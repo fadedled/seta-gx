@@ -39,6 +39,7 @@ Remapping is planned, currently only the GameCube Controller is supported:
 To return to the menu press Start + Z, this will close the game so remember to save before doing this. In the menu you can select a game and press A to start it, by pressing B you return to the Homebrew Channel.
 
 ## Credits/Special Thanks
+
 - Yabause Team: Original soure code
 - Devmiyax: Updates to Yabause trough Yaba Sanshiro
 - Extrems: Help on GX issues

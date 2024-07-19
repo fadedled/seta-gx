@@ -290,7 +290,7 @@ s32 games_LoadList()
 	filename_items.item = (String*) calloc(1024, sizeof(*filename_items.item));	//1024 entries
 	games_filecount = 0;
 
-	while((entry = readdir(dp))) {
+	while ((entry = readdir(dp))) {
 		//Copy the string to memory
 		u32 len = 0;
 		char *str_src = entry->d_name;
@@ -582,44 +582,35 @@ int main(int argc, char **argv)
 
 	//XXX: change the mount code... just check once...
    //fatInitDefault();
-
+	char *device = NULL;
    //for stable mout
 	retry = 3;
 	while(retry) {
 		if(fatMountSimple("sd", &__io_wiisd)) {
+			device = "sd:/";
 			break;
 		} else {
 			usleep(500000);
 		}
 		retry--;
 	}
-
-	retry = 3;
-	while(retry) {
-		if(fatMountSimple("usb", &__io_usbstorage)) {
-			break;
-		} else {
-			usleep(500000);
+	if (retry) {
+		retry = 3;
+		while(retry) {
+			if(fatMountSimple("usb", &__io_usbstorage)) {
+				device = "usb:/";
+				break;
+			} else {
+				usleep(500000);
+			}
+			retry--;
 		}
-		retry--;
-	}
-
-	//Check if the folder exists... if not set FileError
-	if (!opendir(yabause_dir)) {
-		strcpy(yabause_dir, "usb:/yabause");
-	} else {
-		strcpy(yabause_dir, "sd:/yabause");
 	}
 
 	//Copy the routes
-	strcpy(games_dir, yabause_dir);
-	strcat(games_dir, "/games");
-	strcpy(saves_dir, yabause_dir);
-	strcat(saves_dir, "/saves");
-	strcpy(carts_dir, yabause_dir);
-	strcat(carts_dir, "/carts");
-
-
+	sprintf(biospath, "%s%s", device, "apps/SataGX/bios.bin");
+	sprintf(games_dir, "%s%s", device, "vgames/Saturn");
+	sprintf(saves_dir, "%s%s", device, "saves/Saturn");
 
 	bioswith = 1;	//bioswith
 	selectedcart = 7; //cartridge
@@ -666,7 +657,7 @@ int main(int argc, char **argv)
 	InitGX();
 	snd_Init();
 	menu_Init();
-	games_LoadList();
+	u32 d = games_LoadList();
 
 	GX_InitTexObj(&tex_lores_fb, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tex_lores_fb, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
@@ -681,6 +672,7 @@ int main(int argc, char **argv)
 	//VM_BATGet(bats);
 	//sprintf(str_mem, "addr: %p", mapped_mem);
 	//*((u8*)0x0d000000) = 32;
+
 	while(1) {
 		/*
 		for (u32 i = 0; i < 8; ++i) {
@@ -691,11 +683,7 @@ int main(int argc, char **argv)
 		//if (block_of_shit[0] == 32) {
 		//	osd_MsgAdd(300, 300-8, 0xFF0000FF, "LOGRADO!!");
 		//}
-		char msg[128] = {0};
-		sprintf(msg, "MEM1 used: %d, available: %d", 0x01800000 - SYS_GetArena1Size(), SYS_GetArena1Size());
-		osd_MsgAdd(20, 28, 0xFFFFFFFF, msg);
 
-		osd_MsgShow();
 		menu_Handle();
 		gui_Draw(&filename_items);
 
@@ -750,8 +738,6 @@ int YuiExec()
 	yinit.m68kcoretype = m68kdriverselect;
 	yinit.carttype = 0;
 	yinit.regionid = REGION_AUTODETECT;
-	strcpy(biospath, yabause_dir);
-	strcat(biospath, biosfilename);
 	if (!bioswith || ((fp = fopen(biospath, "rb")) == NULL)) {
 		yinit.biospath = NULL;
 		bioswith = 0;
@@ -764,9 +750,7 @@ int YuiExec()
 	strcat(buppath, bupfilename);
 	yinit.buppath = buppath;
 	yinit.mpegpath = NULL;
-	strcpy(cartpath, carts_dir);
-	strcat(cartpath, cartfilename[selectedcart]);
-	yinit.cartpath = cartpath;
+	yinit.cartpath = NULL;
 	yinit.netlinksetting = NULL;
 	yinit.videoformattype = IsPal;
 	yinit.clocksync = 0;
