@@ -4,13 +4,24 @@
 
 This software is licensed under the GNU General Public License v2, available at: http://www.gnu.org/licenses/gpl-2.0.txt This requires any released modifications to be licensed similarly, and to have the source available.
 
-## Instalation
+**DISCLAIMER:** This project is experimental and in no way close to good in terms of code quality and stability (this is to be expected), so you may find a lot of bugs/crashes/in
 
-Copy the current SataGX folder into the apps folder located on the root of your USB/SD card, place a Saturn BIOS inside the SataGX folder with the name bios.bin and copy the SataGX folder to the root of your SD card, there you can place your backups.
+## Features
+
+- CUE or CHD file support.
+- GameCube controller support.
+- SD and/or USB storage (FAT32).
+- Can save games.
+
+## Installation
+
+Download and extract the latest release. Copy the `apps/SataGX` folder into the `apps` folder located on the root of your USB/SD card. Create a `vgames/Saturn` and a `saves/Saturn` folder where you can place your backups and saves, respectively.
+
+> **BIOS NOT INCLUDED:** In order to start the emulator, you need to provide your own BIOS. Place a Saturn BIOS file inside the `apps/SataGX/` folder with the name `bios.bin`.
 
 ## Controller Mapping
 
-Remapping is planned, currently only the GameCube Controller can be used with the following mapping:
+Remapping is planned, currently only the GameCube Controller is supported:
 
 | Sega Saturn | GameCube  |
 |-------------|-----------|
@@ -25,6 +36,11 @@ Remapping is planned, currently only the GameCube Controller can be used with th
 | L           | L         |
 | Start       | Start     |
 
-To return to the menu press Start + Z, this will close the game.
+To return to the menu press Start + Z, this will close the game so remember to save before doing this. In the menu you can select a game and press A to start it, by pressing B you return to the Homebrew Channel.
 
-## Special Thanks
+## Credits/Special Thanks
+- Yabause Team: Original soure code
+- Devmiyax: Updates to Yabause trough Yaba Sanshiro
+- Extrems: Help on GX issues
+- emu_kidid & Pcercuei: Their continued work on WiiSX helped inspire this endeavor
+- tueidj: Virtual memory code
