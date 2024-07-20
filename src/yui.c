@@ -129,31 +129,16 @@ NULL
 
 
 //XXX: Change the directory.
-char yabause_dir[512]="sd:/yabause"; //default
-char games_dir[512];
-char saves_dir[512];
+char games_dir[64];
+char saves_dir[64];
 char carts_dir[512];
+static char biospath[32];
 char prev_itemnum[512];
 static char buppath[512];
-static char biospath[512];
-static char cartpath[512];
 char settingpath[512];
 static char bupfilename[512]="/bkram.bin";
-static char biosfilename[512]="/bios.bin";
 static char isofilename[512]="";
-static char cartfilename[11][512]={
- "",
- "/actionreplay.bin",
- "/bkram4M.bin",
- "/bkram8M.bin",
- "/bkram16M.bin",
- "/bkram32M.bin",
- "",
- "",
- "",
- "/", // "/ROM16M.bin",
- ""
-};
+
 
 
 extern int vdp2width, vdp2height;
@@ -567,11 +552,9 @@ int ResetSettings(void)
 }
 
 
-
 int main(int argc, char **argv)
 {
-	int retry;
-
+	char *device_path = NULL;
 	L2Enhance();
 	WPAD_Init();
 	PAD_Init();
@@ -581,44 +564,27 @@ int main(int argc, char **argv)
 	usleep(500000);
 
 	//XXX: change the mount code... just check once...
-   //fatInitDefault();
-	char *device = NULL;
-   //for stable mout
-	retry = 3;
-	while(retry) {
-		if(fatMountSimple("sd", &__io_wiisd)) {
-			device = "sd:/";
-			break;
-		} else {
-			usleep(500000);
-		}
-		retry--;
-	}
-	if (retry) {
-		retry = 3;
-		while(retry) {
-			if(fatMountSimple("usb", &__io_usbstorage)) {
-				device = "usb:/";
-				break;
-			} else {
-				usleep(500000);
-			}
-			retry--;
-		}
+	fatInitDefault();
+	if(fatMountSimple("sd", &__io_wiisd)) {
+		device_path = "sd:/";
+	} else if (fatMountSimple("usb", &__io_usbstorage)){
+		device_path = "usb:/";
+	} else {
+		//Device not found notice
 	}
 
 	//Copy the routes
-	sprintf(biospath, "%s%s", device, "apps/SataGX/bios.bin");
-	sprintf(games_dir, "%s%s", device, "vgames/Saturn");
-	sprintf(saves_dir, "%s%s", device, "saves/Saturn");
+	sprintf(biospath, "%s%s", device_path, "apps/SataGX/bios.bin");
+	sprintf(games_dir, "%s%s", device_path, "vgames/Saturn");
+	sprintf(saves_dir, "%s%s", device_path, "saves/Saturn");
 
-	bioswith = 1;	//bioswith
-	selectedcart = 7; //cartridge
-	videodriverselect = 2; //videodriver
-	sounddriverselect = 0; //sounddriver
+	bioswith = 1;			//bioswith
+	selectedcart = 7;		//cartridge
+	videodriverselect = 2;	//videodriver
+	sounddriverselect = 0;	//sounddriver
 	m68kdriverselect = 1;	//m68kdriver
-	scspdriverselect = 2; //scsodriver
-	selected = 0;				//fileselected
+	scspdriverselect = 2;	//scsodriver
+	selected = 0;			//fileselected
 	if(selected >= FILES_PER_PAGE) start = selected - FILES_PER_PAGE + 1;
 	frameskipoff = 1;	//frameskipoff
 	specialcoloron = 1;	//specialcoloron
@@ -657,7 +623,7 @@ int main(int argc, char **argv)
 	InitGX();
 	snd_Init();
 	menu_Init();
-	u32 d = games_LoadList();
+	games_LoadList();
 
 	GX_InitTexObj(&tex_lores_fb, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tex_lores_fb, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);

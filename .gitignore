@@ -1,3 +1,6 @@
 /SataGX
 /saves
 /vgames
+/build
+/*.dol
+/*.elf
