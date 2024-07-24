@@ -1,6 +1,6 @@
-# Sata GX
+# Seta GX
 
-**_Sata GX_** is an experimental Sega Saturn emulator for the Wii. The original Yabause Wii port was heavily modified and simplified. A couple of improvements (namely CHD support and SCU emulation) come from devmiyax's [Yaba Sanshiro](https://github.com/devmiyax/yabause). The main speed improvement comes from hardware accelerated rendering by using some tricks of the Hollywood GPU.
+**_Seta GX_** is an experimental Sega Saturn emulator for the Wii. The original Yabause Wii port was heavily modified and simplified. A couple of improvements (namely CHD support and SCU emulation) come from devmiyax's [Yaba Sanshiro](https://github.com/devmiyax/yabause). The main speed improvement comes from hardware accelerated rendering by using some tricks of the Hollywood GPU.
 
 This software is licensed under the GNU General Public License v2, available at: http://www.gnu.org/licenses/gpl-2.0.txt This requires any released modifications to be licensed similarly, and to have the source available.
 
@@ -15,9 +15,9 @@ This software is licensed under the GNU General Public License v2, available at:
 
 ## Installation
 
-Download and extract the latest release. Copy the `apps/SataGX` folder into the `apps` folder located on the root of your USB/SD card. Create a `vgames/Saturn` and a `saves/Saturn` folder where you can place your backups and saves, respectively.
+Download and extract the latest release. Copy the `apps/SetaGX` folder into the `apps` folder located on the root of your USB/SD card. Create a `vgames/Saturn` and a `saves/Saturn` folder where you can place your backups and saves, respectively.
 
-> **BIOS NOT INCLUDED:** In order to start the emulator, you need to provide your own BIOS. Place a Saturn BIOS file inside the `apps/SataGX/` folder with the name `bios.bin`.
+> **BIOS NOT INCLUDED:** In order to start the emulator, you need to provide your own BIOS. Place a Saturn BIOS file inside the `apps/SetaGX/` folder with the name `bios.bin`.
 
 ## Controller Mapping
 

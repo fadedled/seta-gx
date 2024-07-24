@@ -20,7 +20,7 @@ include $(DEVKITPRO)/libogc2/wii_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	sata-gx
+TARGET		:=	seta-gx
 BUILD		:=	build
 SOURCES		:=	src \
 			src/c68k \
@@ -138,7 +138,7 @@ $(BUILD):
 	@echo $(INCLUDE) $(LIBPATHS)
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
-	cp $(OUTPUT).dol SataGX/boot.dol
+	cp $(OUTPUT).dol SetaGX/boot.dol
 	size -A -d $(OUTPUT).elf | grep -w  --color .text
 
 

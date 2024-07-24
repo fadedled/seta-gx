@@ -362,7 +362,7 @@ void menu_Handle(void)
 				filename_items.disp_offset = (filename_items.cursor + 6) - filename_items.disp_count;
 			}
 			filename_items.cursor++;
-		}
+		}mak
 	}
 	else if(buttons & PAD_BUTTON_UP) {
 		if (filename_items.cursor == 0) {
@@ -574,7 +574,7 @@ int main(int argc, char **argv)
 	}
 
 	//Copy the routes
-	sprintf(biospath, "%s%s", device_path, "apps/SataGX/bios.bin");
+	sprintf(biospath, "%s%s", device_path, "apps/SetaGX/bios.bin");
 	sprintf(games_dir, "%s%s", device_path, "vgames/Saturn");
 	sprintf(saves_dir, "%s%s", device_path, "saves/Saturn");
 
