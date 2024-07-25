@@ -126,7 +126,7 @@ typedef struct {
 
 // Data/function declarations
 
-extern u8 *SoundRam;
+extern u8 SoundRam[0x80000];
 
 extern int ScspInit(int coreid, void (*interrupt_handler)(void));
 extern void ScspReset(void);

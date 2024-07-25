@@ -869,6 +869,7 @@ static void (* FASTCALL scsp_audiogen_func_table[2][2][2][2][2])(SlotState *slot
 // specify a function to handle interrupts delivered to the SCU.
 // Must be called after M68KInit(); returns 0 on success, -1 on failure.
 
+
 #ifndef SCSP_PLUGIN
 int ScspInit(int coreid, void (*interrupt_handler)(void))
 #else
@@ -878,7 +879,7 @@ int SCSScsp2Init(int coreid, void (*interrupt_handler)(void))
    int i, j;
    double x;
 
-   SoundRam = AUDIO_RAM_BASE;
+	//SoundRam = AUDIO_RAM_BASE;
    memset(SoundRam, 0, 0x80000);
 
    // Fill in lookup tables

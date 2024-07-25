@@ -56,6 +56,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 # include "vdp2.h"
 #endif
 
+
+Scu scu_regs;
 Scu * ScuRegs;
 scudspregs_struct * ScuDsp;
 scubp_struct * ScuBP;
@@ -73,7 +75,7 @@ void ScuSendDMAEnd(u32 mode);
 int ScuInit(void) {
    int i;
 
-	ScuRegs = (Scu*) SCU_REG_BASE;
+	ScuRegs = &scu_regs;
 	memset(ScuRegs, 0, sizeof(Scu));
 	memset(&ScuRegs->dma0, 0, sizeof(ScuRegs->dma0));
 	memset(&ScuRegs->dma1, 0, sizeof(ScuRegs->dma1));

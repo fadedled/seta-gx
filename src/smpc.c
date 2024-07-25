@@ -44,6 +44,8 @@ int smpcperipheraltiming = 1000;
 int smpcothertiming = 1050;
 #endif
 
+u8 smpc_regs[0x80];
+
 //////////////////////////////////////////////////////////////////////////////
 
 int SmpcInit(u8 regionid, int clocksync, u32 basetime)
@@ -102,7 +104,7 @@ void SmpcRecheckRegion(void) {
 //////////////////////////////////////////////////////////////////////////////
 
 void SmpcReset(void) {
-	memset(SMPC_REG_BASE, 0, 0x80);
+	memset(smpc_regs, 0, 0x80);
    memset((void *)SmpcInternalVars->SMEM, 0, 4);
 
    SmpcRecheckRegion();
@@ -444,7 +446,7 @@ u8 FASTCALL SmpcReadByte(u32 addr) {
 		return bustmp;
 	}
 #endif
-	return SMPC_REG_BASE[addr];
+	return smpc_regs[addr];
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -538,7 +540,7 @@ static void SmpcSetTiming(void) {
 //XXX: NEEDS UPDATE
 void FASTCALL SmpcWriteByte(u32 addr, u8 val) {
 	addr &= 0x7F;
-	SMPC_REG_BASE[addr] = val;
+	smpc_regs[addr] = val;
 
 	switch(addr) {
 		case 0x01: // Maybe an INTBACK continue/break request

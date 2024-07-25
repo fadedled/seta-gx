@@ -136,7 +136,7 @@ fetchfunc fetchlist[0x100];
 
 static u32 FASTCALL FetchBios(u32 addr)
 {
-   return T2ReadWord(BIOS_ROM_BASE, addr & 0x7FFFF);
+	return bios_Read16(addr);
 }
 
 //////////////////////////////////////////////////////////////////////////////

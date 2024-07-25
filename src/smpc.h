@@ -33,19 +33,19 @@
 #define REGION_EUROPE                   12
 #define REGION_CENTRALSOUTHAMERICAPAL   13
 
+extern u8 smpc_regs[0x80];
 
-
-#define SMPC_REG_IREG(x)	(*(SMPC_REG_BASE + 0x01 + ((x) << 1)))
-#define SMPC_REG_COMREG		(*(SMPC_REG_BASE + 0x1F))
-#define SMPC_REG_OREG(x)	(*(SMPC_REG_BASE + 0x21 + ((x) << 1)))
-#define SMPC_REG_SR			(*(SMPC_REG_BASE + 0x61))
-#define SMPC_REG_SF			(*(SMPC_REG_BASE + 0x63))
-#define SMPC_REG_PDR1		(*(SMPC_REG_BASE + 0x75))
-#define SMPC_REG_PDR2		(*(SMPC_REG_BASE + 0x77))
-#define SMPC_REG_DDR1		(*(SMPC_REG_BASE + 0x79))
-#define SMPC_REG_DDR2		(*(SMPC_REG_BASE + 0x7B))
-#define SMPC_REG_IOSEL		(*(SMPC_REG_BASE + 0x7D))
-#define SMPC_REG_EXLE		(*(SMPC_REG_BASE + 0x7F))
+#define SMPC_REG_IREG(x)	(*(smpc_regs + 0x01 + ((x) << 1)))
+#define SMPC_REG_COMREG		(*(smpc_regs + 0x1F))
+#define SMPC_REG_OREG(x)	(*(smpc_regs + 0x21 + ((x) << 1)))
+#define SMPC_REG_SR			(*(smpc_regs + 0x61))
+#define SMPC_REG_SF			(*(smpc_regs + 0x63))
+#define SMPC_REG_PDR1		(*(smpc_regs + 0x75))
+#define SMPC_REG_PDR2		(*(smpc_regs + 0x77))
+#define SMPC_REG_DDR1		(*(smpc_regs + 0x79))
+#define SMPC_REG_DDR2		(*(smpc_regs + 0x7B))
+#define SMPC_REG_IOSEL		(*(smpc_regs + 0x7D))
+#define SMPC_REG_EXLE		(*(smpc_regs + 0x7F))
 
 
 typedef struct

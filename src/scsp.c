@@ -3032,7 +3032,7 @@ scsp_init (u8 *scsp_ram, void (*sint_hand)(u32), void (*mint_hand)(void))
 // Yabause specific
 //////////////////////////////////////////////////////////////////////////////
 
-u8 *SoundRam = NULL;
+u8 SoundRam[0x80000];
 ScspInternal *ScspInternalVars;
 #ifndef SCSP_PLUGIN
 static SoundInterface_struct *SNDCore = NULL;
@@ -3276,9 +3276,6 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
 {
   int i;
 
-  if ((SoundRam = T2MemoryInit (0x80000)) == NULL)
-    return -1;
-
   if ((ScspInternalVars = (ScspInternal *)calloc(1, sizeof(ScspInternal))) == NULL)
     return -1;
 
@@ -3409,10 +3406,6 @@ SCSScsp1DeInit (void)
   SNDCore = NULL;
 
   scsp_shutdown();
-
-  if (SoundRam)
-    T2MemoryDeInit (SoundRam);
-  SoundRam = NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////////

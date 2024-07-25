@@ -72,7 +72,10 @@ u32 write32_mask[0x800];
 #endif
 
 u8 *general_ram;//[MEM_4MiB_SIZE] ATTRIBUTE_ALIGN(MEM_4MiB_SIZE);
-
+u8 wram_lo[MEM_1MiB_SIZE] ATTRIBUTE_ALIGN(32);
+u8 wram_hi[MEM_1MiB_SIZE] ATTRIBUTE_ALIGN(32);
+u8 bios_rom[BIOS_SIZE] ATTRIBUTE_ALIGN(32);
+u8 bup_ram[BACKUP_RAM_SIZE] ATTRIBUTE_ALIGN(32);
 
 /* This flag is set to 1 on every write to backup RAM.  Ports can freely
  * check or clear this flag to determine when backup RAM has been written,
@@ -193,6 +196,39 @@ static void FASTCALL UnhandledMemoryWriteLong(USED_IF_DEBUG u32 addr, UNUSED u32
 {
 	LOG("Unhandled long write %08X\n", (unsigned int)addr);
 }
+
+//////////////////////////////////////////////////////////////////////////////
+
+u8  FASTCALL bios_Read8(u32 addr)
+{
+	return bios_rom[addr & (BIOS_SIZE - 1)];
+}
+
+
+u16 FASTCALL bios_Read16(u32 addr)
+{
+	return *((u16*) (bios_rom + (addr & (BIOS_SIZE - 1))));
+}
+
+
+u32 FASTCALL bios_Read32(u32 addr)
+{
+	return *((u32*) (bios_rom + (addr & (BIOS_SIZE - 1))));
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+u8 FASTCALL bup_Read8(u32 addr)
+{
+	return bup_ram[addr & (BACKUP_RAM_SIZE - 1)];
+}
+
+void FASTCALL bup_Write8(u32 addr, u8 val)
+{
+	bup_ram[(addr & (BACKUP_RAM_SIZE - 1)) | 1] = val;
+	bup_ram_written = 1;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -418,10 +454,6 @@ void MappedMemoryInit()
 	//lightrec_mmap(MINIT_BASE, 0x01000000u, PAGE_SIZE);	//MINIT (4 bytes)
 	//lightrec_mmap(SINIT_BASE, 0x01800000u, PAGE_SIZE);	//SINIT (4 bytes)
 	//XXX: This fakes a non conected cartridge
-	lightrec_mmap(DUMMY_MEM_BASE, 0x02000000u, PAGE_SIZE);	//CS0 (32 MiB) ??? Nothing? How to fake connect?
-	lightrec_mmap(DUMMY_MEM_BASE, 0x02FFF000u, PAGE_SIZE);	//CS0 (32 MiB) ??? Nothing? How to fake connect?
-	lightrec_mmap(DUMMY_MEM_BASE, 0x04000000u, PAGE_SIZE);	//CS1 (16 MiB) ??? Nothing? How to fake connect?
-	lightrec_mmap(DUMMY_MEM_BASE, 0x04FFF000u, PAGE_SIZE);	//CS1 (16 MiB) ??? Nothing? How to fake connect?
 	//lightrec_mmap(CS2_REG_BASE, 0x05800000u, PAGE_SIZE);	//CS2 (CD Regs) (64 bytes)
 	//VM_BATSet(2, AUDIO_RAM_BASE, 0x05A00000u, BL_ENC_512K);	//AudioRAM	(512 KiB) BAT
 	//lightrec_mmap(SCSP_REG_BASE, 0x05B00000u, PAGE_SIZE);	//SCSP Regs (dunno)
@@ -467,9 +499,9 @@ void MappedMemoryInit()
 
    // Fill the rest
    //Bios Rom
-   FillMemoryArea(0x00, 0x02, &mmap_Read8,
-                                &mmap_Read16,
-                                &mmap_Read32,
+   FillMemoryArea(0x00, 0x02, &bios_Read8,
+                                &bios_Read16,
+                                &bios_Read32,
                                 &UnhandledMemoryWriteByte,		//XXX: This should be read only
                                 &UnhandledMemoryWriteWord,		//XXX: This should be read only
                                 &UnhandledMemoryWriteLong);		//XXX: This should be read only
@@ -481,10 +513,10 @@ void MappedMemoryInit()
                                 &SmpcWriteWord,
                                 &SmpcWriteLong);
    //Backup Ram
-   FillMemoryArea(0x03, 0x04, &mmap_Read8,
+   FillMemoryArea(0x03, 0x04, &bup_Read8,
                                 &UnhandledMemoryReadWord,
                                 &UnhandledMemoryReadLong,
-                                &mmap_Write8,
+                                &bup_Write8,
                                 &UnhandledMemoryWriteWord,
                                 &UnhandledMemoryWriteLong);
    //Work RAM Low
@@ -509,19 +541,19 @@ void MappedMemoryInit()
                                 &MSH2InputCaptureWriteWord,
                                 &UnhandledMemoryWriteLong);
    //CS0
-   FillMemoryArea(0x40, 0x80, &mmap_Read8,
-                                &mmap_Read16,
-                                &mmap_Read32,
-                                &mmap_Write8,
-                                &mmap_Write16,
-                                &mmap_Write32);
+   FillMemoryArea(0x40, 0x80, CartridgeArea->Cs0ReadByte,
+								CartridgeArea->Cs0ReadWord,
+								CartridgeArea->Cs0ReadLong,
+								CartridgeArea->Cs0WriteByte,
+								CartridgeArea->Cs0WriteWord,
+								CartridgeArea->Cs0WriteLong);
    //CS1
-   FillMemoryArea(0x80, 0xA0, &mmap_Read8,
-                                &mmap_Read16,
-                                &mmap_Read32,
-                                &mmap_Write8,
-                                &mmap_Write16,
-                                &mmap_Write32);
+	FillMemoryArea(0x80, 0xA0, &Cs1ReadByte,
+								&Cs1ReadWord,
+								&Cs1ReadLong,
+								&Cs1WriteByte,
+								&Cs1WriteWord,
+								&Cs1WriteLong);
    //CS2 (CD-ROM Regs)
    FillMemoryArea(0xB0, 0xB2, &Cs2ReadByte,
                                 &Cs2ReadWord,
@@ -751,14 +783,14 @@ void FASTCALL mem_Write32(u32 addr, u32 val)
 
 int LoadBios(const char *filename)
 {
-   return T123Load(BIOS_ROM_BASE, 0x80000, 2, filename);
+	return T123Load(bios_rom, BIOS_SIZE, 2, filename);
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 int LoadBackupRam(const char *filename)
 {
-   return T123Load(BUP_RAM_BASE, 0x10000, 1, filename);
+	return T123Load(bup_ram, BACKUP_RAM_SIZE, 1, filename);
 }
 
 //////////////////////////////////////////////////////////////////////////////

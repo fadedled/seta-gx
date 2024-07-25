@@ -369,6 +369,6 @@ int LoadBackupRam(const char *filename);
 void FormatBackupRam(void *mem, u32 size);
 u32 getMemClock(u32 addr);
 
-
+u16 FASTCALL bios_Read16(u32 addr);
 
 #endif
