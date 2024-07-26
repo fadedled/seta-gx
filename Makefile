@@ -26,7 +26,6 @@ SOURCES		:=	src \
 			src/c68k \
 			src/q68 \
 			src/osd \
-			src/vm \
 			src/drc \
 			src/sgx 
 #			src/sh2/mame

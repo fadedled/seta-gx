@@ -71,9 +71,7 @@ u32 write16_mask[0x800];
 u32 write32_mask[0x800];
 #endif
 
-u8 *general_ram;//[MEM_4MiB_SIZE] ATTRIBUTE_ALIGN(MEM_4MiB_SIZE);
-u8 wram_lo[MEM_1MiB_SIZE] ATTRIBUTE_ALIGN(32);
-u8 wram_hi[MEM_1MiB_SIZE] ATTRIBUTE_ALIGN(32);
+u8 wram[WRAM_SIZE] ATTRIBUTE_ALIGN(32);
 u8 bios_rom[BIOS_SIZE] ATTRIBUTE_ALIGN(32);
 u8 bup_ram[BACKUP_RAM_SIZE] ATTRIBUTE_ALIGN(32);
 
@@ -156,24 +154,30 @@ void T3MemoryDeInit(T3Memory * mem)
 
 static u8 FASTCALL UnhandledMemoryReadByte(USED_IF_DEBUG u32 addr)
 {
-   LOG("Unhandled byte read %08X\n", (unsigned int)addr);
-   return 0;
+	char str_mem[64];
+	sprintf(str_mem, "Unhandled byte read %08x %08x", addr);
+	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 static u16 FASTCALL UnhandledMemoryReadWord(USED_IF_DEBUG u32 addr)
 {
-   LOG("Unhandled word read %08X\n", (unsigned int)addr);
-   return 0;
+	char str_mem[64];
+	sprintf(str_mem, "Unhandled word read %08x %08x", addr);
+	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 static u32 FASTCALL UnhandledMemoryReadLong(USED_IF_DEBUG u32 addr)
 {
-   LOG("Unhandled long read %08X\n", (unsigned int)addr);
-   return 0;
+	char str_mem[64];
+	sprintf(str_mem, "Unhandled long read %08x %08x", addr);
+	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -229,46 +233,46 @@ void FASTCALL bup_Write8(u32 addr, u8 val)
 	bup_ram_written = 1;
 }
 
-
 //////////////////////////////////////////////////////////////////////////////
 
-
-static u8 FASTCALL mmap_Read8(u32 addr)
+u8 FASTCALL wram_Read8(u32 addr)
 {
-	addr &= 0x0FFFFFFF;
-	return *((u8*)addr);
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	return wram[addr];
 }
 
-static u16 FASTCALL mmap_Read16(u32 addr)
+u16 FASTCALL wram_Read16(u32 addr)
 {
-	addr &= 0x0FFFFFFF;
-	return *((u16*)addr);
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	return *((u16*) (wram + addr));
 }
 
-static u32 FASTCALL mmap_Read32(u32 addr)
+u32 FASTCALL wram_Read32(u32 addr)
 {
-	addr &= 0x0FFFFFFF;
-	return *((u32*)addr);
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	return *((u32*) (wram + addr));
 }
 
-static void FASTCALL mmap_Write8(u32 addr, u8 val)
+void FASTCALL wram_Write8(u32 addr, u8 val)
 {
-	addr &= 0x0FFFFFFF;
-	*((u8*)addr) = val;
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	wram[addr] = val;
 }
 
-static void FASTCALL mmap_Write16(u32 addr, u16 val)
+void FASTCALL wram_Write16(u32 addr, u16 val)
 {
-	addr &= 0x0FFFFFFF;
-	*((u16*)addr) = val;
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	*((u16*) (wram + addr)) = val;
 }
 
-static void FASTCALL mmap_Write32(u32 addr, u32 val)
+void FASTCALL wram_Write32(u32 addr, u32 val)
 {
-	addr &= 0x0FFFFFFF;
-	*((u32*)addr) = val;
+	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	*((u32*) (wram + addr)) = val;
 }
 
+
+//////////////////////////////////////////////////////////////////////////////
 
 
 static u8 FASTCALL discr_Vdp2ScuRead8(u32 addr)
@@ -353,47 +357,6 @@ inline u32 getMemClock(u32 addr) {
   return 0;
 }
 
-u8   FASTCALL sh2_Read8 (SH2_struct * sh, u32 addr)
-{
-	//sh->cycles += getMemClock(addr);
-	return mem_Read8(addr);
-}
-
-
-u16  FASTCALL sh2_Read16(SH2_struct * sh, u32 addr)
-{
-	//sh->cycles += getMemClock(addr);
-	return mem_Read16(addr);
-}
-
-
-u32  FASTCALL sh2_Read32(SH2_struct * sh, u32 addr)
-{
-	//sh->cycles += getMemClock(addr);
-	return mem_Read32(addr);
-}
-
-
-void FASTCALL sh2_Write8 (SH2_struct * sh, u32 addr, u8  val)
-{
-	//sh->cycles += getMemClock(addr);
-	mem_Write8(addr, val);
-}
-
-
-void FASTCALL sh2_Write16(SH2_struct * sh, u32 addr, u16 val)
-{
-	//sh->cycles += getMemClock(addr);
-	mem_Write16(addr, val);
-}
-
-
-void FASTCALL sh2_Write32(SH2_struct * sh, u32 addr, u32 val)
-{
-	//sh->cycles += getMemClock(addr);
-	mem_Write32(addr, val);
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 static void mem_MaskFill(u32 start, u32 end, u32 mask, u32 r, u32 w)
@@ -435,22 +398,22 @@ static void FillMemoryArea(unsigned short start, unsigned short end,
 
 void mem_Init(void)
 {
-	general_ram = (u8*) memalign(MEM_4MiB_SIZE, MEM_4MiB_SIZE);
-	memset(general_ram, 0x0, MEM_4MiB_SIZE);
-	memset(DUMMY_MEM_BASE, 0xFF, PAGE_SIZE);
+	memset(wram, 0x0, WRAM_SIZE);
+	memset(bios_rom, 0x0, BIOS_SIZE);
+	memset(bup_ram, 0x0, BACKUP_RAM_SIZE);
 }
 
 void mem_Deinit(void)
 {
-	free(general_ram);
+
 }
 
 void MappedMemoryInit()
 {
 	//Number of pages: 2 + 4 +1 + 1 + 128 + 128 + 1 + 128 + 1 + 1 + 1 + 4
 	//Now we would have 545 pages used
-	VM_Init(1024*1024, 256*1024);	//DFUK
-	VM_BATSet(0, general_ram, 0x00000000u, BL_ENC_4M);			//LOW_RAM_BASE
+	//VM_Init(1024*1024, 256*1024);	//DFUK
+	//VM_BATSet(0, general_ram, 0x00000000u, BL_ENC_4M);			//LOW_RAM_BASE
 	//lightrec_mmap(MINIT_BASE, 0x01000000u, PAGE_SIZE);	//MINIT (4 bytes)
 	//lightrec_mmap(SINIT_BASE, 0x01800000u, PAGE_SIZE);	//SINIT (4 bytes)
 	//XXX: This fakes a non conected cartridge
@@ -458,13 +421,13 @@ void MappedMemoryInit()
 	//VM_BATSet(2, AUDIO_RAM_BASE, 0x05A00000u, BL_ENC_512K);	//AudioRAM	(512 KiB) BAT
 	//lightrec_mmap(SCSP_REG_BASE, 0x05B00000u, PAGE_SIZE);	//SCSP Regs (dunno)
 	//lightrec_mmap(Vdp1Ram, 0x05C00000u, VDP1_RAM_SIZE);	//VDP1 VRAM (512 KiB)
-	lightrec_mmap(Vdp1FrameBuffer, 0x05C80000u, VDP1_FB_SIZE);	//VDP1 FrameBuffer (512 KiB)
+	//lightrec_mmap(Vdp1FrameBuffer, 0x05C80000u, VDP1_FB_SIZE);	//VDP1 FrameBuffer (512 KiB)
 	//lightrec_mmap(VDP1_REG_BASE, 0x05D00000u, PAGE_SIZE);	//VDP1 Regs (24 bytes)
 	//lightrec_mmap(memory, 0x00000000u, 0x200000);	//VDP2 VRAM (512 KiB)
 	//lightrec_mmap(VDP2_CRAM_BASE, 0x05F00000u, PAGE_SIZE);	//VDP2 CRAM (4 KiB)
 	//lightrec_mmap(VDP2_REG_BASE, 0x05F80000u, PAGE_SIZE);	//VDP2 Regs (288 bytes)
 	//lightrec_mmap(SCU_REG_BASE, 0x05FE0000u, PAGE_SIZE);	//SCU Regs (208 bytes)
-	VM_BATSet(1, HIGH_RAM_BASE, 0x06000000u, BL_ENC_1M);	//HIGH_RAM_BASE
+	//VM_BATSet(1, HIGH_RAM_BASE, 0x06000000u, BL_ENC_1M);	//HIGH_RAM_BASE
 
 
 	mem_MaskFill(0x00000000, 0x07FFFFFF, 0, 0, 0); // Init all
@@ -520,12 +483,12 @@ void MappedMemoryInit()
                                 &UnhandledMemoryWriteWord,
                                 &UnhandledMemoryWriteLong);
    //Work RAM Low
-   FillMemoryArea(0x04, 0x06, &mmap_Read8,
-                                &mmap_Read16,
-                                &mmap_Read32,
-                                &mmap_Write8,
-                                &mmap_Write16,
-                                &mmap_Write32);
+   FillMemoryArea(0x04, 0x06, &wram_Read8,
+                                &wram_Read16,
+                                &wram_Read32,
+                                &wram_Write8,
+                                &wram_Write16,
+                                &wram_Write32);
    //Master SH2 Init
    FillMemoryArea(0x20, 0x30, &UnhandledMemoryReadByte,
                                 &UnhandledMemoryReadWord,
@@ -629,12 +592,12 @@ void MappedMemoryInit()
                                 &discr_Vdp2ScuWrite8,
                                 &discr_Vdp2ScuWrite16,
                                 &discr_Vdp2ScuWrite32);
-    FillMemoryArea(0xC0, 0xFF, &mmap_Read8,
-                                &mmap_Read16,
-                                &mmap_Read32,
-                                &mmap_Write8,
-                                &mmap_Write16,
-                                &mmap_Write32);
+    FillMemoryArea(0xC0, 0xFF, &wram_Read8,
+                                &wram_Read16,
+                                &wram_Read32,
+                                &wram_Write8,
+                                &wram_Write16,
+                                &wram_Write32);
 }
 
 
@@ -819,13 +782,4 @@ void FormatBackupRam(void *mem, u32 size)
    }
 }
 
-//////////////////////////////////////////////////////////////////////////////
-
-static int MappedMemoryAddMatch(u32 addr, u32 val, int searchtype, result_struct *result, u32 *numresults)
-{
-   result[numresults[0]].addr = addr;
-   result[numresults[0]].val = val;
-   numresults[0]++;
-   return 0;
-}
 

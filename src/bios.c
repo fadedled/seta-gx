@@ -1786,7 +1786,7 @@ void BupFormat(u32 device)
    switch (device)
    {
       case 0:
-         FormatBackupRam(BUP_RAM_BASE, 0x10000);
+         FormatBackupRam(bup_ram, 0x10000);
          break;
       case 1:
          if ((CartridgeArea->cartid & 0xF0) == 0x20)

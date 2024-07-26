@@ -32,10 +32,11 @@
 
 #define VDP1_PTE_SIZE 		VDP1_RAM_SIZE / 4096
 
+u8 vdp1_regs[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
+
 u8 Vdp1Ram[VDP1_RAM_SIZE] ATTRIBUTE_ALIGN(32);
 u8 Vdp1FrameBuffer[VDP1_FB_SIZE] ATTRIBUTE_ALIGN(32);
 Vdp1 *Vdp1Regs;
-PTE *vdp1_ptes[VDP1_PTE_SIZE];
 Vdp1External_struct Vdp1External;
 
 
@@ -116,7 +117,7 @@ void FASTCALL Vdp1FrameBufferWriteLong(u32 addr, u32 val) {
 
 //DONE
 int Vdp1Init(void) {
-	Vdp1Regs = (Vdp1 *) VDP1_REG_BASE;
+	Vdp1Regs = (Vdp1 *) vdp1_regs;
 
 	Vdp1External.status = VDP1_STATUS_IDLE;
 	Vdp1External.disptoggle = 1;
@@ -366,28 +367,6 @@ void vdp1_BuildVram(void) {
 	}
 }
 
-void vdp1_UpdateChanges(void)
-{
-	char str[128];
-	//sprintf(str, "%x%x", vdp1_ptes[0]->R, vdp1_ptes[0]->C);
-	//osd_MsgAdd(28, 36+(0*8), 0x33FFFFFF, str);
-
-
-	for (u32 i = 0; i < VDP1_PTE_SIZE; ++i) {
-		sprintf(str, "%x%x", vdp1_ptes[i]->R, vdp1_ptes[0]->C);
-		osd_MsgAdd(28, 32+(i*8), 0x33FFFFFF, str);
-		if (VM_PteChangedBit(vdp1_ptes[i])) {
-			//osd_MsgAdd(28, 32, 0xFFFFFFFF, "Hello_I_WAS CHANGED");
-
-			u32 page = i << 2;
-			tex_dirty[page] = 0x0;
-			tex_dirty[page + 1] = 0x0;
-			tex_dirty[page + 2] = 0x0;
-			tex_dirty[page + 3] = 0x0;
-		}
-	}
-}
-
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -410,8 +389,6 @@ void Vdp1Draw(void) {
 	Vdp1Regs->addr = 0;
 	returnAddr = 0xFFFFFFFF;
 	commandCounter = 0;
-
-	//vdp1_UpdateChanges();
 
    // beginning of a frame
    // BEF <- CEF

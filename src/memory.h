@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include "core.h"
 //#include "sh2core.h"
-#include "vm/vm.h"
 
 /* Type 1 Memory, faster for byte (8 bits) accesses */
 
@@ -288,39 +287,11 @@ void FASTCALL mem_WriteNoCache32(u32 addr, u32 val);
 
 #define HIGH_WRAM_SIZE		0x100000
 #define LOW_WRAM_SIZE		0x100000
+#define WRAM_SIZE			0x200000
 #define BIOS_SIZE			0x80000
 #define BACKUP_RAM_SIZE		0x10000
-
-
-
-#define BIOS_ROM_BASE		(general_ram + 0x00000000)
-#define AUDIO_RAM_BASE		(general_ram + 0x00080000)
-#define SMPC_REG_BASE		(general_ram + 0x00100000)
-#define BUP_RAM_BASE		(general_ram + 0x00180000)
-#define LOW_RAM_BASE		(general_ram + 0x00200000)
-#define HIGH_RAM_BASE		(general_ram + 0x00300000)
-
-#define DUMMY_MEM_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 1))
-#define MINIT_BASE			(SMPC_REG_BASE + (PAGE_SIZE * 2))	//XXX:Find where this is used
-#define SINIT_BASE			(SMPC_REG_BASE + (PAGE_SIZE * 3))	//XXX:Find where this is used
-#define CS2_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 4))	//XXX:Find where this is used
-#define SCSP_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 5))	//XXX:Find where this is used
-#define VDP1_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 6))
-#define VDP2_CRAM_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 7))
-#define VDP2_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 8))
-#define SCU_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 9))
-
-#define SH2_REG_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 10))
-#define SH2_DARRAY_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 11))
-#define SH2_ONCHIP_BASE		(SMPC_REG_BASE + (PAGE_SIZE * 12))
-
-
-
-#define MEM_1MiB_SIZE		0x100000
-#define MEM_4MiB_SIZE		(MEM_1MiB_SIZE << 2)
-
+#define PAGE_SIZE			4096
 extern u8 bup_ram_written;
-extern u8 *general_ram;//[MEM_4MiB_SIZE];
 
 typedef void (FASTCALL *WriteFunc8)(u32, u8);
 typedef void (FASTCALL *WriteFunc16)(u32, u16);
@@ -360,6 +331,8 @@ u32 val;
 #define SEARCHREL8BIT           (6 << 4)
 #define SEARCHREL16BIT          (7 << 4)
 
+extern u8 bup_ram[BACKUP_RAM_SIZE];
+extern u8 wram[WRAM_SIZE];
 
 void mem_Init(void);
 void mem_Deinit(void);

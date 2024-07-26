@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <math.h>
 #include <gccore.h>
 
 //TURN TO WII FORMAT (FOR TEXTURES)
@@ -2434,7 +2435,7 @@ int VIDSoftInit(void)
 
 void VIDSoftDeInit(void)
 {
-
+	free(win_tex);
 }
 
 //////////////////////////////////////////////////////////////////////////////

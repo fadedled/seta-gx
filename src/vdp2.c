@@ -34,6 +34,9 @@
 
 u8 * Vdp2Ram;
 u8 * Vdp2ColorRam;
+
+u8 vdp2_cram[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
+u8 vdp2_regs[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
 Vdp2 * Vdp2Regs;
 Vdp2Internal_struct Vdp2Internal;
 Vdp2External_struct Vdp2External;
@@ -164,8 +167,8 @@ void FASTCALL Vdp2ColorRamWriteLong(u32 addr, u32 val) {
 //////////////////////////////////////////////////////////////////////////////
 
 int Vdp2Init(void) {
-   Vdp2Regs = (Vdp2 *) VDP2_REG_BASE;
-   Vdp2ColorRam = (u8 *) VDP2_CRAM_BASE;
+   Vdp2Regs = (Vdp2 *) vdp2_regs;
+   Vdp2ColorRam = (u8 *) vdp2_cram;
    memset(Vdp2Regs, 0, sizeof(Vdp2));
    memset(Vdp2Regs, 0, 0x1000);
 

@@ -159,7 +159,7 @@ int	YabauseInit(yabauseinit_struct *init)
    {
 #endif
    if (LoadBackupRam(init->buppath) != 0)
-      FormatBackupRam(BUP_RAM_BASE, 0x10000);
+      FormatBackupRam(bup_ram, 0x10000);
 
    bup_ram_written = 0;
 
@@ -232,7 +232,7 @@ int	YabauseInit(yabauseinit_struct *init)
       strcat(buppath, ".bin");
       init->buppath = buppath;
       if (LoadBackupRam(init->buppath) != 0)
-         FormatBackupRam(BUP_RAM_BASE, 0x10000);
+         FormatBackupRam(bup_ram, 0x10000);
 
       bup_ram_written = 0;
 
@@ -330,7 +330,7 @@ int	YabauseInit(yabauseinit_struct *init)
 void YabauseDeInit(void) {
 	SH2DeInit();
 
-	if (T123Save(BUP_RAM_BASE, 0x10000, 1, bupfilename) != 0)
+	if (T123Save(bup_ram, 0x10000, 1, bupfilename) != 0)
          YabSetError(YAB_ERR_FILEWRITE, (void *)bupfilename);
 
    CartDeInit();
@@ -341,8 +341,6 @@ void YabauseDeInit(void) {
    Vdp2DeInit();
    SmpcDeInit();
    VideoDeInit();
-   	//VM_Deinit();
-	VM_BATClear();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -357,8 +355,7 @@ void YabauseResetNoLoad(void) {
 	SH2Reset(MSH2);
 
    YabauseStopSlave();
-   memset(HIGH_RAM_BASE, 0, 0x100000);
-   memset(LOW_RAM_BASE, 0, 0x100000);
+   memset(wram, 0, 0x200000);
 
    // Reset CS0 area here
    // Reset CS1 area here

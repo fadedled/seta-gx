@@ -42,7 +42,6 @@
 #include "vdp2.h"
 #include "yui.h"
 #include "memory.h"
-#include "vm/vm.h"
 
 extern u8 num_button_WII[9];
 extern u8 num_button_CLA[9];
@@ -386,7 +385,6 @@ void menu_Handle(void)
 	}
 	else if (buttons & PAD_BUTTON_B) {
 		//XXX: ask to quit?
-		VM_BATClear();
 		mem_Deinit();
 		exit(0);
 		//SYS_ResetSystem(SYS_SHUTDOWN, 0, 0);

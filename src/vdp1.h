@@ -82,7 +82,6 @@ extern u8 Vdp1Ram[VDP1_RAM_SIZE] ATTRIBUTE_ALIGN(32);
 extern u8 *vdp1_ram_al[4];
 extern u8 Vdp1FrameBuffer[VDP1_FB_SIZE] ATTRIBUTE_ALIGN(32);
 extern Vdp1 * Vdp1Regs;
-extern PTE *vdp1_ptes[VDP1_RAM_SIZE / 4096];
 
 enum VDP1STATUS {
   VDP1_STATUS_IDLE = 0,

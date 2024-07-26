@@ -200,9 +200,9 @@ static INLINE void *DMAMemoryPointer(u32 address) {
          return &Vdp2ColorRam[address & 0xFFF];
       case 0x24:
          if (page == 0x00200000>>19) {
-            return &LOW_RAM_BASE[address & 0xFFFFF];
+            return &wram[address & 0xFFFFF];
          } else {
-            return &HIGH_RAM_BASE[address & 0xFFFFF];
+            return &wram[(address & 0xFFFFF) | 0x100000];
          }
       default:
          return NULL;
@@ -404,9 +404,8 @@ void dsp_dma01(scudspregs_struct *sc, u32 inst)
 	const u32 mode = (inst >> 15) & 0x7;
 	const u32 add = (1 << (mode & 0x2)) &~1;
 
-	ReadFunc32 read32_func = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)];
 	for (i = 0; i < imm ; i++) {
-		sc->MD[sel][sc->CT[sel] & 0x3F] = read32_func((sc->RA0M << 2));
+		sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)]((sc->RA0M << 2));
 		sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
 		sc->RA0M += (add >> 2);
 	}
@@ -451,7 +450,7 @@ void dsp_dma_write_d0bus(scudspregs_struct *sc, int sel, int add, int count)
 		for (i = 0; i < count; i++) {
 			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
 			Adr = (sc->WA0M << 2);
-			T2WriteLong(HIGH_RAM_BASE, Adr & 0xFFFFC, Val);
+			T2WriteLong(wram, (Adr & 0xFFFFC) | 0x100000, Val);
 			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
 			sc->WA0M += add;
 		}
@@ -487,15 +486,13 @@ void dsp_dma03(scudspregs_struct *sc, u32 inst)
 
 	u32 abus_check = ((sc->RA0M << 2) & 0x0FF00000);
 
-	ReadFunc32 read32_func = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)];
-
 	for (i = 0; i < Counter; i++) {
 		if (sel == 0x04) {
-			sc->ProgramRam[index] = read32_func(sc->RA0M << 2);
+			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
 			index++;
 		}
 		else {
-			sc->MD[sel][sc->CT[sel] & 0x3F] = read32_func(sc->RA0M << 2);
+			sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
 			sc->CT[sel]++;
 			sc->CT[sel] &= 0x3F;
 		}
@@ -621,10 +618,6 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
   //LOG("[SCU] SucDmaExec src=%08X,dst=%08X,size=%d, ra:%d/wa:%d flame=%d:%d",
    // dma->ReadAddress, dma->WriteAddress, dma->TransferNumber, dma->ReadAdd, dma->WriteAdd, yabsys.frame_count, yabsys.LineCount);
   //u32 cycle = 0;
-  ReadFunc16 read16_func = mem_read16_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)];
-  ReadFunc32 read32_func = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)];
-  WriteFunc16 write16_func = mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)];
-  WriteFunc32 write32_func = mem_write32_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)];
 
   if (dma->ReadAdd == 0) {
     // DMA fill
@@ -643,19 +636,19 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       if (constant_source) {
         u32 val;
         if (dma->ReadAddress & 2) {  // Avoid misaligned access
-          val = read16_func( (dma->ReadAddress&0x0FFFFFFF)) << 16
-            | read16_func( (dma->ReadAddress&0x0FFFFFFF) + 2);
+          val = mem_read16_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]( (dma->ReadAddress&0x0FFFFFFF)) << 16
+            | mem_read16_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]( (dma->ReadAddress&0x0FFFFFFF) + 2);
         }
         else {
-          val = read32_func((dma->ReadAddress & 0x0FFFFFFF));
+          val = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
         }
 
         u32 start = dma->WriteAddress;
         while ( *time > 0 ) {
           *time -= 1;
-          write16_func(dma->WriteAddress, (u16)(val >> 16));
+          mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, (u16)(val >> 16));
           dma->WriteAddress += dma->WriteAdd;
-          write16_func(dma->WriteAddress, (u16)val);
+          mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, (u16)val);
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
           if (dma->TransferNumber <= 0 ) {
@@ -669,10 +662,10 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
         u32 start = dma->WriteAddress;
         while ( *time > 0) {
           *time -= 1;
-          u32 tmp = read32_func((dma->ReadAddress & 0x0FFFFFFF));
-          write16_func(dma->WriteAddress, (u16)(tmp >> 16));
+          u32 tmp = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
+          mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, (u16)(tmp >> 16));
           dma->WriteAddress += dma->WriteAdd;
-          write16_func(dma->WriteAddress, (u16)tmp);
+          mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, (u16)tmp);
           dma->WriteAddress += dma->WriteAdd;
           dma->ReadAddress += dma->ReadAdd;
           dma->TransferNumber -= 4;
@@ -688,10 +681,10 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       // Fill in 32-bit units (always aligned).
       u32 start = dma->WriteAddress;
       if (constant_source) {
-        u32 val = read32_func((dma->ReadAddress & 0x0FFFFFFF));
+        u32 val = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
         while ( *time > 0) {
           *time -= 1;
-          write32_func(dma->WriteAddress, val);
+          mem_write32_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, val);
           dma->ReadAddress += dma->ReadAdd;
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
@@ -704,8 +697,8 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       else {
         while (*time > 0) {
           *time -= 1;
-          u32 val = read32_func((dma->ReadAddress & 0x0FFFFFFF));
-          write32_func(dma->WriteAddress, val);
+          u32 val = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
+          mem_write32_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, val);
           dma->ReadAddress += dma->ReadAdd;
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
@@ -728,8 +721,8 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       u32 start = dma->WriteAddress;
       while (*time > 0) {
         *time -= 1;
-        u16 tmp = read16_func((dma->ReadAddress & 0x0FFFFFFF));
-        write16_func(dma->WriteAddress, tmp);
+        u16 tmp = mem_read16_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
+        mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, tmp);
         dma->WriteAddress += dma->WriteAdd;
         dma->ReadAddress += 2;
         dma->TransferNumber -= 2;
@@ -744,8 +737,8 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       u32 start = dma->WriteAddress;
       while ( *time > 0) {
         *time -= 1;
-        u16 tmp = read16_func((dma->ReadAddress & 0x0FFFFFFF));
-        write16_func(dma->WriteAddress, tmp);
+        u16 tmp = mem_read16_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
+        mem_write16_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, tmp);
         dma->WriteAddress += (dma->WriteAdd >> 1);
         dma->ReadAddress += 2;
         dma->TransferNumber -= 2;
@@ -761,8 +754,8 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
       u32 start = dma->WriteAddress;
       while (*time > 0) {
         *time -= 1;
-        u32 val = read32_func((dma->ReadAddress & 0x0FFFFFFF));
-        write32_func(dma->WriteAddress, val);
+        u32 val = mem_read32_arr[MEM_GET_FUNC_ADDR(dma->ReadAddress & 0x0FFFFFFF)]((dma->ReadAddress & 0x0FFFFFFF));
+        mem_write32_arr[MEM_GET_FUNC_ADDR(dma->WriteAddress & 0x0FFFFFFF)](dma->WriteAddress, val);
         dma->ReadAddress += 4;
         dma->WriteAddress += dma->WriteAdd;
         dma->TransferNumber -= 4;
