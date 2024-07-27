@@ -22,6 +22,7 @@
 #define SCSP_H
 
 #include "core.h"  // For sized integer types
+#include "snd.h"
 ///////////////////////////////////////////////////////////////////////////
 // Breakpoint data structure (currently just an address)
 typedef struct {
@@ -85,29 +86,6 @@ extern SCSPInterface_struct *SCSCoreList[];  // Defined by each port
 #define SCSP_MUTE_SYSTEM    1
 #define SCSP_MUTE_USER      2
 
-typedef struct
-{
-	int id;
-	const char *Name;
-	int (*Init)(void);
-	void (*DeInit)(void);
-	int (*Reset)(void);
-	int (*ChangeVideoFormat)(int vertfreq);
-	// FIXME/SCSP1: u32* should be s32* (they're signed samples)
-	void (*UpdateAudio)(u32 *leftchanbuffer, u32 *rightchanbuffer, u32 num_samples);
-	u32 (*GetAudioSpace)(void);
-	void (*MuteAudio)(void);
-	void (*UnMuteAudio)(void);
-	void (*SetVolume)(int volume);
-} SoundInterface_struct;
-
-extern SoundInterface_struct SNDDummy;
-extern SoundInterface_struct SNDWave;
-
-extern SoundInterface_struct *SNDCoreList[];  // Defined by each port
-#ifdef SCSP_PLUGIN
-extern SoundInterface_struct *SNDCore;
-#endif
 
 ///////////////////////////////////////////////////////////////////////////
 

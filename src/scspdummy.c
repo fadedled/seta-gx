@@ -256,9 +256,7 @@ static void FASTCALL SCSDummyWriteLong(u32 address, u32 data)
 
 static M68KBreakpointInfo *SCSDummyM68KGetBreakpointList(void)
 {
-   M68KBreakpointInfo *m68k_breakpoint_dummy;
-
-   return m68k_breakpoint_dummy;
+   return NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////////

@@ -3034,10 +3034,6 @@ scsp_init (u8 *scsp_ram, void (*sint_hand)(u32), void (*mint_hand)(void))
 
 u8 SoundRam[0x80000];
 ScspInternal *ScspInternalVars;
-#ifndef SCSP_PLUGIN
-static SoundInterface_struct *SNDCore = NULL;
-#endif
-extern SoundInterface_struct *SNDCoreList[];
 
 struct sounddata
 {
@@ -3326,50 +3322,18 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
 int
 ScspChangeSoundCore (int coreid)
 {
-  int i;
+	int i;
 
-  // Make sure the old core is freed
-  if (SNDCore)
-    SNDCore->DeInit();
+	//TODO: Dont deinit, just pause
+    snd_DeInit();
 
-  // So which core do we want?
-  if (coreid == SNDCORE_DEFAULT)
-    coreid = 0; // Assume we want the first one
-
-  // Go through core list and find the id
-  for (i = 0; SNDCoreList[i] != NULL; i++)
-    {
-      if (SNDCoreList[i]->id == coreid)
-        {
-          // Set to current core
-          SNDCore = SNDCoreList[i];
-          break;
-        }
-    }
-
-  if (SNDCore == NULL)
-    {
-      SNDCore = &SNDDummy;
-      return -1;
-    }
-
-  if (SNDCore->Init () == -1)
-    {
-      // Since it failed, instead of it being fatal, we'll just use the dummy
-      // core instead
-
-      // This might be helpful though.
-      YabSetError (YAB_ERR_CANNOTINIT, (void *)SNDCore->Name);
-
-      SNDCore = &SNDDummy;
-    }
-
-  if (SNDCore)
-    {
-      if (scsp_mute_flags) SNDCore->MuteAudio();
-      else SNDCore->UnMuteAudio();
-      SNDCore->SetVolume(scsp_volume);
-    }
+	if (scsp_mute_flags) {
+		snd_MuteAudio();
+	}
+	else {
+		snd_UnMuteAudio();
+	}
+	snd_SetVolume(scsp_volume);
 
   return 0;
 }
@@ -3401,11 +3365,9 @@ SCSScsp1DeInit (void)
     free(scspchannel[1].data32);
   scspchannel[1].data32 = NULL;
 
-  if (SNDCore)
-    SNDCore->DeInit();
-  SNDCore = NULL;
+    snd_DeInit();
 
-  scsp_shutdown();
+	scsp_shutdown();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3462,7 +3424,7 @@ SCSScsp1ChangeVideoFormat (int type)
   if (scsp_alloc_bufs () < 0)
     return -1;
 
-  SNDCore->ChangeVideoFormat (type ? 50 : 60);
+  snd_ChangeVideoFormat (type ? 50 : 60);
 
   return 0;
 }
@@ -3650,7 +3612,7 @@ SCSScsp1Exec (int dummy)
   if (scspframeaccurate)
     {
       while (scspsoundoutleft > 0 &&
-             (audiosize = SNDCore->GetAudioSpace ()) > 0)
+             (audiosize = snd_GetAudioSpace ()) > 0)
         {
           s32 outstart = (s32)scspsoundgenpos - (s32)scspsoundoutleft;
 
@@ -3661,7 +3623,7 @@ SCSScsp1Exec (int dummy)
           if (audiosize > scspsoundbufsize - outstart)
             audiosize = scspsoundbufsize - outstart;
 
-          SNDCore->UpdateAudio (&scspchannel[0].data32[outstart],
+          snd_UpdateAudio (&scspchannel[0].data32[outstart],
                                 &scspchannel[1].data32[outstart], audiosize);
           scspsoundoutleft -= audiosize;
 
@@ -3675,7 +3637,7 @@ SCSScsp1Exec (int dummy)
     }
   else
     {
-      if ((audiosize = SNDCore->GetAudioSpace ()))
+      if ((audiosize = snd_GetAudioSpace ()))
         {
           if (audiosize > scspsoundlen)
             audiosize = scspsoundlen;
@@ -3684,7 +3646,7 @@ SCSScsp1Exec (int dummy)
 
           scsp_update ((s32 *)scspchannel[0].data32,
                        (s32 *)scspchannel[1].data32, audiosize);
-          SNDCore->UpdateAudio (scspchannel[0].data32,
+          snd_UpdateAudio (scspchannel[0].data32,
                                 (u32 *)scspchannel[1].data32, audiosize);
 
 #ifdef WIN32
@@ -3763,8 +3725,8 @@ SCSScsp1MuteAudio (int flags)
 #endif
 {
   scsp_mute_flags |= flags;
-  if (SNDCore && scsp_mute_flags)
-    SNDCore->MuteAudio ();
+  if (scsp_mute_flags)
+    snd_MuteAudio ();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3777,8 +3739,8 @@ SCSScsp1UnMuteAudio (int flags)
 #endif
 {
   scsp_mute_flags &= ~flags;
-  if (SNDCore && (scsp_mute_flags == 0))
-    SNDCore->UnMuteAudio ();
+  if (scsp_mute_flags == 0)
+    snd_UnMuteAudio ();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3791,8 +3753,7 @@ SCSScsp1SetVolume (int volume)
 #endif
 {
   scsp_volume = volume;
-  if (SNDCore)
-    SNDCore->SetVolume (volume);
+  snd_SetVolume (volume);
 }
 
 //////////////////////////////////////////////////////////////////////////////

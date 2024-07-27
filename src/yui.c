@@ -112,12 +112,6 @@ NULL
 };
 #endif
 
-SoundInterface_struct *SNDCoreList[] = {
-&SNDDummy,
-&SNDDummy,
-NULL
-};
-
 
 M68K_struct *M68KCoreList[] = {
 &M68KDummy,

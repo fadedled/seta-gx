@@ -99,7 +99,6 @@ SCSScsp2M68KGetBreakpointList
 };
 #endif
 
-extern SoundInterface_struct *SNDCoreList[];  // Defined by each port
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -542,9 +541,7 @@ static u32 scsp_clock_inc;
 
 // Selected sound output module
 #ifndef SCSP_PLUGIN
-static SoundInterface_struct *SNDCore;
 #else
-SoundInterface_struct *SNDCore=NULL;
 SCSPInterface_struct *SCSCore=NULL;
 #endif
 
@@ -1201,54 +1198,20 @@ int ScspChangeCore(int coreid)
 #ifndef SCSP_PLUGIN
 int ScspChangeSoundCore(int coreid)
 {
-   int i;
+	int i;
+	//TODO: Dont deinit, just pause
+	snd_DeInit();
 
-   // Make sure the old core is freed
-   if (SNDCore)
-      SNDCore->DeInit();
+	if (scsp_mute_flags) {
+		snd_MuteAudio();
+	}
+	else {
+		snd_UnMuteAudio();
+	}
+	snd_SetVolume(scsp_volume);
 
-   // If the default was requested, use the first core in the list
-   if (coreid == SNDCORE_DEFAULT)
-      SNDCore = SNDCoreList[0];
-   else
-   {
-      // Otherwise, go through core list and find the id
-      for (i = 0; SNDCoreList[i] != NULL; i++)
-      {
-         if (SNDCoreList[i]->id == coreid)
-         {
-            // Set to current core
-            SNDCore = SNDCoreList[i];
-            break;
-         }
-      }
-   }
 
-   if (SNDCore == NULL)
-   {
-      SNDCore = &SNDDummy;
-      return -1;
-   }
-
-   if (SNDCore->Init() == -1)
-   {
-      // Since it failed, instead of it being fatal, we'll just use the dummy
-      // core instead
-
-      // This might be helpful though.
-      YabSetError(YAB_ERR_CANNOTINIT, (void *)SNDCore->Name);
-
-      SNDCore = &SNDDummy;
-   }
-
-   if (SNDCore)
-   {
-      if (scsp_mute_flags) SNDCore->MuteAudio();
-      else SNDCore->UnMuteAudio();
-      SNDCore->SetVolume(scsp_volume);
-   }
-
-   return 0;
+	return 0;
 }
 #endif
 
@@ -1266,7 +1229,7 @@ int SCSScsp2ChangeVideoFormat(int type)
 {
    scsp_clock_inc = yabsys.IsPal ? SCSP_CLOCK_INC_PAL : SCSP_CLOCK_INC_NTSC;
 
-   SNDCore->ChangeVideoFormat(type ? 50 : 60);
+   snd_ChangeVideoFormat(type ? 50 : 60);
 
    return 0;
 }
@@ -1294,8 +1257,8 @@ void SCSScsp2MuteAudio(int flags)
 #endif
 {
    scsp_mute_flags |= flags;
-   if (SNDCore && scsp_mute_flags)
-      SNDCore->MuteAudio();
+   if (scsp_mute_flags)
+      snd_MuteAudio();
 }
 
 #ifndef SCSP_PLUGIN
@@ -1305,8 +1268,8 @@ void SCSScsp2UnMuteAudio(int flags)
 #endif
 {
    scsp_mute_flags &= ~flags;
-   if (SNDCore && (scsp_mute_flags == 0))
-      SNDCore->UnMuteAudio();
+   if (scsp_mute_flags == 0)
+      snd_UnMuteAudio();
 }
 
 //-------------------------------------------------------------------------
@@ -1321,8 +1284,7 @@ void SCSScsp2SetVolume(int volume)
 #endif
 {
    scsp_volume = volume;
-   if (SNDCore)
-      SNDCore->SetVolume(volume);
+   snd_SetVolume(volume);
 }
 
 //-------------------------------------------------------------------------
@@ -1335,19 +1297,7 @@ void ScspDeInit(void)
 void SCSScsp2DeInit(void)
 #endif
 {
-#if 0
-   if (scsp_thread_running)
-   {
-      scsp_thread_running = 0;  // Tell the subthread to stop
-      YabThreadWake(YAB_THREAD_SCSP);
-      YabThreadWait(YAB_THREAD_SCSP);
-   }
-#endif
-
-   if (SNDCore)
-      SNDCore->DeInit();
-   SNDCore = NULL;
-
+	snd_DeInit();
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -1517,7 +1467,7 @@ static void ScspDoExec(u32 cycles)
       }
 
       // Send audio to the output device if possible
-      while (scsp_sound_left > 0 && (audio_free = SNDCore->GetAudioSpace()) > 0)
+      while (scsp_sound_left > 0 && (audio_free = snd_GetAudioSpace()) > 0)
       {
          s32 out_start = (s32)scsp_sound_genpos - (s32)scsp_sound_left;
          if (out_start < 0)
@@ -1526,7 +1476,7 @@ static void ScspDoExec(u32 cycles)
             audio_free = scsp_sound_left;
          if (audio_free > SCSP_SOUND_BUFSIZE - out_start)
             audio_free = SCSP_SOUND_BUFSIZE - out_start;
-         SNDCore->UpdateAudio((u32 *) &scsp_buffer[out_start << 1],
+         snd_UpdateAudio((u32 *) &scsp_buffer[out_start << 1],
                               NULL, audio_free);
          scsp_sound_left -= audio_free;
       }
