@@ -281,7 +281,7 @@ typedef struct slot_t
   u8 fsft;      // frequency shift (used for freq lfo)
 
   u8 mdl;       // modulation level
-  u8 mdx;       // modulation source X 
+  u8 mdx;       // modulation source X
   u8 mdy;       // modulation source Y
 
   u8 imxl;      // input sound level

@@ -106,7 +106,7 @@ NULL
 #ifdef SCSP_PLUGIN
 SCSPInterface_struct *SCSCoreList[] = {
 &SCSDummy,
-&SCSScsp1,
+&SCSScsp2,
 &SCSScsp2,
 NULL
 };
