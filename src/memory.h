@@ -331,11 +331,19 @@ u32 val;
 #define SEARCHREL8BIT           (6 << 4)
 #define SEARCHREL16BIT          (7 << 4)
 
-extern u8 bup_ram[BACKUP_RAM_SIZE];
-extern u8 wram[WRAM_SIZE];
 
 void mem_Init(void);
+void mem_allocate(void);
 void mem_Deinit(void);
+
+extern u8 *wram;
+extern u8 *bup_ram;
+extern u8 *bios_rom;
+extern u8 *wii_vram;
+extern u8 *Vdp1Ram;
+extern u8 *Vdp1FrameBuffer;
+extern u8 *SoundRam;
+extern u32 *display_fb;
 
 int LoadBios(const char *filename);
 int LoadBackupRam(const char *filename);

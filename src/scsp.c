@@ -3032,7 +3032,7 @@ scsp_init (u8 *scsp_ram, void (*sint_hand)(u32), void (*mint_hand)(void))
 // Yabause specific
 //////////////////////////////////////////////////////////////////////////////
 
-u8 SoundRam[0x80000];
+u8 *SoundRam;
 ScspInternal *ScspInternalVars;
 
 struct sounddata

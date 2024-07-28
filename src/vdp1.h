@@ -78,9 +78,9 @@ void Vdp1FakeDrawCommands(u8 * ram, Vdp1 * regs);
 #define VDP1_REGS_SIZE		0x1000		//Most bytes go unused, must be min pagesize
 
 
-extern u8 Vdp1Ram[VDP1_RAM_SIZE] ATTRIBUTE_ALIGN(32);
+extern u8 *Vdp1Ram;
 extern u8 *vdp1_ram_al[4];
-extern u8 Vdp1FrameBuffer[VDP1_FB_SIZE] ATTRIBUTE_ALIGN(32);
+extern u8 *Vdp1FrameBuffer;
 extern Vdp1 * Vdp1Regs;
 
 enum VDP1STATUS {

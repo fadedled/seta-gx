@@ -71,9 +71,9 @@ u32 write16_mask[0x800];
 u32 write32_mask[0x800];
 #endif
 
-u8 wram[WRAM_SIZE] ATTRIBUTE_ALIGN(32);
-u8 bios_rom[BIOS_SIZE] ATTRIBUTE_ALIGN(32);
-u8 bup_ram[BACKUP_RAM_SIZE] ATTRIBUTE_ALIGN(32);
+u8 *wram;
+u8 *bios_rom;
+u8 *bup_ram;
 
 /* This flag is set to 1 on every write to backup RAM.  Ports can freely
  * check or clear this flag to determine when backup RAM has been written,
@@ -395,6 +395,23 @@ static void FillMemoryArea(unsigned short start, unsigned short end,
 }
 
 //////////////////////////////////////////////////////////////////////////////
+//TODO: move this to mem_init and use a mem_Reset
+void mem_allocate(void)
+{
+	//Should be in MEM1
+	wram = (u8*) memalign(32, 0x200000);
+	Vdp1FrameBuffer = (u8*) memalign(32, 0x80000);
+	Vdp1Ram = (u8*) memalign(32, 0x80000);
+	wii_vram = (u8*) memalign(32, 0x80000);	//Should be done in another place
+
+
+	//Should be in MEM2
+	SoundRam = (u8*) memalign(32, 0x80000);
+	bios_rom = (u8*) memalign(32, 0x80000);
+	display_fb = (u32*) memalign(32, 0x58000);	//Should be done in another place
+	bup_ram = (u8*) memalign(32, 0x10000);
+}
+
 
 void mem_Init(void)
 {

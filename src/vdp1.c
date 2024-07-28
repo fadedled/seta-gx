@@ -34,8 +34,8 @@
 
 u8 vdp1_regs[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
 
-u8 Vdp1Ram[VDP1_RAM_SIZE] ATTRIBUTE_ALIGN(32);
-u8 Vdp1FrameBuffer[VDP1_FB_SIZE] ATTRIBUTE_ALIGN(32);
+u8 *Vdp1Ram;
+u8 *Vdp1FrameBuffer;
 Vdp1 *Vdp1Regs;
 Vdp1External_struct Vdp1External;
 

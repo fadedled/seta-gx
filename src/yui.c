@@ -199,7 +199,7 @@ extern int dividenumclock;
 
 static BOOL flag_mount = FALSE;
 
-u32 display_fb[256 * 352] ATTRIBUTE_ALIGN(32);
+u32 *display_fb;
 GXTexObj tex_lores_fb;
 
 extern int fpstoggle;
@@ -613,6 +613,7 @@ int main(int argc, char **argv)
 	VIDEO_Flush();
 	VIDEO_WaitVSync();
 
+	mem_allocate();
 	InitGX();
 	snd_Init();
 	menu_Init();

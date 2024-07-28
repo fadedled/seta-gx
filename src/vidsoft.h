@@ -30,7 +30,6 @@
 #endif
 
 extern u32 *dispbuffer;
-extern u8 wii_vram[0x80000];
 extern u32 tex_dirty[0x200];
 
 int VIDSoftInit(void);

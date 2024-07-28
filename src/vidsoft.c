@@ -81,7 +81,6 @@ u8 *vdp1backframebuffer;
 
 //Window texture
 //XXX: background texture data
-static u16 bg_tex[4][352 * 256] ATTRIBUTE_ALIGN(32);
 //static u8 bg_alpha_tex[4][352 * 256] ATTRIBUTE_ALIGN(32);
 static u8 *win_tex;
 //static u8 win_tex[640 * 512] ATTRIBUTE_ALIGN(32);
@@ -154,12 +153,12 @@ GXTexObj tobj_bitmap;
 GXTlutObj tlut_obj;
 //vram clone for converted textures
 //Double VRAM because of tiles
-u8 wii_vram[0x80000] ATTRIBUTE_ALIGN(32);
+u8 *wii_vram;
 u32 tex_dirty[0x200];
 
 //Vdp1 Framebuffer copy for vpd2
 //u32 display_fb[640 * 480] ATTRIBUTE_ALIGN(32);
-extern u32 display_fb[256 * 352] ATTRIBUTE_ALIGN(32);
+//extern u32 display_fb[256 * 352] ATTRIBUTE_ALIGN(32);
 static u8 screen_list[8];
 u32 bad_cycle_setting_nbg3 = 0;
 
@@ -2388,7 +2387,7 @@ int VIDSoftInit(void)
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 	memset(tex_dirty, 0, 0x200 << 2);
 
-	GX_InitTexObj(&tex_obj_bg[2], bg_tex[2], 1, 1, GX_TF_CI4, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	// //GX_InitTexObj(&tex_obj_bg[2], bg_tex[2], 1, 1, GX_TF_CI4, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tex_obj_bg[2], GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 
 	GX_InitTexObj(&tex_obj_i4, wii_vram, 8, 8, GX_TF_I4, GX_CLAMP, GX_CLAMP, GX_FALSE);

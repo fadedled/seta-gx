@@ -44,7 +44,7 @@ void osd_MsgAdd(u32 x, u32 y, u32 color, char *msg)
 {
 	u32 len = 0;
 
-	if (!msg || osd.count > MAX_MESSAGES) {
+	if (!msg || osd.count >= MAX_MESSAGES) {
 		return;
 	}
 
@@ -160,6 +160,5 @@ void osd_MsgShow(void)
 
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 	osd.count = 0;
-	msg_index = 0;
 }
 
