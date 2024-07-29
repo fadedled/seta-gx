@@ -165,3 +165,182 @@ M68K_struct M68KDummy = {
 	M68KDummySetWriteB,
 	M68KDummySetWriteW
 };
+
+
+//======================================================
+//Musashi Plug in (will replace all plug ins)
+//======================================================
+#include "musashi/m68k.h"
+#include "musashi/m68kcpu.h"
+
+
+//TODO: this should not be done this way.. implement directly
+M68K_READ *mus_read8;
+M68K_READ *mus_read16;
+M68K_WRITE *mus_write8;
+M68K_WRITE *mus_write16;
+
+
+int musashi_Init(void)
+{
+
+}
+
+int musashi_DeInit(void)
+{
+
+}
+
+void musashi_Reset(void)
+{
+
+}
+
+s32 musashi_Exec(s32 cycles)
+{
+
+}
+
+void musashi_Sync(void)
+{
+
+}
+
+
+u32 musashi_GetDReg(u32 num)
+{
+
+}
+
+u32 musashi_GetAReg(u32 num)
+{
+
+}
+
+u32 musashi_GetPC(void)
+{
+
+}
+
+u32 musashi_GetSR(void)
+{
+
+}
+
+u32 musashi_GetUSP(void)
+{
+
+}
+
+u32 musashi_GetMSP(void)
+{
+
+}
+
+void musashi_SetDReg(u32 num, u32 val)
+{
+
+}
+
+void musashi_SetAReg(u32 num, u32 val)
+{
+
+}
+
+void musashi_SetPC(u32 val)
+{
+
+}
+
+void musashi_SetSR(u32 val)
+{
+
+}
+
+void musashi_SetUSP(u32 val)
+{
+
+}
+
+void musashi_SetMSP(u32 val)
+{
+
+}
+
+void musashi_SetFetch(u32 low_adr, u32 high_adr, pointer fetch_addr)
+{
+
+}
+
+void FASTCALL musashi_SetIRQ(s32 level)
+{
+
+}
+
+void FASTCALL musashi_WriteNotify(u32 address, u32 size)
+{
+
+}
+
+void musashi_SetReadB(M68K_READ *func)
+{
+	mus_read8 = func;
+}
+
+void musashi_SetReadW(M68K_READ *func)
+{
+	mus_read16 = func;
+}
+
+void musashi_SetWriteB(M68K_READ *func)
+{
+	mus_write8 = func;
+}
+
+void musashi_SetWriteW(M68K_READ *func)
+{
+	mus_write16 = func;
+}
+
+void musashi_SaveState(FILE *fp)
+{
+	//Does nothing
+}
+
+void musashi_LoadState(FILE *fp)
+{
+	//Does nothing
+}
+
+
+//Implementation for musashi read/write functions
+u32 m8k_read_memory_8(u32 address)
+{
+
+}
+
+u32 m8k_read_memory_16(u32 address)
+{
+
+}
+
+u32 m8k_read_memory_32(u32 address)
+{
+
+}
+
+void m8k_write_memory_8(u32 address, u32 value)
+{
+
+}
+
+void m8k_write_memory_16(u32 address, u32 value)
+{
+
+}
+
+void m8k_write_memory_32(u32 address, u32 value)
+{
+
+}
+
