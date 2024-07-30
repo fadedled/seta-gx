@@ -3,11 +3,10 @@
 /* ======================================================================== */
 /*
  *                                  MUSASHI
- *                                Version 4.60
+ *                                Version 3.4
  *
  * A portable Motorola M680x0 processor emulation engine.
- * Copyright Karl Stenerud.  All rights reserved.
- * FPU and MMU by R. Belmont.
+ * Copyright 1998-2001 Karl Stenerud.  All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -57,7 +56,7 @@
  */
 
 
-static const char g_version[] = "4.60";
+char* g_version = "3.3";
 
 /* ======================================================================== */
 /* =============================== INCLUDES =============================== */
@@ -78,6 +77,7 @@ static const char g_version[] = "4.60";
 #define M68K_MAX_PATH 1024
 #define M68K_MAX_DIR  1024
 
+#define NUM_CPUS                          3	/* 000, 010, 020 */
 #define MAX_LINE_LENGTH                 200	/* length of 1 line */
 #define MAX_BODY_LENGTH                 300	/* Number of lines in 1 function */
 #define MAX_REPLACE_LENGTH               30	/* Max number of replace strings */
@@ -93,6 +93,9 @@ static const char g_version[] = "4.60";
 #define FILENAME_INPUT      "m68k_in.c"
 #define FILENAME_PROTOTYPE  "m68kops.h"
 #define FILENAME_TABLE      "m68kops.c"
+#define FILENAME_OPS_AC     "m68kopac.c"
+#define FILENAME_OPS_DM     "m68kopdm.c"
+#define FILENAME_OPS_NZ     "m68kopnz.c"
 
 
 /* Identifier sequences recognized by this program */
@@ -132,14 +135,9 @@ static const char g_version[] = "4.60";
 /* ============================== PROTOTYPES ============================== */
 /* ======================================================================== */
 
-enum {
-    CPU_TYPE_000=0,
-    CPU_TYPE_010,
-    CPU_TYPE_020,
-    CPU_TYPE_030,
-    CPU_TYPE_040,
-    NUM_CPUS
-};
+#define CPU_TYPE_000 0
+#define CPU_TYPE_010 1
+#define CPU_TYPE_020 2
 
 #define UNSPECIFIED "."
 #define UNSPECIFIED_CH '.'
@@ -187,7 +185,7 @@ typedef struct
 	char ea_allowed[EA_ALLOWED_LENGTH];   /* Effective addressing modes allowed */
 	char cpu_mode[NUM_CPUS];              /* User or supervisor mode */
 	char cpus[NUM_CPUS+1];                /* Allowed CPUs */
-	unsigned char cycles[NUM_CPUS];       /* cycles for 000, 010, 020, 030, 040 */
+	unsigned char cycles[NUM_CPUS];       /* cycles for 000, 010, 020 */
 } opcode_struct;
 
 
@@ -218,11 +216,11 @@ typedef struct
 
 
 /* Function Prototypes */
-void error_exit(const char* fmt, ...);
-void perror_exit(const char* fmt, ...);
-int check_strsncpy(char* dst, char* src, int maxlength);
-int check_atoi(char* str, int *result);
-int skip_spaces(char* str);
+void error_exit(char* fmt, ...);
+void perror_exit(char* fmt, ...);
+size_t check_strsncpy(char* dst, char* src, int maxlength);
+size_t check_atoi(char* str, int *result);
+size_t skip_spaces(char* str);
 int num_bits(int value);
 int atoh(char* buff);
 int fgetline(char* buff, int nchars, FILE* file);
@@ -233,6 +231,7 @@ int extract_opcode_info(char* src, char* name, int* size, char* spec_proc, char*
 void add_replace_string(replace_struct* replace, char* search_str, char* replace_str);
 void write_body(FILE* filep, body_struct* body, replace_struct* replace);
 void get_base_name(char* base_name, opcode_struct* op);
+void write_prototype(FILE* filep, char* base_name);
 void write_function_name(FILE* filep, char* base_name);
 void add_opcode_output_table_entry(opcode_struct* op, char* name);
 static int DECL_SPEC compare_nof_true_bits(const void* aptr, const void* bptr);
@@ -242,7 +241,7 @@ void set_opcode_struct(opcode_struct* src, opcode_struct* dst, int ea_mode);
 void generate_opcode_handler(FILE* filep, body_struct* body, replace_struct* replace, opcode_struct* opinfo, int ea_mode);
 void generate_opcode_ea_variants(FILE* filep, body_struct* body, replace_struct* replace, opcode_struct* op);
 void generate_opcode_cc_variants(FILE* filep, body_struct* body, replace_struct* replace, opcode_struct* op_in, int offset);
-void process_opcode_handlers(FILE* filep);
+void process_opcode_handlers(void);
 void populate_table(void);
 void read_insert(char* insert);
 
@@ -259,6 +258,9 @@ char g_input_filename[M68K_MAX_PATH] = FILENAME_INPUT;
 FILE* g_input_file = NULL;
 FILE* g_prototype_file = NULL;
 FILE* g_table_file = NULL;
+FILE* g_ops_ac_file = NULL;
+FILE* g_ops_dm_file = NULL;
+FILE* g_ops_nz_file = NULL;
 
 int g_num_functions = 0;  /* Number of functions processed */
 int g_num_primitives = 0; /* Number of function primitives read */
@@ -270,7 +272,7 @@ opcode_struct g_opcode_input_table[MAX_OPCODE_INPUT_TABLE_LENGTH];
 opcode_struct g_opcode_output_table[MAX_OPCODE_OUTPUT_TABLE_LENGTH];
 int g_opcode_output_table_length = 0;
 
-const ea_info_struct g_ea_info_table[13] =
+ea_info_struct g_ea_info_table[13] =
 {/* fname    ea        mask  match */
 	{"",     "",       0x00, 0x00}, /* EA_MODE_NONE */
 	{"ai",   "AY_AI",  0x38, 0x10}, /* EA_MODE_AI   */
@@ -288,7 +290,7 @@ const ea_info_struct g_ea_info_table[13] =
 };
 
 
-const char *const g_cc_table[16][2] =
+char* g_cc_table[16][2] =
 {
 	{ "t",  "T"}, /* 0000 */
 	{ "f",  "F"}, /* 0001 */
@@ -309,7 +311,7 @@ const char *const g_cc_table[16][2] =
 };
 
 /* size to index translator (0 -> 0, 8 and 16 -> 1, 32 -> 2) */
-const int g_size_select_table[33] =
+int g_size_select_table[33] =
 {
 	0,												/* unsized */
 	0, 0, 0, 0, 0, 0, 0, 1,							/*    8    */
@@ -318,26 +320,25 @@ const int g_size_select_table[33] =
 };
 
 /* Extra cycles required for certain EA modes */
-/* TODO: correct timings for 030, 040 */
-const int g_ea_cycle_table[13][NUM_CPUS][3] =
-{/*       000           010           020           030           040  */
-	{{ 0,  0,  0}, { 0,  0,  0}, { 0,  0,  0}, { 0,  0,  0}, { 0,  0,  0}}, /* EA_MODE_NONE */
-	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}, { 0,  4,  4}, { 0,  4,  4}}, /* EA_MODE_AI   */
-	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}, { 0,  4,  4}, { 0,  4,  4}}, /* EA_MODE_PI   */
-	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}, { 0,  4,  4}, { 0,  4,  4}}, /* EA_MODE_PI7  */
-	{{ 0,  6, 10}, { 0,  6, 10}, { 0,  5,  5}, { 0,  5,  5}, { 0,  5,  5}}, /* EA_MODE_PD   */
-	{{ 0,  6, 10}, { 0,  6, 10}, { 0,  5,  5}, { 0,  5,  5}, { 0,  5,  5}}, /* EA_MODE_PD7  */
-	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  5,  5}, { 0,  5,  5}, { 0,  5,  5}}, /* EA_MODE_DI   */
-	{{ 0, 10, 14}, { 0, 10, 14}, { 0,  7,  7}, { 0,  7,  7}, { 0,  7,  7}}, /* EA_MODE_IX   */
-	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  4,  4}, { 0,  4,  4}, { 0,  4,  4}}, /* EA_MODE_AW   */
-	{{ 0, 12, 16}, { 0, 12, 16}, { 0,  4,  4}, { 0,  4,  4}, { 0,  4,  4}}, /* EA_MODE_AL   */
-	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  5,  5}, { 0,  5,  5}, { 0,  5,  5}}, /* EA_MODE_PCDI */
-	{{ 0, 10, 14}, { 0, 10, 14}, { 0,  7,  7}, { 0,  7,  7}, { 0,  7,  7}}, /* EA_MODE_PCIX */
-	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  2,  4}, { 0,  2,  4}, { 0,  2,  4}}, /* EA_MODE_I    */
+int g_ea_cycle_table[13][NUM_CPUS][3] =
+{/*       000           010           020   */
+	{{ 0,  0,  0}, { 0,  0,  0}, { 0,  0,  0}}, /* EA_MODE_NONE */
+	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}}, /* EA_MODE_AI   */
+	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}}, /* EA_MODE_PI   */
+	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  4,  4}}, /* EA_MODE_PI7  */
+	{{ 0,  6, 10}, { 0,  6, 10}, { 0,  5,  5}}, /* EA_MODE_PD   */
+	{{ 0,  6, 10}, { 0,  6, 10}, { 0,  5,  5}}, /* EA_MODE_PD7  */
+	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  5,  5}}, /* EA_MODE_DI   */
+	{{ 0, 10, 14}, { 0, 10, 14}, { 0,  7,  7}}, /* EA_MODE_IX   */
+	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  4,  4}}, /* EA_MODE_AW   */
+	{{ 0, 12, 16}, { 0, 12, 16}, { 0,  4,  4}}, /* EA_MODE_AL   */
+	{{ 0,  8, 12}, { 0,  8, 12}, { 0,  5,  5}}, /* EA_MODE_PCDI */
+	{{ 0, 10, 14}, { 0, 10, 14}, { 0,  7,  7}}, /* EA_MODE_PCIX */
+	{{ 0,  4,  8}, { 0,  4,  8}, { 0,  2,  4}}, /* EA_MODE_I    */
 };
 
 /* Extra cycles for JMP instruction (000, 010) */
-const int g_jmp_cycle_table[13] =
+int g_jmp_cycle_table[13] =
 {
 	 0, /* EA_MODE_NONE */
 	 4, /* EA_MODE_AI   */
@@ -355,7 +356,7 @@ const int g_jmp_cycle_table[13] =
 };
 
 /* Extra cycles for JSR instruction (000, 010) */
-const int g_jsr_cycle_table[13] =
+int g_jsr_cycle_table[13] =
 {
 	 0, /* EA_MODE_NONE */
 	 4, /* EA_MODE_AI   */
@@ -373,7 +374,7 @@ const int g_jsr_cycle_table[13] =
 };
 
 /* Extra cycles for LEA instruction (000, 010) */
-const int g_lea_cycle_table[13] =
+int g_lea_cycle_table[13] =
 {
 	 0, /* EA_MODE_NONE */
 	 4, /* EA_MODE_AI   */
@@ -391,7 +392,7 @@ const int g_lea_cycle_table[13] =
 };
 
 /* Extra cycles for PEA instruction (000, 010) */
-const int g_pea_cycle_table[13] =
+int g_pea_cycle_table[13] =
 {
 	 0, /* EA_MODE_NONE */
 	 6, /* EA_MODE_AI   */
@@ -408,26 +409,8 @@ const int g_pea_cycle_table[13] =
 	 0, /* EA_MODE_I    */
 };
 
-/* Extra cycles for MOVEM instruction (000, 010) */
-const int g_movem_cycle_table[13] =
-{
-	 0, /* EA_MODE_NONE */
-	 0, /* EA_MODE_AI   */
-	 0, /* EA_MODE_PI   */
-	 0, /* EA_MODE_PI7  */
-	 0, /* EA_MODE_PD   */
-	 0, /* EA_MODE_PD7  */
-	 4, /* EA_MODE_DI   */
-	 6, /* EA_MODE_IX   */
-	 4, /* EA_MODE_AW   */
-	 8, /* EA_MODE_AL   */
-	 0, /* EA_MODE_PCDI */
-	 0, /* EA_MODE_PCIX */
-	 0, /* EA_MODE_I    */
-};
-
 /* Extra cycles for MOVES instruction (010) */
-const int g_moves_cycle_table[13][3] =
+int g_moves_cycle_table[13][3] =
 {
 	{ 0,  0,  0}, /* EA_MODE_NONE */
 	{ 0,  4,  6}, /* EA_MODE_AI   */
@@ -445,7 +428,7 @@ const int g_moves_cycle_table[13][3] =
 };
 
 /* Extra cycles for CLR instruction (010) */
-const int g_clr_cycle_table[13][3] =
+int g_clr_cycle_table[13][3] =
 {
 	{ 0,  0,  0}, /* EA_MODE_NONE */
 	{ 0,  4,  6}, /* EA_MODE_AI   */
@@ -469,7 +452,7 @@ const int g_clr_cycle_table[13][3] =
 /* ======================================================================== */
 
 /* Print an error message and exit with status error */
-void error_exit(const char* fmt, ...)
+void error_exit(char* fmt, ...)
 {
 	va_list args;
 	fprintf(stderr, "In %s, near or on line %d:\n\t", g_input_filename, g_line_number);
@@ -480,13 +463,16 @@ void error_exit(const char* fmt, ...)
 
 	if(g_prototype_file) fclose(g_prototype_file);
 	if(g_table_file) fclose(g_table_file);
+	if(g_ops_ac_file) fclose(g_ops_ac_file);
+	if(g_ops_dm_file) fclose(g_ops_dm_file);
+	if(g_ops_nz_file) fclose(g_ops_nz_file);
 	if(g_input_file) fclose(g_input_file);
 
 	exit(EXIT_FAILURE);
 }
 
 /* Print an error message, call perror(), and exit with status error */
-void perror_exit(const char* fmt, ...)
+void perror_exit(char* fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
@@ -496,6 +482,9 @@ void perror_exit(const char* fmt, ...)
 
 	if(g_prototype_file) fclose(g_prototype_file);
 	if(g_table_file) fclose(g_table_file);
+	if(g_ops_ac_file) fclose(g_ops_ac_file);
+	if(g_ops_dm_file) fclose(g_ops_dm_file);
+	if(g_ops_nz_file) fclose(g_ops_nz_file);
 	if(g_input_file) fclose(g_input_file);
 
 	exit(EXIT_FAILURE);
@@ -503,7 +492,7 @@ void perror_exit(const char* fmt, ...)
 
 
 /* copy until 0 or space and exit with error if we read too far */
-int check_strsncpy(char* dst, char* src, int maxlength)
+size_t check_strsncpy(char* dst, char* src, int maxlength)
 {
 	char* p = dst;
 	while(*src && *src != ' ')
@@ -517,7 +506,7 @@ int check_strsncpy(char* dst, char* src, int maxlength)
 }
 
 /* copy until 0 or specified character and exit with error if we read too far */
-int check_strcncpy(char* dst, char* src, char delim, int maxlength)
+size_t check_strcncpy(char* dst, char* src, char delim, int maxlength)
 {
 	char* p = dst;
 	while(*src && *src != delim)
@@ -531,7 +520,7 @@ int check_strcncpy(char* dst, char* src, char delim, int maxlength)
 }
 
 /* convert ascii to integer and exit with error if we find invalid data */
-int check_atoi(char* str, int *result)
+size_t check_atoi(char* str, int *result)
 {
 	int accum = 0;
 	char* p = str;
@@ -547,7 +536,7 @@ int check_atoi(char* str, int *result)
 }
 
 /* Skip past spaces in a string */
-int skip_spaces(char* str)
+size_t skip_spaces(char* str)
 {
 	char* p = str;
 
@@ -597,9 +586,9 @@ int fgetline(char* buff, int nchars, FILE* file)
 	if(fgets(buff, nchars, file) == NULL)
 		return -1;
 	if(buff[0] == '\r')
-		memmove(buff, buff + 1, nchars - 1);
+		memcpy(buff, buff + 1, nchars - 1);
 
-	length = strlen(buff);
+	length = (int)strlen(buff);
 	while(length && (buff[length-1] == '\r' || buff[length-1] == '\n'))
 		length--;
 	buff[length] = 0;
@@ -650,8 +639,6 @@ int get_oper_cycles(opcode_struct* op, int ea_mode, int cpu_type)
 			return op->cycles[cpu_type] + g_lea_cycle_table[ea_mode];
 		if(strcmp(op->name, "pea") == 0)
 			return op->cycles[cpu_type] + g_pea_cycle_table[ea_mode];
-		if(strcmp(op->name, "movem") == 0)
-			return op->cycles[cpu_type] + g_movem_cycle_table[ea_mode];
 	}
 	return op->cycles[cpu_type] + g_ea_cycle_table[ea_mode][cpu_type][size];
 }
@@ -662,7 +649,7 @@ opcode_struct* find_opcode(char* name, int size, char* spec_proc, char* spec_ea)
 	opcode_struct* op;
 
 
-	for(op = g_opcode_input_table;op < &g_opcode_input_table[MAX_OPCODE_INPUT_TABLE_LENGTH];op++)
+	for(op = g_opcode_input_table; strlen(op->name) != 0;op++)
 	{
 		if(	strcmp(name, op->name) == 0 &&
 			(size == op->size) &&
@@ -678,7 +665,7 @@ opcode_struct* find_illegal_opcode(void)
 {
 	opcode_struct* op;
 
-	for(op = g_opcode_input_table;op < &g_opcode_input_table[MAX_OPCODE_INPUT_TABLE_LENGTH];op++)
+	for(op = g_opcode_input_table;strlen(op->name) != 0;op++)
 	{
 		if(strcmp(op->name, "illegal") == 0)
 			return op;
@@ -724,6 +711,15 @@ int extract_opcode_info(char* src, char* name, int* size, char* spec_proc, char*
 /* Add a search/replace pair to a replace structure */
 void add_replace_string(replace_struct* replace, char* search_str, char* replace_str)
 {
+	size_t search_str_len = strlen(search_str);
+	size_t replace_str_len = strlen(replace_str);
+
+	if(search_str_len >= 201)
+		error_exit("search_str was too long");
+
+	if (replace_str_len >= 201)
+		error_exit("replace_str was too long");
+
 	if(replace->length >= MAX_REPLACE_LENGTH)
 		error_exit("overflow in replace structure");
 
@@ -754,6 +750,9 @@ void write_body(FILE* filep, body_struct* body, replace_struct* replace)
 				ptr = strstr(output, replace->replace[j][0]);
 				if(ptr)
 				{
+					size_t replace_len = strlen(ptr + strlen(replace->replace[j][0]));
+					if(replace_len >= 201)
+						error_exit("write_body: replace_len was too long");
 					/* We found something to replace */
 					found = 1;
 					strcpy(temp_buff, ptr+strlen(replace->replace[j][0]));
@@ -763,7 +762,7 @@ void write_body(FILE* filep, body_struct* body, replace_struct* replace)
 			}
 			/* Found a directive with no matching replace string */
 			if(!found)
-				error_exit("Unknown " ID_BASE " directive [%s]", output);
+				error_exit("Unknown " ID_BASE " directive");
 		}
 		fprintf(filep, "%s\n", output);
 	}
@@ -782,16 +781,27 @@ void get_base_name(char* base_name, opcode_struct* op)
 		sprintf(base_name+strlen(base_name), "_%s", op->spec_ea);
 }
 
+/* Write the prototype of an opcode handler function */
+void write_prototype(FILE* filep, char* base_name)
+{
+	fprintf(filep, "void %s(void);\n", base_name);
+}
+
 /* Write the name of an opcode handler function */
 void write_function_name(FILE* filep, char* base_name)
 {
-	fprintf(filep, "static void %s(void)\n", base_name);
+	fprintf(filep, "void %s(void)\n", base_name);
 }
 
 void add_opcode_output_table_entry(opcode_struct* op, char* name)
 {
 	opcode_struct* ptr;
-	if(g_opcode_output_table_length > MAX_OPCODE_OUTPUT_TABLE_LENGTH)
+	size_t name_len = strlen(name);
+
+	if(name_len >= 30)
+		error_exit("Opcode output name too long");
+
+	if(g_opcode_output_table_length >= MAX_OPCODE_OUTPUT_TABLE_LENGTH)
 		error_exit("Opcode output table overflow");
 
 	ptr = g_opcode_output_table + g_opcode_output_table_length++;
@@ -868,6 +878,7 @@ void generate_opcode_handler(FILE* filep, body_struct* body, replace_struct* rep
 	/* Set the opcode structure and write the tables, prototypes, etc */
 	set_opcode_struct(opinfo, op, ea_mode);
 	get_base_name(str, op);
+	write_prototype(g_prototype_file, str);
 	add_opcode_output_table_entry(op, str);
 	write_function_name(filep, str);
 
@@ -986,9 +997,10 @@ void generate_opcode_cc_variants(FILE* filep, body_struct* body, replace_struct*
 }
 
 /* Process the opcode handlers section of the input file */
-void process_opcode_handlers(FILE* filep)
+void process_opcode_handlers(void)
 {
 	FILE* input_file = g_input_file;
+	FILE* output_file;
 	char func_name[MAX_LINE_LENGTH+1];
 	char oper_name[MAX_LINE_LENGTH+1];
 	int  oper_size;
@@ -997,6 +1009,9 @@ void process_opcode_handlers(FILE* filep)
 	opcode_struct* opinfo;
 	replace_struct* replace = malloc(sizeof(replace_struct));
 	body_struct* body = malloc(sizeof(body_struct));
+
+
+	output_file = g_ops_ac_file;
 
 	for(;;)
 	{
@@ -1040,17 +1055,23 @@ void process_opcode_handlers(FILE* filep)
 		if(opinfo == NULL)
 			error_exit("Unable to find matching table entry for %s", func_name);
 
+        /* Change output files if we pass 'c' or 'n' */
+		if(output_file == g_ops_ac_file && oper_name[0] > 'c')
+			output_file = g_ops_dm_file;
+		else if(output_file == g_ops_dm_file && oper_name[0] > 'm')
+			output_file = g_ops_nz_file;
+
 		replace->length = 0;
 
 		/* Generate opcode variants */
 		if(strcmp(opinfo->name, "bcc") == 0 || strcmp(opinfo->name, "scc") == 0)
-			generate_opcode_cc_variants(filep, body, replace, opinfo, 1);
+			generate_opcode_cc_variants(output_file, body, replace, opinfo, 1);
 		else if(strcmp(opinfo->name, "dbcc") == 0)
-			generate_opcode_cc_variants(filep, body, replace, opinfo, 2);
+			generate_opcode_cc_variants(output_file, body, replace, opinfo, 2);
 		else if(strcmp(opinfo->name, "trapcc") == 0)
-			generate_opcode_cc_variants(filep, body, replace, opinfo, 4);
+			generate_opcode_cc_variants(output_file, body, replace, opinfo, 4);
 		else
-			generate_opcode_ea_variants(filep, body, replace, opinfo);
+			generate_opcode_ea_variants(output_file, body, replace, opinfo);
 	}
 
 	free(replace);
@@ -1073,13 +1094,13 @@ void populate_table(void)
 	/* Find the start of the table */
 	while(strcmp(buff, ID_TABLE_START) != 0)
 		if(fgetline(buff, MAX_LINE_LENGTH, g_input_file) < 0)
-			error_exit("(table_start) Premature EOF while reading table");
+			error_exit("Premature EOF while reading table");
 
 	/* Process the entire table */
 	for(op = g_opcode_input_table;;op++)
 	{
 		if(fgetline(buff, MAX_LINE_LENGTH, g_input_file) < 0)
-			error_exit("(inline) Premature EOF while reading table");
+			error_exit("Premature EOF while reading table");
 		if(strlen(buff) == 0)
 			continue;
 		/* We finish when we find an input separator */
@@ -1217,15 +1238,13 @@ int main(int argc, char **argv)
 {
 	/* File stuff */
 	char output_path[M68K_MAX_DIR] = "";
-	char filename[M68K_MAX_PATH*2];
+	char filename[M68K_MAX_PATH];
 	/* Section identifier */
 	char section_id[MAX_LINE_LENGTH+1];
 	/* Inserts */
 	char temp_insert[MAX_INSERT_LENGTH+1];
 	char prototype_footer_insert[MAX_INSERT_LENGTH+1];
-	char table_header_insert[MAX_INSERT_LENGTH+1];
 	char table_footer_insert[MAX_INSERT_LENGTH+1];
-	char ophandler_header_insert[MAX_INSERT_LENGTH+1];
 	char ophandler_footer_insert[MAX_INSERT_LENGTH+1];
 	/* Flags if we've processed certain parts already */
 	int prototype_header_read = 0;
@@ -1237,21 +1256,31 @@ int main(int argc, char **argv)
 	int table_body_read = 0;
 	int ophandler_body_read = 0;
 
-	printf("\n\tMusashi v%s 68000, 68008, 68010, 68EC020, 68020, 68EC030, 68030, 68EC040, 68040 emulator\n", g_version);
-	printf("\t\tCopyright Karl Stenerud (kstenerud@gmail.com)\n\n");
+	printf("\n\t\tMusashi v%s 68000, 68010, 68EC020, 68020 emulator\n", g_version);
+	printf("\t\tCopyright 1998-2000 Karl Stenerud (karl@mame.net)\n\n");
 
 	/* Check if output path and source for the input file are given */
     if(argc > 1)
 	{
 		char *ptr;
+		size_t argv_len = strlen(argv[1]);
+
+		if(argv_len >= 1024)
+			perror_exit("Argument was too long (%s)\n", argv[1]);
+
 		strcpy(output_path, argv[1]);
 
 		for(ptr = strchr(output_path, '\\'); ptr; ptr = strchr(ptr, '\\'))
 			*ptr = '/';
         if(output_path[strlen(output_path)-1] != '/')
 			strcat(output_path, "/");
-		if(argc > 2)
-			strcpy(g_input_filename, argv[2]);
+        if (argc > 2)
+        {
+           if (strlen(argv[2]) >= 1024)
+              perror_exit("Argument 2 was too long (%s)\n", argv[2]);
+
+           strcpy(g_input_filename, argv[2]);
+        }
 	}
 
 
@@ -1263,6 +1292,18 @@ int main(int argc, char **argv)
 	sprintf(filename, "%s%s", output_path, FILENAME_TABLE);
 	if((g_table_file = fopen(filename, "wt")) == NULL)
 		perror_exit("Unable to create table file (%s)\n", filename);
+
+	sprintf(filename, "%s%s", output_path, FILENAME_OPS_AC);
+	if((g_ops_ac_file = fopen(filename, "wt")) == NULL)
+		perror_exit("Unable to create ops ac file (%s)\n", filename);
+
+	sprintf(filename, "%s%s", output_path, FILENAME_OPS_DM);
+	if((g_ops_dm_file = fopen(filename, "wt")) == NULL)
+		perror_exit("Unable to create ops dm file (%s)\n", filename);
+
+	sprintf(filename, "%s%s", output_path, FILENAME_OPS_NZ);
+	if((g_ops_nz_file = fopen(filename, "wt")) == NULL)
+		perror_exit("Unable to create ops nz file (%s)\n", filename);
 
 	if((g_input_file=fopen(g_input_filename, "rt")) == NULL)
 		perror_exit("can't open %s for input", g_input_filename);
@@ -1291,14 +1332,18 @@ int main(int argc, char **argv)
 		{
 			if(table_header_read)
 				error_exit("Duplicate table header");
-			read_insert(table_header_insert);
+			read_insert(temp_insert);
+			fprintf(g_table_file, "%s", temp_insert);
 			table_header_read = 1;
 		}
 		else if(strcmp(section_id, ID_OPHANDLER_HEADER) == 0)
 		{
 			if(ophandler_header_read)
 				error_exit("Duplicate opcode handler header");
-			read_insert(ophandler_header_insert);
+			read_insert(temp_insert);
+			fprintf(g_ops_ac_file, "%s\n\n", temp_insert);
+			fprintf(g_ops_dm_file, "%s\n\n", temp_insert);
+			fprintf(g_ops_nz_file, "%s\n\n", temp_insert);
 			ophandler_header_read = 1;
 		}
 		else if(strcmp(section_id, ID_PROTOTYPE_FOOTER) == 0)
@@ -1351,9 +1396,7 @@ int main(int argc, char **argv)
 			if(ophandler_body_read)
 				error_exit("Duplicate opcode handler section");
 
-			fprintf(g_table_file, "%s\n\n", ophandler_header_insert);
-			process_opcode_handlers(g_table_file);
-			fprintf(g_table_file, "%s\n\n", ophandler_footer_insert);
+			process_opcode_handlers();
 
 			ophandler_body_read = 1;
 		}
@@ -1377,11 +1420,13 @@ int main(int argc, char **argv)
 			if(!ophandler_body_read)
 				error_exit("Missing opcode handler body");
 
-			fprintf(g_table_file, "%s\n\n", table_header_insert);
 			print_opcode_output_table(g_table_file);
-			fprintf(g_table_file, "%s\n\n", table_footer_insert);
 
 			fprintf(g_prototype_file, "%s\n\n", prototype_footer_insert);
+			fprintf(g_table_file, "%s\n\n", table_footer_insert);
+			fprintf(g_ops_ac_file, "%s\n\n", ophandler_footer_insert);
+			fprintf(g_ops_dm_file, "%s\n\n", ophandler_footer_insert);
+			fprintf(g_ops_nz_file, "%s\n\n", ophandler_footer_insert);
 
 			break;
 		}
@@ -1394,6 +1439,9 @@ int main(int argc, char **argv)
 	/* Close all files and exit */
 	fclose(g_prototype_file);
 	fclose(g_table_file);
+	fclose(g_ops_ac_file);
+	fclose(g_ops_dm_file);
+	fclose(g_ops_nz_file);
 	fclose(g_input_file);
 
 	printf("Generated %d opcode handlers from %d primitives\n", g_num_functions, g_num_primitives);

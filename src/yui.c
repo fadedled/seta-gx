@@ -116,8 +116,8 @@ NULL
 
 M68K_struct *M68KCoreList[] = {
 &M68KDummy,
-&M68KC68K,
-&M68KC68K,
+&M68KMusashi,
+&M68KMusashi,
 NULL
 };
 

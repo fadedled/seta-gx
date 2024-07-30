@@ -118,7 +118,7 @@ void FASTCALL Vdp1FrameBufferWriteLong(u32 addr, u32 val) {
 //DONE
 int Vdp1Init(void) {
 	Vdp1Regs = (Vdp1 *) vdp1_regs;
-	memset(Vdp1Regs, 0, sizeof(Vdp1Regs));
+	memset(Vdp1Regs, 0, PAGE_SIZE);
 	Vdp1External.status = VDP1_STATUS_IDLE;
 	Vdp1External.disptoggle = 1;
 

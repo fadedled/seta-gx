@@ -111,7 +111,7 @@ endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES)) $(addsuffix .o,$(TPLFILES))
 export OFILES_SOURCES := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(sFILES:.s=.o) $(SFILES:.S=.o)
-export OFILES := $(OFILES_BIN) $(OFILES_SOURCES)
+export OFILES := $(OFILES_BIN) $(OFILES_SOURCES) m68kops.o m68kcpu.o m68kopdm.o m68kopac.o m68kopdm.o m68kopnz.o
 
 export HFILES := $(addsuffix .h,$(subst .,_,$(BINFILES))) $(addsuffix .h,$(subst .,_,$(TPLFILES)))
 
@@ -176,8 +176,20 @@ c68k/c68kexec.o:
 	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c c68k/c68kexec.c -o $@ 
 
 
-dsihandler.o:		./vm/dsihandler.s
-		$(CC) -x assembler-with-cpp $(CFLAGS) -D_LANGUAGE_ASSEMBLY -c -o $@ $<
+m68kops.o: 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kops.c -o $@ 
+	
+m68kcpu.o: 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kcpu.c -o $@ 
+
+m68kopac.o: 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopac.c -o $@ 
+
+m68kopdm.o: 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopdm.c -o $@ 
+	
+m68kopnz.o: 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopnz.c -o $@ 
 
 
 
