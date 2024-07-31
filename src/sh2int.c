@@ -2136,7 +2136,7 @@ static void FASTCALL SH2sleep(SH2_struct * sh)
 
 //////////////////////////////////////////////////////////////////////////////
 
-
+#if 0
 opcodefunc opcode_arr[224] ATTRIBUTE_ALIGN(32) = {
 //Opcodes 0000xxxxxxxxxxx : 64 entries
 	sh2_IllegalInst, sh2_IllegalInst, SH2stcsr, SH2bsrf,
@@ -2225,7 +2225,6 @@ u8 code_offset[32] ATTRIBUTE_ALIGN(32) = {
 	0x0F, 0x00, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x00
 };
 
-
 #define OPCODE_BITSHFT    0b1000100000000000
 
 opcodefunc FASTCALL decode(u16 instruction)
@@ -2233,9 +2232,303 @@ opcodefunc FASTCALL decode(u16 instruction)
 	u32 main_op = (instruction >> 12) & 0xF;
 	u32 ofs = code_offset[main_op];
 	u32 mask = code_offset[main_op + 16];
-	u32 clamp = (instruction & (0xC0C0 >> (main_op << 1)) & 0xC0 ? 0x30 : 0);
+	//u32 clamp = (instruction & (0xC0C0 >> (main_op << 1)) & 0xC0 ? 0x30 : 0);
 	u32 shft = (OPCODE_BITSHFT >> main_op) & 0x8;
-	return opcode_arr[ofs + (((instruction >> shft) & mask) | clamp)];
+	return opcode_arr[ofs + (((instruction >> shft) & mask))];
+}
+
+#endif
+
+opcodefunc opcode_arr[1024] ATTRIBUTE_ALIGN(32) = {
+	//Opcodes 0000xxxxxxxxxxx : 64 entries
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcsr, SH2bsrf,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2clrt, SH2nop, SH2stsmach, SH2rts,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcgbr, sh2_IllegalInst,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2sett, SH2div0u, SH2stsmacl, SH2sleep,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcvbr, SH2braf,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2clrmac, SH2movt, SH2stspr, SH2rte,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	//Opcodes 0001xxxxxxxxxxx : 1 entrie
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	SH2movls4, SH2movls4, SH2movls4, SH2movls4,
+	//Opcodes 0010xxxxxxxxxxx : 16 entries
+	SH2movbs, SH2movws, SH2movls, sh2_IllegalInst,
+	SH2movbm, SH2movwm, SH2movlm, SH2div0s,
+	SH2tst, SH2y_and, SH2y_xor, SH2y_or,
+	SH2cmpstr, SH2xtrct, SH2mulu, SH2muls,
+	SH2movbs, SH2movws, SH2movls, sh2_IllegalInst,
+	SH2movbm, SH2movwm, SH2movlm, SH2div0s,
+	SH2tst, SH2y_and, SH2y_xor, SH2y_or,
+	SH2cmpstr, SH2xtrct, SH2mulu, SH2muls,
+	SH2movbs, SH2movws, SH2movls, sh2_IllegalInst,
+	SH2movbm, SH2movwm, SH2movlm, SH2div0s,
+	SH2tst, SH2y_and, SH2y_xor, SH2y_or,
+	SH2cmpstr, SH2xtrct, SH2mulu, SH2muls,
+	SH2movbs, SH2movws, SH2movls, sh2_IllegalInst,
+	SH2movbm, SH2movwm, SH2movlm, SH2div0s,
+	SH2tst, SH2y_and, SH2y_xor, SH2y_or,
+	SH2cmpstr, SH2xtrct, SH2mulu, SH2muls,
+	//Opcodes 0011xxxxxxxxxxx : 16 entries
+	SH2cmpeq, sh2_IllegalInst, SH2cmphs, SH2cmpge,
+	SH2div1, SH2dmulu, SH2cmphi, SH2cmpgt,
+	SH2sub, sh2_IllegalInst, SH2subc, SH2subv,
+	SH2add, SH2dmuls, SH2addc, SH2addv,
+	SH2cmpeq, sh2_IllegalInst, SH2cmphs, SH2cmpge,
+	SH2div1, SH2dmulu, SH2cmphi, SH2cmpgt,
+	SH2sub, sh2_IllegalInst, SH2subc, SH2subv,
+	SH2add, SH2dmuls, SH2addc, SH2addv,
+	SH2cmpeq, sh2_IllegalInst, SH2cmphs, SH2cmpge,
+	SH2div1, SH2dmulu, SH2cmphi, SH2cmpgt,
+	SH2sub, sh2_IllegalInst, SH2subc, SH2subv,
+	SH2add, SH2dmuls, SH2addc, SH2addv,
+	SH2cmpeq, sh2_IllegalInst, SH2cmphs, SH2cmpge,
+	SH2div1, SH2dmulu, SH2cmphi, SH2cmpgt,
+	SH2sub, sh2_IllegalInst, SH2subc, SH2subv,
+	SH2add, SH2dmuls, SH2addc, SH2addv,
+	//Opcodes 0100xxxxxxxxxxx : 64 entries
+	SH2shll, SH2shlr, SH2stsmmach, SH2stcmsr,
+	SH2rotl, SH2rotr, SH2ldsmmach, SH2ldcmsr,
+	SH2shll2, SH2shlr2, SH2ldsmach, SH2jsr,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcsr, SH2macw,
+	SH2dt, SH2cmppz, SH2stsmmacl, SH2stcmgbr,
+	sh2_IllegalInst, SH2cmppl, SH2ldsmmacl, SH2ldcmgbr,
+	SH2shll8, SH2shlr8, SH2ldsmacl, SH2tas,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcgbr, SH2macw,
+	SH2shal, SH2shar, SH2stsmpr, SH2stcmvbr,
+	SH2rotcl, SH2rotcr, SH2ldsmpr, SH2ldcmvbr,
+	SH2shll16, SH2shlr16, SH2ldspr, SH2jmp,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcvbr, SH2macw,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, SH2macw,
+	//Opcodes 0101xxxxxxxxxxx : 1 entries
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	SH2movll4, SH2movll4, SH2movll4, SH2movll4,
+	//Opcodes 0110xxxxxxxxxxx : 16 entries
+	SH2movbl, SH2movwl, SH2movll, SH2mov,
+	SH2movbp, SH2movwp, SH2movlp, SH2y_not,
+	SH2swapb, SH2swapw, SH2negc, SH2neg,
+	SH2extub, SH2extuw, SH2extsb, SH2extsw,
+	SH2movbl, SH2movwl, SH2movll, SH2mov,
+	SH2movbp, SH2movwp, SH2movlp, SH2y_not,
+	SH2swapb, SH2swapw, SH2negc, SH2neg,
+	SH2extub, SH2extuw, SH2extsb, SH2extsw,
+	SH2movbl, SH2movwl, SH2movll, SH2mov,
+	SH2movbp, SH2movwp, SH2movlp, SH2y_not,
+	SH2swapb, SH2swapw, SH2negc, SH2neg,
+	SH2extub, SH2extuw, SH2extsb, SH2extsw,
+	SH2movbl, SH2movwl, SH2movll, SH2mov,
+	SH2movbp, SH2movwp, SH2movlp, SH2y_not,
+	SH2swapb, SH2swapw, SH2negc, SH2neg,
+	SH2extub, SH2extuw, SH2extsb, SH2extsw,
+	//Opcodes 0111xxxxxxxxxxx : 1 entries
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	SH2addi, SH2addi, SH2addi, SH2addi,
+	//Opcodes 1000xxxxxxxxxxx : 16 entries
+	SH2movbs4, SH2movws4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl4, SH2movwl4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2cmpim, SH2bt, sh2_IllegalInst, SH2bf,
+	sh2_IllegalInst, SH2bts, sh2_IllegalInst, SH2bfs,
+	SH2movbs4, SH2movws4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl4, SH2movwl4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2cmpim, SH2bt, sh2_IllegalInst, SH2bf,
+	sh2_IllegalInst, SH2bts, sh2_IllegalInst, SH2bfs,
+	SH2movbs4, SH2movws4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl4, SH2movwl4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2cmpim, SH2bt, sh2_IllegalInst, SH2bf,
+	sh2_IllegalInst, SH2bts, sh2_IllegalInst, SH2bfs,
+	SH2movbs4, SH2movws4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl4, SH2movwl4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2cmpim, SH2bt, sh2_IllegalInst, SH2bf,
+	sh2_IllegalInst, SH2bts, sh2_IllegalInst, SH2bfs,
+	//Opcodes 1001xxxxxxxxxxx : 1 entries
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	SH2movwi, SH2movwi, SH2movwi, SH2movwi,
+	//Opcodes 1010xxxxxxxxxxx : 1 entries
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	SH2bra, SH2bra, SH2bra, SH2bra,
+	//Opcodes 1011xxxxxxxxxxx : 1 entries
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	SH2bsr, SH2bsr, SH2bsr, SH2bsr,
+	//Opcodes 1100xxxxxxxxxxx : 16 entries
+	SH2movbsg, SH2movwsg, SH2movlsg, SH2trapa,
+	SH2movblg, SH2movwlg, SH2movllg, SH2mova,
+	SH2tsti, SH2andi, SH2xori, SH2ori,
+	SH2tstm, SH2andm, SH2xorm, SH2orm,
+	SH2movbsg, SH2movwsg, SH2movlsg, SH2trapa,
+	SH2movblg, SH2movwlg, SH2movllg, SH2mova,
+	SH2tsti, SH2andi, SH2xori, SH2ori,
+	SH2tstm, SH2andm, SH2xorm, SH2orm,
+	SH2movbsg, SH2movwsg, SH2movlsg, SH2trapa,
+	SH2movblg, SH2movwlg, SH2movllg, SH2mova,
+	SH2tsti, SH2andi, SH2xori, SH2ori,
+	SH2tstm, SH2andm, SH2xorm, SH2orm,
+	SH2movbsg, SH2movwsg, SH2movlsg, SH2trapa,
+	SH2movblg, SH2movwlg, SH2movllg, SH2mova,
+	SH2tsti, SH2andi, SH2xori, SH2ori,
+	SH2tstm, SH2andm, SH2xorm, SH2orm,
+	//Opcodes 1101xxxxxxxxxxx : 1 entries
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	SH2movli, SH2movli, SH2movli, SH2movli,
+	//Opcodes 1110xxxxxxxxxxx : 1 entries
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	SH2movi, SH2movi, SH2movi, SH2movi,
+	//Opcodes 1111xxxxxxxxxxx : 1 entries
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+};
+
+u8 code_offset[32] ATTRIBUTE_ALIGN(32) = {
+	0x00, 0x40, 0x41, 0x51, 0x61, 0xA1, 0xA2, 0xB2,
+	0xB3, 0xC3, 0xC4, 0xC5, 0xC6, 0xD6, 0xD7, 0xD8,
+	// Code masks
+	0x3F, 0x00, 0x0F, 0x0F, 0x3F, 0x00, 0x0F, 0x00,
+	0x0F, 0x00, 0x00, 0x00, 0x0F, 0x00, 0x00, 0x00
+};
+
+#define OPCODE_BITSHFT    0b1000100000000000
+
+opcodefunc FASTCALL decode(u16 instruction)
+{
+	u32 main_op = ((instruction >> 6) & 0x3C0);
+	u32 shft = ((instruction >> 12) & 0x8);
+	return opcode_arr[main_op + ((instruction >> shft) & 0x3F)];
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2480,8 +2773,10 @@ FASTCALL void SH2InterpreterExec(SH2_struct *context, u32 cycles)
       // Fetch Instruction
       context->instruction = fetchlist[(context->regs.PC >> 20) & 0x0FF](context->regs.PC);
 
-      // Execute it
-	  decode(context->instruction)(context);
+      // Execute it decode(context->instruction)(context);
+	  u32 main_op = ((context->instruction >> 6) & 0x3C0);
+	  u32 shft = ((context->instruction >> 12) & 0x8);
+	  opcode_arr[main_op + ((context->instruction >> shft) & 0x3F)](context);
 	  //opcodes[context->instruction](context);
    }
 }
