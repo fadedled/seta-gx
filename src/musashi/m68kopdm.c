@@ -2085,34 +2085,6 @@ void m68k_op_link_16(void)
 }
 
 
-void m68k_op_link_32_a7(void)
-{
-	if(CPU_TYPE_IS_EC020_PLUS(CPU_TYPE))
-	{
-		REG_A[7] -= 4;
-		m68ki_write_32(REG_A[7], REG_A[7]);
-		REG_A[7] = MASK_OUT_ABOVE_32(REG_A[7] + OPER_I_32());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_link_32(void)
-{
-	if(CPU_TYPE_IS_EC020_PLUS(CPU_TYPE))
-	{
-		uint* r_dst = &AY;
-
-		m68ki_push_32(*r_dst);
-		*r_dst = REG_A[7];
-		REG_A[7] = MASK_OUT_ABOVE_32(REG_A[7] + OPER_I_32());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
 void m68k_op_lsr_8_s(void)
 {
 	uint* r_dst = &DY;
@@ -7291,94 +7263,6 @@ void m68k_op_movea_32_i(void)
 }
 
 
-void m68k_op_move_16_frc_d(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		DY = MASK_OUT_BELOW_16(DY) | m68ki_get_ccr();
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_ai(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AY_AI_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_pi(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AY_PI_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_pd(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AY_PD_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_di(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AY_DI_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_ix(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AY_IX_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_aw(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AW_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
-void m68k_op_move_16_frc_al(void)
-{
-	if(CPU_TYPE_IS_010_PLUS(CPU_TYPE))
-	{
-		m68ki_write_16(EA_AL_16(), m68ki_get_ccr());
-		return;
-	}
-	m68ki_exception_illegal();
-}
-
-
 void m68k_op_move_16_toc_d(void)
 {
 	m68ki_set_ccr(DY);
@@ -7447,96 +7331,56 @@ void m68k_op_move_16_toc_i(void)
 
 void m68k_op_move_16_frs_d(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		DY = MASK_OUT_BELOW_16(DY) | m68ki_get_sr();
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	DY = MASK_OUT_BELOW_16(DY) | m68ki_get_sr();
 }
 
 
 void m68k_op_move_16_frs_ai(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AY_AI_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AY_AI_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_pi(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AY_PI_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AY_PI_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_pd(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AY_PD_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AY_PD_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_di(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AY_DI_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AY_DI_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_ix(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AY_IX_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AY_IX_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_aw(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AW_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AW_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 
 void m68k_op_move_16_frs_al(void)
 {
-	if(CPU_TYPE_IS_000(CPU_TYPE) || FLAG_S)	/* NS990408 */
-	{
-		uint ea = EA_AL_16();
-		m68ki_write_16(ea, m68ki_get_sr());
-		return;
-	}
-	m68ki_exception_privilege_violation();
+	uint ea = EA_AL_16();
+	m68ki_write_16(ea, m68ki_get_sr());
 }
 
 

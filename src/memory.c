@@ -154,9 +154,9 @@ void T3MemoryDeInit(T3Memory * mem)
 
 static u8 FASTCALL UnhandledMemoryReadByte(USED_IF_DEBUG u32 addr)
 {
-	char str_mem[64];
-	sprintf(str_mem, "Unhandled byte read %08x %08x", addr);
-	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	//char str_mem[64];
+	//sprintf(str_mem, "Unhandled byte read %08x %08x", addr);
+	//osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
 	return 0;
 }
 
@@ -164,9 +164,9 @@ static u8 FASTCALL UnhandledMemoryReadByte(USED_IF_DEBUG u32 addr)
 
 static u16 FASTCALL UnhandledMemoryReadWord(USED_IF_DEBUG u32 addr)
 {
-	char str_mem[64];
-	sprintf(str_mem, "Unhandled word read %08x %08x", addr);
-	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	//char str_mem[64];
+	//sprintf(str_mem, "Unhandled word read %08x %08x", addr);
+	//osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
 	return 0;
 }
 
@@ -174,9 +174,9 @@ static u16 FASTCALL UnhandledMemoryReadWord(USED_IF_DEBUG u32 addr)
 
 static u32 FASTCALL UnhandledMemoryReadLong(USED_IF_DEBUG u32 addr)
 {
-	char str_mem[64];
-	sprintf(str_mem, "Unhandled long read %08x %08x", addr);
-	osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
+	//char str_mem[64];
+	//sprintf(str_mem, "Unhandled long read %08x %08x", addr);
+	//osd_MsgAdd(300, 300, 0xFFFF00FF, str_mem);
 	return 0;
 }
 

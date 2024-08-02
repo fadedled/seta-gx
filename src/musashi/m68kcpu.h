@@ -854,7 +854,7 @@ extern uint           m68ki_tracing;
 extern uint8          m68ki_shift_8_table[];
 extern uint16         m68ki_shift_16_table[];
 extern uint           m68ki_shift_32_table[];
-extern uint8          m68ki_exception_cycle_table[][256];
+extern uint8          m68ki_exception_cycle_table[256];
 extern uint           m68ki_address_space;
 extern uint8          m68ki_ea_idx_cycle_table[];
 

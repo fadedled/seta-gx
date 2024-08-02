@@ -697,8 +697,6 @@ void m68k_op_lea_32_pcdi(void);
 void m68k_op_lea_32_pcix(void);
 void m68k_op_link_16_a7(void);
 void m68k_op_link_16(void);
-void m68k_op_link_32_a7(void);
-void m68k_op_link_32(void);
 void m68k_op_lsr_8_s(void);
 void m68k_op_lsr_16_s(void);
 void m68k_op_lsr_32_s(void);
@@ -1071,14 +1069,6 @@ void m68k_op_movea_32_al(void);
 void m68k_op_movea_32_pcdi(void);
 void m68k_op_movea_32_pcix(void);
 void m68k_op_movea_32_i(void);
-void m68k_op_move_16_frc_d(void);
-void m68k_op_move_16_frc_ai(void);
-void m68k_op_move_16_frc_pi(void);
-void m68k_op_move_16_frc_pd(void);
-void m68k_op_move_16_frc_di(void);
-void m68k_op_move_16_frc_ix(void);
-void m68k_op_move_16_frc_aw(void);
-void m68k_op_move_16_frc_al(void);
 void m68k_op_move_16_toc_d(void);
 void m68k_op_move_16_toc_ai(void);
 void m68k_op_move_16_toc_pi(void);
@@ -1762,7 +1752,7 @@ void m68k_op_unlk_32(void);
 void m68ki_build_opcode_table(void);
 
 extern void (*m68ki_instruction_jump_table[0x10000])(void); /* opcode handler jump table */
-extern unsigned char m68ki_cycles[][0x10000];
+extern unsigned char m68ki_cycles[0x10000];
 
 
 /* ======================================================================== */
