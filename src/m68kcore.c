@@ -18,7 +18,6 @@
 */
 
 #include "m68kcore.h"
-#include "m68kc68k.h"
 #include "memory.h"
 
 extern u8 * SoundRam;

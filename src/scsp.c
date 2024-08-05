@@ -84,7 +84,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-#include "c68k/c68k.h"
 #include "cs2.h"
 #include "debug.h"
 #include "error.h"
@@ -3278,10 +3277,10 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
   if (M68K->Init () != 0)
     return -1;
 
-  M68K->SetReadB ((C68K_READ *)c68k_byte_read);
-  M68K->SetReadW ((C68K_READ *)c68k_word_read);
-  M68K->SetWriteB ((C68K_WRITE *)c68k_byte_write);
-  M68K->SetWriteW ((C68K_WRITE *)c68k_word_write);
+	M68K->SetReadB(M68KReadByte);
+  M68K->SetReadW(M68KReadWord);
+  M68K->SetWriteB(M68KWriteByte);
+  M68K->SetWriteW(M68KWriteWord);
 
   M68K->SetFetch (0x000000, 0x040000, (pointer)SoundRam);
   M68K->SetFetch (0x040000, 0x080000, (pointer)SoundRam);

@@ -1,4 +1,0 @@
-/home/faded/Downloads/yabause-master/yabause/src/c68k/CMakeFiles/gen68k.dir
-/home/faded/Downloads/yabause-master/yabause/src/c68k/CMakeFiles/c68kinc.dir
-/home/faded/Downloads/yabause-master/yabause/src/c68k/CMakeFiles/edit_cache.dir
-/home/faded/Downloads/yabause-master/yabause/src/c68k/CMakeFiles/rebuild_cache.dir
