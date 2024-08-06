@@ -65,6 +65,41 @@ typedef struct {
 	void (*SetWriteW)(M68K_WRITE *Func);
 } M68K_struct;
 
+
+int musashi_Init(void);
+void musashi_DeInit(void);
+void musashi_Reset(void);
+s32 musashi_Exec(s32 cycles);
+void musashi_Sync(void);
+u32 musashi_GetDReg(u32 n);
+u32 musashi_GetAReg(u32 n);
+u32 musashi_GetPC(void);
+u32 musashi_GetSR(void);
+u32 musashi_GetUSP(void);
+u32 musashi_GetMSP(void);
+void musashi_SetDReg(u32 n, u32 val);
+void musashi_SetAReg(u32 n, u32 val);
+void musashi_SetPC(u32 val);
+void musashi_SetSR(u32 val);
+void musashi_SetUSP(u32 val);
+void musashi_SetMSP(u32 val);
+void musashi_SetFetch(u32 low_adr, u32 high_adr, pointer fetch_addr);
+void FASTCALL musashi_SetIRQ(s32 level);
+void FASTCALL musashi_WriteNotify(u32 address, u32 size);
+void musashi_SetReadB(M68K_READ *func);
+void musashi_SetReadW(M68K_READ *func);
+void musashi_SetWriteB(M68K_WRITE *func);
+void musashi_SetWriteW(M68K_WRITE *func);
+void musashi_SaveState(FILE *fp);
+void musashi_LoadState(FILE *fp);
+//Implementation for musashi read/write functions
+u32 m68k_read_memory_8(u32 address);
+u32 m68k_read_memory_16(u32 address);
+u32 m68k_read_memory_32(u32 address);
+void m68k_write_memory_8(u32 address, u32 value);
+void m68k_write_memory_16(u32 address, u32 value);
+void m68k_write_memory_32(u32 address, u32 value);
+
 extern M68K_struct * M68K;
 
 int M68KInit(int coreid);

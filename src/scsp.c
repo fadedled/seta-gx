@@ -506,7 +506,7 @@ scsp_slot_keyon (slot_t *slot)
   if (slot->ecurp == SCSP_ENV_RELEASE)
     {
       SCSPLOG ("key on slot %d. 68K PC = %08X slot->sa = %08X slot->lsa = %08X "
-               "slot->lea = %08X\n", slot - &(scsp.slot[0]), M68K->GetPC(),
+               "slot->lea = %08X\n", slot - &(scsp.slot[0]), musashi_GetPC(),
                slot->sa, slot->lsa, slot->lea >> SCSP_FREQ_LB);
 
       // set buffer, loop start/end address of the slot
@@ -1215,14 +1215,14 @@ scsp_set_b (u32 a, u8 d)
       scsp.mem4b = (d >> 1) & 0x1;
       if (scsp.mem4b)
         {
-          M68K->SetFetch(0x000000, 0x080000, (pointer)SoundRam);
+          musashi_SetFetch(0x000000, 0x080000, (pointer)SoundRam);
         }
       else
         {
-          M68K->SetFetch(0x000000, 0x040000, (pointer)SoundRam);
-          M68K->SetFetch(0x040000, 0x080000, (pointer)SoundRam);
-          M68K->SetFetch(0x080000, 0x0C0000, (pointer)SoundRam);
-          M68K->SetFetch(0x0C0000, 0x100000, (pointer)SoundRam);
+          musashi_SetFetch(0x000000, 0x040000, (pointer)SoundRam);
+          musashi_SetFetch(0x040000, 0x080000, (pointer)SoundRam);
+          musashi_SetFetch(0x080000, 0x0C0000, (pointer)SoundRam);
+          musashi_SetFetch(0x0C0000, 0x100000, (pointer)SoundRam);
         }
       return;
 
@@ -1387,14 +1387,14 @@ scsp_set_w (u32 a, u16 d)
       scsp.mvol = d & 0xF;
       if (scsp.mem4b)
         {
-          M68K->SetFetch(0x000000, 0x080000, (pointer)SoundRam);
+          musashi_SetFetch(0x000000, 0x080000, (pointer)SoundRam);
         }
       else
         {
-          M68K->SetFetch(0x000000, 0x040000, (pointer)SoundRam);
-          M68K->SetFetch(0x040000, 0x080000, (pointer)SoundRam);
-          M68K->SetFetch(0x080000, 0x0C0000, (pointer)SoundRam);
-          M68K->SetFetch(0x0C0000, 0x100000, (pointer)SoundRam);
+          musashi_SetFetch(0x000000, 0x040000, (pointer)SoundRam);
+          musashi_SetFetch(0x040000, 0x080000, (pointer)SoundRam);
+          musashi_SetFetch(0x080000, 0x0C0000, (pointer)SoundRam);
+          musashi_SetFetch(0x0C0000, 0x100000, (pointer)SoundRam);
         }
       return;
 
@@ -3068,7 +3068,7 @@ scsp_alloc_bufs (void)
 }
 
 static u8 IsM68KRunning;
-static s32 FASTCALL (*m68kexecptr)(s32 cycles);  // M68K->Exec or M68KExecBP
+static s32 FASTCALL (*m68kexecptr)(s32 cycles);  // musashi_Exec or M68KExecBP
 static s32 savedcycles;  // Cycles left over from the last M68KExec() call
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3126,7 +3126,7 @@ static void
 c68k_interrupt_handler (u32 level)
 {
   // send interrupt to 68k
-  M68K->SetIRQ ((s32)level);
+  musashi_SetIRQ ((s32)level);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3176,7 +3176,7 @@ SCSScsp1SoundRamWriteByte (u32 addr, u8 val)
     return;
 
   T2WriteByte (SoundRam, addr, val);
-  M68K->WriteNotify (addr, 1);
+  musashi_WriteNotify (addr, 1);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3216,7 +3216,7 @@ SCSScsp1SoundRamWriteWord (u32 addr, u16 val)
     return;
 
   T2WriteWord (SoundRam, addr, val);
-  M68K->WriteNotify (addr, 2);
+  musashi_WriteNotify (addr, 2);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3257,7 +3257,7 @@ SCSScsp1SoundRamWriteLong (u32 addr, u32 val)
     return;
 
   T2WriteLong (SoundRam, addr, val);
-  M68K->WriteNotify (addr, 4);
+  musashi_WriteNotify (addr, 4);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3274,18 +3274,18 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
   if ((ScspInternalVars = (ScspInternal *)calloc(1, sizeof(ScspInternal))) == NULL)
     return -1;
 
-  if (M68K->Init () != 0)
+  if (musashi_Init () != 0)
     return -1;
 
-	M68K->SetReadB(M68KReadByte);
-  M68K->SetReadW(M68KReadWord);
-  M68K->SetWriteB(M68KWriteByte);
-  M68K->SetWriteW(M68KWriteWord);
+	musashi_SetReadB(M68KReadByte);
+  musashi_SetReadW(M68KReadWord);
+  musashi_SetWriteB(M68KWriteByte);
+  musashi_SetWriteW(M68KWriteWord);
 
-  M68K->SetFetch (0x000000, 0x040000, (pointer)SoundRam);
-  M68K->SetFetch (0x040000, 0x080000, (pointer)SoundRam);
-  M68K->SetFetch (0x080000, 0x0C0000, (pointer)SoundRam);
-  M68K->SetFetch (0x0C0000, 0x100000, (pointer)SoundRam);
+  musashi_SetFetch (0x000000, 0x040000, (pointer)SoundRam);
+  musashi_SetFetch (0x040000, 0x080000, (pointer)SoundRam);
+  musashi_SetFetch (0x080000, 0x0C0000, (pointer)SoundRam);
+  musashi_SetFetch (0x0C0000, 0x100000, (pointer)SoundRam);
 
   IsM68KRunning = 0;
 
@@ -3299,7 +3299,7 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
   ScspInternalVars->BreakpointCallBack = NULL;
   ScspInternalVars->inbreakpoint = 0;
 
-  m68kexecptr = M68K->Exec;
+  m68kexecptr = musashi_Exec;
 
   // Allocate enough memory for each channel buffer(may have to change)
   scspsoundlen = 44100 / 60; // assume it's NTSC timing
@@ -3378,7 +3378,7 @@ M68KStart (void)
 SCSScsp1M68KStart (void)
 #endif
 {
-  M68K->Reset ();
+  musashi_Reset ();
   savedcycles = 0;
   IsM68KRunning = 1;
 }
@@ -3466,7 +3466,7 @@ M68KExecBP (s32 cycles)
       // Make sure it isn't one of our breakpoints
       for (i = 0; i < ScspInternalVars->numcodebreakpoints; i++)
         {
-          if ((M68K->GetPC () == ScspInternalVars->codebreakpoint[i].addr) &&
+          if ((musashi_GetPC () == ScspInternalVars->codebreakpoint[i].addr) &&
               ScspInternalVars->inbreakpoint == 0)
             {
               ScspInternalVars->inbreakpoint = 1;
@@ -3477,7 +3477,7 @@ M68KExecBP (s32 cycles)
         }
 
       // execute instructions individually
-      cyclesexecuted += M68K->Exec(1);
+      cyclesexecuted += musashi_Exec(1);
 
     }
   return cyclesexecuted;
@@ -3489,7 +3489,7 @@ M68KExecBP (s32 cycles)
 void
 M68KStep (void)
 {
-  M68K->Exec(1);
+  musashi_Exec(1);
 }
 #endif
 
@@ -3499,7 +3499,7 @@ M68KStep (void)
 void
 M68KSync (void)
 {
-  M68K->Sync();
+  musashi_Sync();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3666,7 +3666,7 @@ SCSScsp1Exec (int dummy)
 void
 M68KWriteNotify (u32 address, u32 size)
 {
-  M68K->WriteNotify (address, size);
+  musashi_WriteNotify (address, size);
 }
 #endif
 
@@ -3682,12 +3682,12 @@ M68KGetRegisters (m68kregs_struct *regs)
     {
       for (i = 0; i < 8; i++)
         {
-          regs->D[i] = M68K->GetDReg (i);
-          regs->A[i] = M68K->GetAReg (i);
+          regs->D[i] = musashi_GetDReg (i);
+          regs->A[i] = musashi_GetAReg (i);
         }
 
-      regs->SR = M68K->GetSR ();
-      regs->PC = M68K->GetPC ();
+      regs->SR = musashi_GetSR ();
+      regs->PC = musashi_GetPC ();
     }
 }
 #endif
@@ -3704,12 +3704,12 @@ M68KSetRegisters (m68kregs_struct *regs)
     {
       for (i = 0; i < 8; i++)
         {
-          M68K->SetDReg (i, regs->D[i]);
-          M68K->SetAReg (i, regs->A[i]);
+          musashi_SetDReg (i, regs->D[i]);
+          musashi_SetAReg (i, regs->A[i]);
         }
 
-      M68K->SetSR (regs->SR);
-      M68K->SetPC (regs->PC);
+      musashi_SetSR (regs->SR);
+      musashi_SetPC (regs->PC);
     }
 }
 #endif
@@ -3841,7 +3841,7 @@ Scsp1M68KDelCodeBreakpoint (u32 addr)
               M68KSortCodeBreakpoints ();
               ScspInternalVars->numcodebreakpoints--;
               if (ScspInternalVars->numcodebreakpoints == 0)
-                m68kexecptr = M68K->Exec;
+                m68kexecptr = musashi_Exec;
               return 0;
             }
         }
@@ -3901,19 +3901,19 @@ SCSScsp1SoundSaveState (FILE *fp)
 
   for (i = 0; i < 8; i++)
     {
-      temp = M68K->GetDReg (i);
+      temp = musashi_GetDReg (i);
       ywrite (&check, (void *)&temp, 4, 1, fp);
     }
 
   for (i = 0; i < 8; i++)
     {
-      temp = M68K->GetAReg (i);
+      temp = musashi_GetAReg (i);
       ywrite (&check, (void *)&temp, 4, 1, fp);
     }
 
-  temp = M68K->GetSR ();
+  temp = musashi_GetSR ();
   ywrite (&check, (void *)&temp, 4, 1, fp);
-  temp = M68K->GetPC ();
+  temp = musashi_GetPC ();
   ywrite (&check, (void *)&temp, 4, 1, fp);
 
   // Now for the SCSP registers
@@ -4023,19 +4023,19 @@ SCSScsp1SoundLoadState (FILE *fp, int version, int size)
   for (i = 0; i < 8; i++)
     {
       yread (&check, (void *)&temp, 4, 1, fp);
-      M68K->SetDReg (i, temp);
+      musashi_SetDReg (i, temp);
     }
 
   for (i = 0; i < 8; i++)
     {
       yread (&check, (void *)&temp, 4, 1, fp);
-      M68K->SetAReg (i, temp);
+      musashi_SetAReg (i, temp);
     }
 
   yread (&check, (void *)&temp, 4, 1, fp);
-  M68K->SetSR (temp);
+  musashi_SetSR (temp);
   yread (&check, (void *)&temp, 4, 1, fp);
-  M68K->SetPC (temp);
+  musashi_SetPC (temp);
 
   // Now for the SCSP registers
   yread (&check, (void *)scsp_reg, 0x1000, 1, fp);
