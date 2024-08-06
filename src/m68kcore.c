@@ -19,159 +19,10 @@
 
 #include "m68kcore.h"
 #include "memory.h"
-
-extern u8 * SoundRam;
-
-M68K_struct * M68K = NULL;
-
-extern M68K_struct * M68KCoreList[];
-
-int M68KInit(int coreid) {
-   int i;
-
-   M68K = &M68KDummy;
-
-   // Go through core list and find the id
-   for (i = 0; M68KCoreList[i] != NULL; i++)
-   {
-      if (M68KCoreList[i]->id == coreid)
-      {
-         // Set to current core
-         M68K = M68KCoreList[i];
-         break;
-      }
-   }
-
-   return 0;
-}
-
-static int M68KDummyInit(void) {
-	return 0;
-}
-
-static void M68KDummyDeInit(void) {
-}
-
-static void M68KDummyReset(void) {
-}
-
-static s32 FASTCALL M68KDummyExec(UNUSED s32 cycle) {
-	T2WriteWord(SoundRam, 0x700, 0);
-	T2WriteWord(SoundRam, 0x710, 0);
-	T2WriteWord(SoundRam, 0x720, 0);
-	T2WriteWord(SoundRam, 0x730, 0);
-	T2WriteWord(SoundRam, 0x740, 0);
-	T2WriteWord(SoundRam, 0x750, 0);
-	T2WriteWord(SoundRam, 0x760, 0);
-	T2WriteWord(SoundRam, 0x770, 0);
-
-	T2WriteWord(SoundRam, 0x790, 0);
-	T2WriteWord(SoundRam, 0x792, 0);
-	return 0;
-}
-
-static void M68KDummySync(void) {
-}
-
-static u32 M68KDummyGetDReg(UNUSED u32 num) {
-	return 0;
-}
-
-static u32 M68KDummyGetAReg(UNUSED u32 num) {
-	return 0;
-}
-
-static u32 M68KDummyGetPC(void) {
-	return 0;
-}
-
-static u32 M68KDummyGetSR(void) {
-	return 0;
-}
-
-static u32 M68KDummyGetUSP(void) {
-	return 0;
-}
-
-static u32 M68KDummyGetMSP(void) {
-	return 0;
-}
-
-static void M68KDummySetDReg(UNUSED u32 num, UNUSED u32 val) {
-}
-
-static void M68KDummySetAReg(UNUSED u32 num, UNUSED u32 val) {
-}
-
-static void M68KDummySetPC(UNUSED u32 val) {
-}
-
-static void M68KDummySetSR(UNUSED u32 val) {
-}
-
-static void M68KDummySetUSP(UNUSED u32 val) {
-}
-
-static void M68KDummySetMSP(UNUSED u32 val) {
-}
-
-static void M68KDummySetFetch(UNUSED u32 low_adr, UNUSED u32 high_adr, UNUSED pointer fetch_adr) {
-}
-
-static void FASTCALL M68KDummySetIRQ(UNUSED s32 level) {
-}
-
-static void FASTCALL M68KDummyWriteNotify(u32 address, u32 size) {
-}
-
-static void M68KDummySetReadB(UNUSED M68K_READ *Func) {
-}
-
-static void M68KDummySetReadW(UNUSED M68K_READ *Func) {
-}
-
-static void M68KDummySetWriteB(UNUSED M68K_WRITE *Func) {
-}
-
-static void M68KDummySetWriteW(UNUSED M68K_WRITE *Func) {
-}
-
-M68K_struct M68KDummy = {
-	0,
-	"Dummy 68k Interface",
-	M68KDummyInit,
-	M68KDummyDeInit,
-	M68KDummyReset,
-	M68KDummyExec,
-	M68KDummySync,
-	M68KDummyGetDReg,
-	M68KDummyGetAReg,
-	M68KDummyGetPC,
-	M68KDummyGetSR,
-	M68KDummyGetUSP,
-	M68KDummyGetMSP,
-	M68KDummySetDReg,
-	M68KDummySetAReg,
-	M68KDummySetPC,
-	M68KDummySetSR,
-	M68KDummySetUSP,
-	M68KDummySetMSP,
-	M68KDummySetFetch,
-	M68KDummySetIRQ,
-	M68KDummyWriteNotify,
-	M68KDummySetReadB,
-	M68KDummySetReadW,
-	M68KDummySetWriteB,
-	M68KDummySetWriteW
-};
-
-
-//======================================================
-//Musashi Plug in (will replace all plug ins)
-//======================================================
 #include "musashi/m68k.h"
 #include "musashi/m68kcpu.h"
 
+extern u8 * SoundRam;
 
 //TODO: this should not be done this way.. implement directly
 M68K_READ *mus_read8;
@@ -306,17 +157,6 @@ void musashi_SetWriteW(M68K_WRITE *func)
 	mus_write16 = func;
 }
 
-void musashi_SaveState(FILE *fp)
-{
-	//Does nothing
-}
-
-void musashi_LoadState(FILE *fp)
-{
-	//Does nothing
-}
-
-
 //Implementation for musashi read/write functions
 u32 m68k_read_memory_8(u32 address)
 {
@@ -348,32 +188,3 @@ void m68k_write_memory_32(u32 address, u32 value)
 	mus_write16(address,     value >> 16);
 	mus_write16(address + 2, value & 0xFFFFu);
 }
-
-M68K_struct M68KMusashi = {
-	1,
-	"Musashi Interface",
-	musashi_Init,
-	musashi_DeInit,
-	musashi_Reset,
-	musashi_Exec,
-	musashi_Sync,
-	musashi_GetDReg,
-	musashi_GetAReg,
-	musashi_GetPC,
-	musashi_GetSR,
-	musashi_GetUSP,
-	musashi_GetMSP,
-	musashi_SetDReg,
-	musashi_SetAReg,
-	musashi_SetPC,
-	musashi_SetSR,
-	musashi_SetUSP,
-	musashi_SetMSP,
-	musashi_SetFetch,
-	musashi_SetIRQ,
-	musashi_WriteNotify,
-	musashi_SetReadB,
-	musashi_SetReadW,
-	musashi_SetWriteB,
-	musashi_SetWriteW
-};

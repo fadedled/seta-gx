@@ -113,15 +113,6 @@ NULL
 #endif
 
 
-
-M68K_struct *M68KCoreList[] = {
-&M68KDummy,
-&M68KMusashi,
-&M68KMusashi,
-NULL
-};
-
-
 //XXX: Change the directory.
 char games_dir[64];
 char saves_dir[64];

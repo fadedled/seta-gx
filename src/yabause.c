@@ -246,12 +246,6 @@ int	YabauseInit(yabauseinit_struct *init)
       return -1;
    }
 
-   if (M68KInit(init->m68kcoretype) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "M68K");
-      return -1;
-   }
-
 #ifdef SCSP_PLUGIN
    if (SCSCore->Init(init->sndcoretype, ScuSendSoundRequest) != 0)
 #else

@@ -864,7 +864,6 @@ static void (* FASTCALL scsp_audiogen_func_table[2][2][2][2][2])(SlotState *slot
 
 // ScspInit:  Initialize the SCSP emulation.  interrupt_handler should
 // specify a function to handle interrupts delivered to the SCU.
-// Must be called after M68KInit(); returns 0 on success, -1 on failure.
 
 
 #ifndef SCSP_PLUGIN

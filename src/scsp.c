@@ -3071,30 +3071,6 @@ static u8 IsM68KRunning;
 static s32 FASTCALL (*m68kexecptr)(s32 cycles);  // musashi_Exec or M68KExecBP
 static s32 savedcycles;  // Cycles left over from the last M68KExec() call
 
-//////////////////////////////////////////////////////////////////////////////
-
-static u32 FASTCALL
-c68k_byte_read (const u32 adr)
-{
-  if (adr < 0x100000)
-    return T2ReadByte(SoundRam, adr & 0x7FFFF);
-  else
-    return scsp_r_b(adr);
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-static void FASTCALL
-c68k_byte_write (const u32 adr, u32 data)
-{
-  if (adr < 0x100000)
-    T2WriteByte(SoundRam, adr & 0x7FFFF, data);
-  else
-    scsp_w_b(adr, data);
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 /* exported to m68kd.c */
 u32 FASTCALL
 #ifndef SCSP_PLUGIN
@@ -3108,19 +3084,6 @@ SCSScsp1M68KReadWord (const u32 adr)
   else
     return scsp_r_w(adr);
 }
-
-//////////////////////////////////////////////////////////////////////////////
-
-static void FASTCALL
-c68k_word_write (const u32 adr, u32 data)
-{
-  if (adr < 0x100000)
-    T2WriteWord (SoundRam, adr & 0x7FFFF, data);
-  else
-    scsp_w_w (adr, data);
-}
-
-//////////////////////////////////////////////////////////////////////////////
 
 static void
 c68k_interrupt_handler (u32 level)
