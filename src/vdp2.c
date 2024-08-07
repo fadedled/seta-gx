@@ -355,7 +355,8 @@ void Vdp2VBlankOUT(void)
 
 	if (Vdp2Regs->TVMD & 0x8000) {
 		//Generate sprite Window texture
-		//gfx_WindowTextureGen();
+		GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
+		gfx_WindowTextureGen();
 		//We draw sprites first to not waste CPU time
 		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 		Vdp1Draw();	//Create DL for GX

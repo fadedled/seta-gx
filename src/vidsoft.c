@@ -538,196 +538,199 @@ static INLINE u16 gfx_GetVpd2Texel(vdp2draw_struct *info, u32 x, u32 y)
 //////////////////////////////////////////////////////////////////////////////
 //HALF-DONE
 
+GXTexObj tobj_win;
+
+void gfx_DrawWindowTex(u32 wctl, u32 priority)
+{
+	//win_act contains active windows [sw, w1, w0]
+	//for each active window we set its corresponding swapmode and comparison operation
+	//win_inv says how it's correspoding konstant color is inverted (we want the == that makes sense)
+	//if op is AND we want greater than 0, else we want less than 1 and Konstant colors are inverted.
+	if (!(wctl & 0x2A)) {
+		return;
+	}
+
+	GX_SetZCompLoc(GX_FALSE);
+	SGX_SetZOffset(priority);
+	GX_SetColorUpdate(GX_FALSE);
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0,  GX_DIRECT);
+
+	GX_LoadPosMtxImm(mat[GXMTX_IDENTITY], GXMTX_IDENTITY);
+
+	//TODO: Optimize this
+	u32 comp_op = 7;
+	u32 ch_count = 0;
+	u8 op = (wctl >> 7) & 1;
+	u8 op_mask = -op;
+	u8 ch[4] = {GX_CH_ALPHA, GX_CH_ALPHA, GX_CH_ALPHA, GX_CH_ALPHA};
+	u8 kcol[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+	for (u32 i = 0; i < 3; ++i) {
+		if (wctl & 0x2) {
+			ch[ch_count] = i;
+			if (wctl & 0x1) {
+				kcol[ch_count] = op_mask ^ 0xFF;
+			} else {
+				kcol[ch_count] = op_mask;
+			}
+			comp_op += 2;
+			ch_count++;
+		}
+		wctl >>= 2;
+	}
+	GX_SetTevSwapModeTable(GX_TEV_SWAP2, ch[0], ch[1], ch[2], GX_CH_ALPHA);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP2);
+	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) kcol));
+
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
+
+	GX_InitTexObj(&tobj_win, win_tex, disp.w, disp.h, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	GX_InitTexObjLOD(&tobj_win, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
+	GX_LoadTexObj(&tobj_win, GX_TEXMAP0);
+
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_KONST, GX_CC_ZERO, GX_CC_TEXC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, comp_op, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CA_KONST, GX_CC_ZERO);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+
+	if (op) {
+		GX_SetAlphaCompare(GX_EQUAL, 0xFF, GX_AOP_AND, GX_ALWAYS, 0);
+	} else {
+		GX_SetAlphaCompare(GX_NEQUAL, 0xFF, GX_AOP_AND, GX_ALWAYS, 0);
+	}
+	//Draw the window
+	GX_Begin(GX_QUADS, GX_VTXFMT1, 4);		// Draw A Quad
+		GX_Position2s16(0, 0);				// Top Left
+		GX_TexCoord2u16(0, 0);
+		GX_Position2s16(disp.w, 0);			// Top Right
+		GX_TexCoord2u16(disp.w, 0);
+		GX_Position2s16(disp.w, disp.h);	// Bottom Right
+		GX_TexCoord2u16(disp.w, disp.h);
+		GX_Position2s16(0, disp.h);			// Bottom Left
+		GX_TexCoord2u16(0, disp.h);
+	GX_End();								// Done Drawing The Quad
+
+	//Restore previous settings
+	GX_SetColorUpdate(GX_TRUE);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
+}
+
+
+static void gfx_DrawWindow(u32 win_ctl, u16 *win_pos)
+{
+	u32 h_shft = disp.highres ^ 1;
+	if (win_ctl & 0x80000000) {
+		u32 line_addr = (win_ctl & 0x7FFFE) << 1;
+		GX_Begin(GX_LINES, GX_VTXFMT1, disp.h * 2);
+		for (u32 i = 0; i < disp.h; ++i) {
+			u16 x0 = T1ReadWord(Vdp2Ram, line_addr);
+			u16 x1 = T1ReadWord(Vdp2Ram, line_addr + 2);
+			line_addr += 4;
+
+			if (x1 == 0xFFFF) {
+				x0 = 0;
+				x1 = 0;
+			}
+
+			GX_Position2s16(x0 >> h_shft, i + 1);
+			GX_Position2s16(x1 >> h_shft, i + 1);
+		}
+		GX_End();
+	} else {
+		//XXX: this is only for W0
+		u16 x0 = win_pos[0] >> h_shft;
+		u16 y0 = win_pos[1] + 1;
+		u16 x1 = win_pos[2] >> h_shft;
+		u16 y1 = win_pos[3] + 1;
+		GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
+			GX_Position2s16(x0, y0);
+			GX_Position2s16(x1, y0);
+			GX_Position2s16(x1, y1);
+			GX_Position2s16(x0, y1);
+		GX_End();
+	}
+}
+
+
+void gfx_WindowTextureGen(void)
+{
+	const GXColor w0_kc = {0xFF, 0x00, 0x00, 0xFF};	//red
+	const GXColor w1_kc = {0x00, 0xFF, 0x00, 0xFF};	//blue
+	const GXColor sw_kc = {0x00, 0x00, 0xFF, 0xFF};	//green
+
+	GX_SetScissor(0, 0, disp.w, disp.h);	//Use actual values disp.w and disp.h
+
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
+
+	GX_LoadPosMtxImm(mat[GXMTX_IDENTITY], GXMTX_IDENTITY);
+
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+
+	//TODO: Check if we need to clear the screen
+	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
+	GX_Begin(GX_QUADS, GX_VTXFMT1, 4);		// Draw A Quad
+		GX_Position2s16(0, 0);				// Top Left
+		GX_Position2s16(disp.w, 0);			// Top Right
+		GX_Position2s16(disp.w, disp.h);	// Bottom Right
+		GX_Position2s16(0, disp.h);			// Bottom Left
+	GX_End();								// Done Drawing The Quad
+
+	//Draw Window 0
+	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_OR);
+	GX_SetTevKColor(GX_KCOLOR0, w0_kc);
+	gfx_DrawWindow(Vdp2Regs->LWTA0.all, &Vdp2Regs->WPSX0);
+
+	//Draw Window 1
+	GX_SetTevKColor(GX_KCOLOR0, w1_kc);
+	gfx_DrawWindow(Vdp2Regs->LWTA1.all, &Vdp2Regs->WPSX1);
+
+	//Sprite window (Only draw if sprite window is used)
+	//Change tev to accept textures
+	//TODO: Add this feature
+	if (0) {
+		GX_SetTevKColor(GX_KCOLOR0, sw_kc);
+		GX_SetVtxDesc(GX_VA_TEX0,  GX_DIRECT);
+		//gfx_DrawWindow(40, 40, 200, 100);
+	}
+
+	//Copy the red component of FB
+	GX_Flush();
+	GX_DrawDone();
+	GX_SetTexCopySrc(0, 0, disp.w, disp.h);
+	GX_SetTexCopyDst(disp.w, disp.h, GX_TF_RGB565, GX_FALSE);
+	GX_CopyTex(win_tex, GX_TRUE);
+	GX_PixModeSync();
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_AND);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+}
+
 
 //DONE
 static INLINE int TestBothWindow(int wctl, clipping_struct *clip, int x, int y)
 {
     return 1;
 }
-
-
-static void gfx_WindowDraw(u32 z, u32 win_ctl, u16 *win_pos)
-{
-	if (win_ctl & 0x80000000) {
-		u32 line_addr = (win_ctl & 0x7FFFE) << 1;
-		GX_Begin(GX_LINES, GX_VTXFMT1, 4);
-			for (u32 i = 0; i < disp.h; ++i) {
-				u16 x0 = T1ReadWord(Vdp2Ram, line_addr);
-				u16 x1 = T1ReadWord(Vdp2Ram, line_addr + 2);
-				line_addr += 4;
-
-				if (x1 == 0xFFFF) {
-					x0 = 0;
-					x1 = 0;
-				}
-
-				GX_Position3s16(x0, i, z);
-				GX_TexCoord2f32(0.0, 0.0);
-				GX_Position3s16(x1, i, z);
-				GX_TexCoord2f32(0.0, 0.0);
-			}
-		GX_End();
-	} else {
-		//XXX: this is only for W0
-		u16 x0 = win_pos[0];
-		u16 y0 = win_pos[1];
-		u16 x1 = win_pos[2];
-		u16 y1 = win_pos[3];
-		GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
-			GX_Position3s16(x0, y0, z);
-			GX_TexCoord2f32(0.0, 0.0);
-			GX_Position3s16(x1, y0, z);
-			GX_TexCoord2f32(0.0, 0.0);
-			GX_Position3s16(x1, y1, z);
-			GX_TexCoord2f32(0.0, 0.0);
-			GX_Position3s16(x0, y1, z);
-			GX_TexCoord2f32(0.0, 0.0);
-		GX_End();
-	}
-}
-
-static void gfx_WindowDrawQuad(u32 x, u32 y, u32 z, u32 w, u32 h)
-{
-	GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
-		GX_Position3s16(x, y, z);
-		GX_TexCoord2f32(0.0, 0.0);
-		GX_Position3s16(x + w, y, z);
-		GX_TexCoord2f32(0.0, 0.0);
-		GX_Position3s16(x + w, y + h, z);
-		GX_TexCoord2f32(0.0, 0.0);
-		GX_Position3s16(x, y + h, z);
-		GX_TexCoord2f32(0.0, 0.0);
-	GX_End();
-}
-
-/*
- * Window position in byte:
- * bit 7 						bit 0
- * [CC][RP][SP][R0]-[N3][N2][N1][N0]
- *
- */
-void gfx_WindowTextureGen(void)
-{
-	//XXX: Set up tev stages.
-	//SET UP GX TEV STAGES...
-	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
-
-	GX_LoadPosMtxImm(mat[GXMTX_IDENTITY], GXMTX_IDENTITY);
-	GX_SetScissor(0, 0, disp.w, disp.h);
-
-	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-
-	GX_SetNumTevStages(1);
-	GX_SetNumTexGens(1);
-	GX_SetNumChans(0);
-    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
-
-	//XXX: this is for paletted sprites, Konst is for transparency, gouraud is always active and half
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
-
-	GXColor konst = {0x00, 0x00, 0x00, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
-	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
-
-	//XXX: This can be optimized by updating when values change
-	u8 op = ((Vdp2Regs->WCTLA >> 14) & 0x02) | ((Vdp2Regs->WCTLA >> 7) & 0x01) |
-			((Vdp2Regs->WCTLB >> 12) & 0x08) | ((Vdp2Regs->WCTLB >> 5) & 0x04) |
-			((Vdp2Regs->WCTLC >> 10) & 0x20) | ((Vdp2Regs->WCTLC >> 3) & 0x10) |
-			((Vdp2Regs->WCTLD >>  8) & 0x80) | ((Vdp2Regs->WCTLD >> 1) & 0x40);
-
-	u8 w0_area = ((Vdp2Regs->WCTLA >> 7) & 0x02) | ((Vdp2Regs->WCTLA     ) & 0x01) |
-				((Vdp2Regs->WCTLB >>  5) & 0x08) | ((Vdp2Regs->WCTLB << 2) & 0x04) |
-				((Vdp2Regs->WCTLC >>  3) & 0x20) | ((Vdp2Regs->WCTLC << 4) & 0x10) |
-				((Vdp2Regs->WCTLD >>  1) & 0x80) | ((Vdp2Regs->WCTLD << 6) & 0x40);
-
-	u8 w0_act = ((Vdp2Regs->WCTLA >> 8) & 0x02) | ((Vdp2Regs->WCTLA >> 1) & 0x01) |
-				((Vdp2Regs->WCTLB >> 6) & 0x08) | ((Vdp2Regs->WCTLB << 1) & 0x04) |
-				((Vdp2Regs->WCTLC >> 4) & 0x20) | ((Vdp2Regs->WCTLC << 3) & 0x10) |
-				((Vdp2Regs->WCTLD >> 2) & 0x80) | ((Vdp2Regs->WCTLD << 5) & 0x40);
-
-	u8 w1_area = ((Vdp2Regs->WCTLA >> 9) & 0x02) | ((Vdp2Regs->WCTLA >> 2) & 0x01) |
-				((Vdp2Regs->WCTLB >>  7) & 0x08) | ((Vdp2Regs->WCTLB     ) & 0x04) |
-				((Vdp2Regs->WCTLC >>  5) & 0x20) | ((Vdp2Regs->WCTLC << 2) & 0x10) |
-				((Vdp2Regs->WCTLD >>  3) & 0x80) | ((Vdp2Regs->WCTLD << 4) & 0x40);
-
-	u8 w1_act = ((Vdp2Regs->WCTLA >> 10) & 0x02) | ((Vdp2Regs->WCTLA >> 3) & 0x01) |
-				((Vdp2Regs->WCTLB >>  8) & 0x08) | ((Vdp2Regs->WCTLB >> 1) & 0x04) |
-				((Vdp2Regs->WCTLC >>  6) & 0x20) | ((Vdp2Regs->WCTLC << 1) & 0x10) |
-				((Vdp2Regs->WCTLD >>  4) & 0x80) | ((Vdp2Regs->WCTLD << 3) & 0x40);
-
-	u8 sp_area = ((Vdp2Regs->WCTLA >> 11) & 0x02) | ((Vdp2Regs->WCTLA >> 4) & 0x01) |
-				((Vdp2Regs->WCTLB >>  9) & 0x08) | ((Vdp2Regs->WCTLB >> 2) & 0x04) |
-				((Vdp2Regs->WCTLC >>  7) & 0x20) | ((Vdp2Regs->WCTLC     ) & 0x10) |
-				((Vdp2Regs->WCTLD >>  5) & 0x80) | ((Vdp2Regs->WCTLD << 2) & 0x40);
-
-	u8 sp_act = ((Vdp2Regs->WCTLA >> 12) & 0x02) | ((Vdp2Regs->WCTLA >> 5) & 0x01) |
-				((Vdp2Regs->WCTLB >> 10) & 0x08) | ((Vdp2Regs->WCTLB >> 3) & 0x04) |
-				((Vdp2Regs->WCTLC >>  8) & 0x20) | ((Vdp2Regs->WCTLC >> 1) & 0x10) |
-				((Vdp2Regs->WCTLD >>  6) & 0x80) | ((Vdp2Regs->WCTLD << 1) & 0x40);
-
-	//Clear screen
-	GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
-	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_SET);
-	gfx_WindowDrawQuad(0, 0, 0, disp.w, disp.h);
-
-	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_AND);
-	//Sprite Window
-	//Z = 1
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-	konst.r = (sp_area ^ op) | (~sp_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	//Draw All sprites
-	//drawSpriteTex( 64, 64, 64, 64, 1);	//inside, set with win_act
-	GX_SetZMode(GX_ENABLE, GX_NEQUAL, GX_FALSE);
-	konst.r = ((~sp_area) ^ op) | (~sp_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDrawQuad( 0, 0, 1, disp.w, disp.h);	//outside, invert with win_region
-
-	//Window 0
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-	konst.r = (w0_area ^ op) | (~w0_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDraw(2, Vdp2Regs->LWTA0.all, &Vdp2Regs->WPSX0);
-	GX_SetZMode(GX_ENABLE, GX_NEQUAL, GX_FALSE);
-	konst.r = ((~w0_area) ^ op) | (~w0_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDrawQuad( 0, 0, 2, disp.w, disp.h);	//outside, invert with win_region
-
-	//Window 1
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-	konst.r = (w1_area ^ op) | (~w1_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDraw(4, Vdp2Regs->LWTA1.all, &Vdp2Regs->WPSX1);
-	GX_SetZMode(GX_ENABLE, GX_NEQUAL, GX_FALSE);
-	konst.r = ((~w1_area) ^ op) | (~w1_act);
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDrawQuad( 0, 0, 4, disp.w, disp.h);	//outside, invert with win_region
-
-	//Apply Operation
-	GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
-	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_XOR);
-	konst.r = op;
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	gfx_WindowDrawQuad(0, 0, 0, disp.w, disp.h);	//use or
-
-	//Copy the red component of FB
-	GX_Flush();
-	GX_DrawDone();
-	GX_SetTexCopySrc(0, 0, disp.w, disp.h);
-	GX_SetTexCopyDst(disp.w, disp.h, GX_CTF_R8, GX_FALSE);
-	GX_CopyTex(win_tex, GX_TRUE);
-	GX_PixModeSync();
-
-}
-
-
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -903,26 +906,6 @@ static void Vdp2GetInterlaceInfo(int *start_line, int *line_increment)
 
 
 //Tests to see if 32-byte algined memory block is full of zeroes
-#if 0
-static u32 FASTCALL memIsZeroTest(const u32 *mem, u32 size)
-{
-	u32 val = 0;
-	size >>= 5; //32-byte aligned
-	while (size) {
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		val |= *(mem++);
-		--size;
-	}
-	return !val;
-}
-#else
-
 static u32 FASTCALL memIsZeroTest( u32 *mem, u32 size)
 {
     register u32 *m = mem;
@@ -941,7 +924,6 @@ static u32 FASTCALL memIsZeroTest( u32 *mem, u32 size)
 	}
 	return !val;
 }
-#endif
 
 //Draws bitmap screens
 static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
@@ -955,7 +937,7 @@ static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
 
 	GX_SetScissor(0, 0, disp.w, disp.h);
 
-
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
 	u32 trn_code = info->transparencyenable << 7;
 	u32 tlut_pos = ((info->coloroffset + info->paladdr) >> 4) & 0x7F;
 	//XXX: Convert textures before loading
@@ -1031,6 +1013,7 @@ static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
 	GX_SetVtxDesc(GX_VA_TEX0, GX_INDEX8);
 }
 
+
 //Draws NBG2 and NBG3 scroll screen using GX quads
 static void FASTCALL gfx_DrawScroll(vdp2draw_struct *info)
 {
@@ -1042,6 +1025,8 @@ static void FASTCALL gfx_DrawScroll(vdp2draw_struct *info)
 	}
 
 	SetupScreenVars(info, &sinfo, info->PlaneAddr);
+
+	gfx_DrawWindowTex(info->wctl, (info->priority << 4) + info->prioffs);
 
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -1173,195 +1158,6 @@ static void FASTCALL gfx_DrawScroll(vdp2draw_struct *info)
 
 	SGX_SpriteConverterSet(1, SPRITE_4BPP, 0);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
-}
-
-
-
-
-
-
-//HALF-DONE
-static void FASTCALL Vdp2DrawScroll(vdp2draw_struct *info)
-{
-   u32 i, j;
-   u32 x, y;
-   clipping_struct clip[2];
-   u32 linewnd0addr, linewnd1addr;
-   u32 line_window_base[2] = { 0 };
-   screeninfo_struct sinfo;
-   int scrolly;
-   int *mosaic_y, *mosaic_x;
-   clipping_struct colorcalcwindow[2];
-
-
-   SetupScreenVars(info, &sinfo, info->PlaneAddr);
-
-   scrolly = info->y;
-
-   clip[0].xstart = clip[0].ystart = clip[0].xend = clip[0].yend = 0;
-   clip[1].xstart = clip[1].ystart = clip[1].xend = clip[1].yend = 0;
-   ReadWindowData(info->wctl, clip);
-   linewnd0addr = linewnd1addr = 0;
-   ReadLineWindowData(&info->islinewindow, info->wctl, &linewnd0addr, &linewnd1addr);
-   line_window_base[0] = linewnd0addr;
-   line_window_base[1] = linewnd1addr;
-   /* color calculation window: in => no color calc, out => color calc */
-   //NOTE: UPDATED START
-   ReadWindowData(Vdp2Regs->WCTLD >> 8, colorcalcwindow);
-   {
-	   static int tables_initialized = 0;
-	   static int mosaic_table[16][1024];
-	   if(!tables_initialized)
-	   {
-		   tables_initialized = 1;
-			for(i=0;i<16;++i)
-			{
-				int m = i+1;
-				for(j=0;j<1024;++j)
-					mosaic_table[i][j] = j/m*m;
-			}
-	   }
-	   mosaic_x = mosaic_table[info->mosaicxmask-1];
-	   mosaic_y = mosaic_table[info->mosaicymask-1];
-   }
-   //NOTE: UPDATED END
-
-   for (j = 0; j < vdp2height; j++)
-   {
-      int Y;
-      int linescrollx = 0;
-      // precalculate the coordinate for the line(it's faster) and do line
-      // scroll
-      if (info->islinescroll)
-      {
-         if (info->islinescroll & 0x1)
-         {
-            linescrollx = (T1ReadLong(Vdp2Ram, info->linescrolltbl) >> 16) & 0x7FF;
-            info->linescrolltbl += 4;
-         }
-         if (info->islinescroll & 0x2)
-         {
-            info->y = (T1ReadWord(Vdp2Ram, info->linescrolltbl) & 0x7FF) + scrolly;
-            info->linescrolltbl += 4;
-            y = info->y;
-         }
-         else
-            y = info->y + info->coordincy*mosaic_y[j];
-
-         if (info->islinescroll & 0x4)
-         {
-            info->coordincx = (T1ReadLong(Vdp2Ram, info->linescrolltbl) & 0x7FF00) / (float)65536.0;
-            info->linescrolltbl += 4;
-         }
-      }
-      else
-         y = info->y + info->coordincy*mosaic_y[j];
-
-	  if (vdp2_interlace)
-      {
-         linewnd0addr = line_window_base[0] + (j * 4);
-         linewnd1addr = line_window_base[1] + (j * 4);
-      }
-
-      // if line window is enabled, adjust clipping values
-      ReadLineWindowClip(info->islinewindow, clip, &linewnd0addr, &linewnd1addr);
-      y &= sinfo.ymask;
-
-      if (info->isverticalscroll && (!vdp2_x_hires))
-      {
-         // this is *wrong*, vertical scroll use a different value per cell
-         // info->verticalscrolltbl should be incremented by info->verticalscrollinc
-         // each time there's a cell change and reseted at the end of the line...
-         // or something like that :)
-         y += T1ReadLong(Vdp2Ram, info->verticalscrolltbl) >> 16;
-         y &= 0x1FF;
-
-#if 0	//XXX: THis must be active
-         u32 scroll_value = 0;
-         int y_value = j >> vdp2_interlace;
-         if (num_vertical_cell_scroll_enabled == 1)
-         {
-            scroll_value = cell_data[y_value].data[0] >> 16;
-         }
-         else
-         {
-            if (info->titan_which_layer == TITAN_NBG0)
-               scroll_value = cell_data[y_value].data[0] >> 16;//reload cell data per line for sonic 2, 2 player mode
-            else if (info->titan_which_layer == TITAN_NBG1)
-               scroll_value = cell_data[y_value].data[1] >> 16;
-         }
-
-         y += scroll_value;
-         y &= 0x1FF;
-#endif
-      }
-
-      Y=y;
-
-      info->LoadLineParams(info, j >> vdp2_interlace);
-      if (!info->enable)
-         continue;
-
-      for (i = 0; i < vdp2width; i++)
-      {
-         u32 color, dot;
-         /* I'm really not sure about this... but I think the way we handle
-         high resolution gets in the way with window process. I may be wrong...
-         This was added for Cotton Boomerang */
-
-         // See if screen position is clipped, if it isn't, continue
-         if (!TestBothWindow(info->wctl, clip, i, j))
-         {
-            continue;
-         }
-
-         //x = info->x+((int)(info->coordincx*(float)((info->mosaicxmask > 1) ? (i / info->mosaicxmask * info->mosaicxmask) : i)));
-		 x = info->x + mosaic_x[i]*info->coordincx;
-         x &= sinfo.xmask;
-
-         if (linescrollx) {
-            x = (x + linescrollx) & 0x3FF;
-         }
-
-         // Fetch Pixel, if it isn't transparent, continue
-         if (!info->isbitmap)
-         {
-            // Tile
-            y=Y;
-            Vdp2MapCalcXY(info, &x, &y, &sinfo);
-         }
-
-         if (!Vdp2FetchPixel(info, x, y, &color, &dot))
-         {
-            continue;
-         }
-
-         //per-pixel priority is on
-         u32 priority = info->priority;
-         if (info->specialprimode == 2)
-         {
-            priority = info->priority & 0xE;
-            priority |= PixelIsSpecialPriority(info->specialcode, dot) & info->specialfunction;
-         }
-         // Apply color offset and color calculation/special color calculation
-         // and then continue.
-         // We almost need to know well ahead of time what the top
-         // and second pixel is in order to work this.
-
-#if 0
-         {
-            u8 alpha;
-            /* if we're in the valid area of the color calculation window, don't do color calculation */
-            if (!TestBothWindow(Vdp2Regs->WCTLD >> 8, colorcalcwindow, i, j))
-               alpha = 0x3F;
-            else
-               alpha = GetAlpha(info, color, dot);
-			//FUCK
-            //TitanPutPixel(priority, i, j, COL2WII_32(alpha, info->PostPixelFetchCalc(info, color)), info->linescreen);
-         }
-#endif
-      }
-   }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2410,7 +2206,7 @@ int VIDSoftInit(void)
 	GX_InitTexObj(&tex_obj_vdp1, display_fb, 8, 8, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tex_obj_vdp1, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 
-	if ((win_tex = (u8 *)memalign(32, 704 * 512)) == NULL)
+	if ((win_tex = (u8 *)memalign(32, 704 * 512 * sizeof(u16))) == NULL)
       return -1;
 
 
