@@ -181,7 +181,7 @@ static void wii_sat2tex4bpp(u32 addr, u32 w, u32 h)
 {
 	w >>= 3;
 	volatile f32 *tmem = (f32*) GX_RedirectWriteGatherPipe(wii_vram + addr);
-	f32 *src0 = (f32*) (Vdp1Ram + addr);
+	f32 *src0 = (f32*) (Vdp2Ram + addr);
 	f32 *src1 = src0 + w;
 	f32 *src2 = src1 + w;
 	f32 *src3 = src2 + w;
@@ -214,7 +214,36 @@ static void wii_sat2texRGBA(u32 addr, u32 w, u32 h)
 {
 	w >>= 2;
 	volatile f64 *tmem = (f64*) GX_RedirectWriteGatherPipe(wii_vram + addr);
-	f64 *src0 = (f64*) (Vdp1Ram + addr);
+	f64 *src0 = (f64*) (Vdp2Ram + addr);
+	f64 *src1 = src0 + w;
+	f64 *src2 = src1 + w;
+	f64 *src3 = src2 + w;
+
+	register u32 lines = h >> 2;
+	register const u32 inc = w * 3;
+	while (lines--) {
+		u32 tiles = w;
+		do {
+			*tmem = *(src0++);
+			*tmem = *(src1++);
+			*tmem = *(src2++);
+			*tmem = *(src3++);
+		} while (--tiles);
+		src0 += inc;
+		src1 += inc;
+		src2 += inc;
+		src3 += inc;
+	}
+	GX_RestoreWriteGatherPipe();
+}
+
+
+//Converts saturn bitmap 16bpp textures
+static void wii_sat2texRGBA32(u32 addr, u32 w, u32 h)
+{
+	w >>= 2;
+	volatile f64 *tmem = (f64*) GX_RedirectWriteGatherPipe(wii_vram + addr);
+	f64 *src0 = (f64*) (Vdp2Ram + addr);
 	f64 *src1 = src0 + w;
 	f64 *src2 = src1 + w;
 	f64 *src3 = src2 + w;
@@ -937,30 +966,35 @@ static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
 
 	GX_SetScissor(0, 0, disp.w, disp.h);
 
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
 	u32 trn_code = info->transparencyenable << 7;
 	u32 tlut_pos = ((info->coloroffset + info->paladdr) >> 4) & 0x7F;
 	//XXX: Convert textures before loading
 	switch (info->colornumber) {
 		case 0: { // 4bpp
-			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
+			wii_sat2tex4bpp(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI4, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(trn_code, tlut_pos));
 		} break;
 		case 1: { // 8bpp
-			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
+			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI8, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(trn_code << 1, tlut_pos));
 		} break;
 		case 2: { // 16bpp (11 bits used)
 			//XXX: color palette is wrong?
-			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
+			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI14, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(0, 0));
 		} break;
 		case 3: {
-			GX_InitTexObj(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
+			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObj(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_RGB5A3, GX_REPEAT, GX_REPEAT, GX_FALSE);
 		} break;
 		case 4: {
-			GX_InitTexObj(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
+			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObj(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_RGBA8, GX_REPEAT, GX_REPEAT, GX_FALSE);
 		} break;
 	}
@@ -995,21 +1029,25 @@ static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
 
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
 	//XXX: Dont use color
-	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT1, 4);
 		GX_Position2s16(0, 0);
 		GX_Color1u32(info->alpha);
-		GX_TexCoord2f32(0.0f, 0.0f);
+		GX_TexCoord2u16(0.0f, 0.0f);
+
 		GX_Position2s16(disp.w, 0);
 		GX_Color1u32(info->alpha);
-		GX_TexCoord2f32( (f32) disp.w / (f32) info->cellw , 0.0f);
+		GX_TexCoord2u16(disp.w, 0.0f);
+
 		GX_Position2s16(disp.w, disp.h);
 		GX_Color1u32(info->alpha);
-		GX_TexCoord2f32((f32) disp.w / (f32) info->cellw, (f32) disp.h / (f32) info->cellh);
+		GX_TexCoord2u16(disp.w, disp.h);
+
 		GX_Position2s16(0, disp.h);
 		GX_Color1u32(info->alpha);
-		GX_TexCoord2f32(0.0f, (f32) disp.h / (f32) info->cellh);
+		GX_TexCoord2u16(0.0f, disp.h);
 	GX_End();
 
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_INDEX8);
 }
 
@@ -1053,10 +1091,24 @@ static void FASTCALL gfx_DrawScroll(vdp2draw_struct *info)
 	if (info->colornumber) {
 		//Only change format...
 		//GX_InitTexObjCI(&tobj_ci, Vdp2Ram, inc_xy, inc_xy, GX_TF_CI8, GX_CLAMP, GX_CLAMP, GX_FALSE, 0);
-		SGX_BeginVdp2Scroll(GX_TF_CI8, inc_xy);
 		trn_code <<= 1;
 		block_size <<= 1;
+		SGX_BeginVdp2Scroll(GX_TF_CI8, inc_xy);
 		SGX_CellConverterSet(info->patternwh_bits, SPRITE_8BPP);
+
+		//TODO: This should be changed
+		switch (info->colornumber) {
+			case 2: { // 16bpp (11 bits used)
+				SGX_BeginVdp2Scroll(GX_TF_CI14, inc_xy);
+				SGX_CellConverterSet(info->patternwh_bits, SPRITE_8BPP);
+			} break;
+			case 3: {
+				SGX_BeginVdp2Scroll(GX_TF_RGB5A3, inc_xy);
+			} break;
+			case 4: {
+				SGX_BeginVdp2Scroll(GX_TF_RGBA8, inc_xy);
+			} break;
+		}
 	} else {
 		//GX_InitTexObjCI(&tobj_ci, Vdp2Ram, inc_xy, inc_xy, GX_TF_CI4, GX_CLAMP, GX_CLAMP, GX_FALSE, 0);
 		SGX_BeginVdp2Scroll(GX_TF_CI4, inc_xy);
@@ -1657,8 +1709,6 @@ static void Vdp2DrawNBG0(void)
 
 		if ((info.isbitmap = Vdp2Regs->CHCTLA & 0x2) != 0) {
 			// Bitmap Mode
-			//XXX: not implemented
-			//return;
 			ReadBitmapSize(&info, Vdp2Regs->CHCTLA >> 2, 0x3);
 
 			info.charaddr = (Vdp2Regs->MPOFN & 0x7) * 0x20000;
@@ -1758,8 +1808,6 @@ static void Vdp2DrawNBG1(void)
 	info.colornumber = (Vdp2Regs->CHCTLA & 0x3000) >> 12;
 
 	if((info.isbitmap = Vdp2Regs->CHCTLA & 0x200) != 0) {
-		//XXX: Bitmap rendering is sill not implemented...
-		return;
 		ReadBitmapSize(&info, Vdp2Regs->CHCTLA >> 10, 0x3);
 
 		info.x = Vdp2Regs->SCXIN1 & 0x7FF;

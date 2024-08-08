@@ -206,6 +206,7 @@ void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
 		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_2, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
 		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_8, GX_ITS_4);
 	}
+	//TODO: Handle Cell 16BPP (1x1 and 2x2)
 }
 
 
