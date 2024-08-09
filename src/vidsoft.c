@@ -179,6 +179,9 @@ typedef struct
 //Converts saturn bitmap 4bpp textures
 static void wii_sat2tex4bpp(u32 addr, u32 w, u32 h)
 {
+	if ((addr + (w*h*2)) > 0x80000) {
+		h = (0x80000 - addr) / w;
+	}
 	w >>= 3;
 	volatile f32 *tmem = (f32*) GX_RedirectWriteGatherPipe(wii_vram + addr);
 	f32 *src0 = (f32*) (Vdp2Ram + addr);
@@ -212,8 +215,11 @@ static void wii_sat2tex4bpp(u32 addr, u32 w, u32 h)
 //Converts saturn bitmap 16bpp textures
 static void wii_sat2texRGBA(u32 addr, u32 w, u32 h)
 {
+	if ((addr + (w*h*2)) > 0x80000) {
+		h = (0x80000 - addr) / w;
+	}
 	w >>= 2;
-	volatile f64 *tmem = (f64*) GX_RedirectWriteGatherPipe(wii_vram + addr);
+	volatile f64 *tmem = (f64*) GX_RedirectWriteGatherPipe(wii_vram);
 	f64 *src0 = (f64*) (Vdp2Ram + addr);
 	f64 *src1 = src0 + w;
 	f64 *src2 = src1 + w;
@@ -972,29 +978,29 @@ static void FASTCALL gfx_DrawBitmap(vdp2draw_struct *info)
 	//XXX: Convert textures before loading
 	switch (info->colornumber) {
 		case 0: { // 4bpp
-			wii_sat2tex4bpp(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
-			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
+			//wii_sat2tex4bpp(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI4, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(trn_code, tlut_pos));
 		} break;
 		case 1: { // 8bpp
-			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
-			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
+			//wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw >> 1, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI8, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(trn_code << 1, tlut_pos));
 		} break;
 		case 2: { // 16bpp (11 bits used)
 			//XXX: color palette is wrong?
-			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
-			GX_InitTexObjCI(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
+			//wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObjCI(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_CI14, GX_REPEAT, GX_REPEAT, GX_FALSE, TLUT_INDX(0, 0));
 		} break;
 		case 3: {
-			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
-			GX_InitTexObj(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
+			//wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObj(&tobj_bitmap, Vdp2Ram + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_RGB5A3, GX_REPEAT, GX_REPEAT, GX_FALSE);
 		} break;
 		case 4: {
-			wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
-			GX_InitTexObj(&tobj_bitmap, wii_vram + info->charaddr, info->cellw, info->cellh,
+			//wii_sat2texRGBA(Vdp2Ram + info->charaddr, info->cellw, info->cellh);
+			GX_InitTexObj(&tobj_bitmap, Vdp2Ram  + info->charaddr, info->cellw, info->cellh,
 				  GX_TF_RGBA8, GX_REPEAT, GX_REPEAT, GX_FALSE);
 		} break;
 	}
@@ -2474,15 +2480,21 @@ static u32 modeToColor(void)
 	spr_h += ((cmd.CMDSIZE & 0x7) != 0 || (cmd.CMDSRCA & 3)) << 3;
 
 	u32 tex_mode = (cmd.CMDPMOD >> 3) & 0x7;
+	u32 colr = cmd.CMDCOLR;
 	spritepixelinfo_struct spi = {0};
 	if ((tex_mode != 1) && (tex_mode != 5)) {
-		Vdp1GetSpritePixelInfo(Vdp2Regs->SPCTL & 0xF, &cmd.CMDCOLR, &spi);
+		Vdp1GetSpritePixelInfo(Vdp2Regs->SPCTL & 0xF, &colr, &spi);
 	}
 	//Set priority
-	SGX_SetZOffset(priority_arr[spi.priority] + 14);
+	if (!(*((u32*)chr_addr)) && ((spr_w + (cmd.CMDSIZE & 0xF8)) < 16)) {
+		SGX_SetZOffset(0);
+	} else {
+		SGX_SetZOffset(priority_arr[spi.priority] + 14);
+	}
+
 	//Check transparent code
 	u32 trn_code = ((cmd.CMDPMOD & 0x40) ^ 0x40) << 1;
-	u32 tlut_pos = cmd.CMDCOLR + ((Vdp2Regs->CRAOFB << 4) & 0x700);
+	u32 tlut_pos = colr + ((Vdp2Regs->CRAOFB << 4) & 0x700);
 
 	//XXX: this can be optimized
 	switch (tex_mode) {
@@ -2493,7 +2505,7 @@ static u32 modeToColor(void)
 			SGX_SpriteConverterSet(spr_w >> 3, SPRITE_4BPP, cmd.CMDSRCA & 3);
 			return 0x7f7f7f00; break;
 		case 1: // LUT 4-bit
-			u32 colorlut = (cmd.CMDCOLR << 3) & 0x7FFFF;
+			u32 colorlut = (colr << 3) & 0x7FFFF;
 			//Upload palette
 			//XXX: palette uploading should be done once per frame (for color bank, the other will be done per sprite)
 			if (trn_code) {
@@ -2566,14 +2578,9 @@ void VIDSoftVdp1NormalSpriteDraw()
 
 	//Flip the sprite
 	//XXX: using s16 is inefficient, use the whole u32
-	u32 tex_flip = 0x0000;
+	u32 tex_flip = (-(cmd.CMDCTRL & 0x10) << 4) & 0x3F00;
+	tex_flip 	|= (-(cmd.CMDCTRL & 0x20) >> 5) & 0x00FF;
 	u32 spr_size = cmd.CMDSIZE & 0x3FFF;
-	if (cmd.CMDCTRL & 0x10) {
-		tex_flip |= 0x3F00;
-	}
-	if (cmd.CMDCTRL & 0x20) {
-		tex_flip |= 0x00FF;
-	}
 
 	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(ax, ay);
@@ -2712,14 +2719,9 @@ void VIDSoftVdp1ScaledSpriteDraw()
 
 	//Flip the sprite
 	//XXX: using s16 is inefficient, use the whole u32
-	u32 tex_flip = 0x0000;
+	u32 tex_flip = (-(cmd.CMDCTRL & 0x10) << 4) & 0x3F00;
+	tex_flip 	|= (-(cmd.CMDCTRL & 0x20) >> 5) & 0x00FF;
 	u32 spr_size = cmd.CMDSIZE & 0x3FFF;
-	if (cmd.CMDCTRL & 0x10) {
-		tex_flip |= 0x3F00;
-	}
-	if (cmd.CMDCTRL & 0x20) {
-		tex_flip |= 0x00FF;
-	}
 
 	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(ax, ay);
@@ -2744,7 +2746,7 @@ void VIDSoftVdp1DistortedSpriteDraw()
 	Vdp1ReadCommand(&cmd, Vdp1Regs->addr);
 	u32 spriteWidth = ((cmd.CMDSIZE & 0x3F00) >> 8);
 	u32 spriteHeight = (cmd.CMDSIZE & 0xFF);
-	if (!spriteWidth || !spriteHeight) {
+	if ((!spriteWidth || !spriteHeight) && !(cmd.CMDCTRL & 0x4)) {
 		return;
 	}
 	//XXX: modify the points to fill leftsize pixels
@@ -2771,15 +2773,25 @@ void VIDSoftVdp1DistortedSpriteDraw()
 	if (cmd.CMDCTRL & 0x4) {
 		//XXX: use konst colors
 		Tev_SetNonTexturedPart();
-		u32 msb = (cmd.CMDCOLR >> 15);
+		//Only check msb if VDP2 specifies that it has RGB values
+		u32 msb = (cmd.CMDCOLR >> 15) & (Vdp2Regs->SPCTL >> 5);
+		u32 color = cmd.CMDCOLR;
 		if (msb) {
+			SGX_SetZOffset(priority_arr[0] + 14);
 			GX_SetTevKAlphaSel(GX_TEVSTAGE0, alpha);
 		} else {
+			spritepixelinfo_struct spi = {0};
+			Vdp1GetSpritePixelInfo(Vdp2Regs->SPCTL & 0xF, &color, &spi);
+			if (!color) {
+				return;
+			}
+			//Set priority
+			SGX_SetZOffset(priority_arr[spi.priority] + 14);
 			//XXX: Get colorbank value
+			color = *((u16*)(Vdp2ColorRam + ((color + ((Vdp2Regs->CRAOFB << 4) & 0x700)) << 3)));
 			GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
 		}
-
-		GXColor konst = {(cmd.CMDCOLR & 0x1F) << 3, (cmd.CMDCOLR & 0x3E0) >> 2, (cmd.CMDCOLR & 0x7C00) >> 7, 0};
+		GXColor konst = {(color & 0x1F) << 3, (color & 0x3E0) >> 2, (color & 0x7C00) >> 7, 0};
 		GX_SetTevKColor(GX_KCOLOR0, konst);
 		GX_SetTevKAlphaSel(GX_TEVSTAGE0, alpha);
 		GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
@@ -2797,14 +2809,9 @@ void VIDSoftVdp1DistortedSpriteDraw()
 
 	//Flip the sprite
 	//XXX: using s16 is inefficient, use the whole u32
-	u32 tex_flip = 0x0000;
+	u32 tex_flip = (-(cmd.CMDCTRL & 0x10) << 4) & 0x3F00;
+	tex_flip 	|= (-(cmd.CMDCTRL & 0x20) >> 5) & 0x00FF;
 	u32 spr_size = cmd.CMDSIZE & 0x3FFF;
-	if (cmd.CMDCTRL & 0x10) {
-		tex_flip |= 0x3F00;
-	}
-	if (cmd.CMDCTRL & 0x20) {
-		tex_flip |= 0x00FF;
-	}
 
 	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(ax, ay);
@@ -2826,6 +2833,10 @@ void vid_Vdp1PolygonDraw()
 {
 	s16 ax, ay, bx, by, cx, cy, dx, dy;
 	Vdp1ReadCommand(&cmd, Vdp1Regs->addr);
+
+	if (!cmd.CMDCOLR) {
+		return;
+	}
 
 	//XXX: modify the points to fill leftsize pixels
     ax = cmd.CMDXA;
