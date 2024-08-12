@@ -311,7 +311,6 @@ void menu_Init(void)
 	axis_button = 0;
 	axis_button_prev = 0;
 	wait_for_sync = 1;
-
 }
 
 
@@ -617,7 +616,16 @@ int main(int argc, char **argv)
 	//u8* mapped_mem = (u8*) mmap(0x06000000, 4096, PROT_READ | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	//char str_mem[32];
 	//BAT bats[8];
-	mem_Init();
+	osd_ProfAddCounter(PROF_SH2M, "SH2M");
+	osd_ProfAddCounter(PROF_SH2S, "SH2S");
+	osd_ProfAddCounter(PROF_M68K, "M68K");
+	osd_ProfAddCounter(PROF_SCSP, "SCSP");
+	osd_ProfAddCounter(PROF_SCU, "SCU");
+	osd_ProfAddCounter(PROF_SMPC, "SMPC");
+	osd_ProfAddCounter(PROF_VDP1, "VDP1");
+	osd_ProfAddCounter(PROF_VDP2, "VDP2");
+	osd_ProfAddCounter(PROF_CDB, "CDB");
+
 	//block_of_shit[0] = 32;
 	//VM_BATSet(0, block_of_shit, 0x0d000000, 0x20000);
 	//MappedMemoryInit();
@@ -639,7 +647,7 @@ int main(int argc, char **argv)
 		menu_Handle();
 		gui_Draw(&filename_items);
 
-		YuiSwapBuffers();
+		YuiSwapBuffers(1);
 		/*
 		GX_CopyDisp(xfb[fbsel], GX_TRUE);
 		GX_DrawDone();
@@ -837,7 +845,7 @@ void gx_ChangeVideo(u32 y_ofs, u32 width, u32 screen_width)
 }
 
 
-void YuiSwapBuffers()
+void YuiSwapBuffers(u32 wait_vsync)
 {
 		//XXX: Limit FPS.. we can do better than this
 	//if (YabauseGetTicks() - current_ticks < yabsys.OneFrameTime - 128) {
@@ -891,7 +899,7 @@ void YuiSwapBuffers()
 
 	VIDEO_SetNextFramebuffer(xfb[fbsel]);
 	VIDEO_Flush();
-	if (wait_for_sync) {
+	if (wait_vsync) {
 		VIDEO_WaitVSync();
 	}
 	fbsel ^= 1;

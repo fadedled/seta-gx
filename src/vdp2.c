@@ -31,6 +31,7 @@
 #include "yui.h"
 #include "yabause.h"
 #include "osd/osd.h"
+#include <ogc/lwp_watchdog.h>
 
 u8 * Vdp2Ram;
 u8 * Vdp2ColorRam;
@@ -340,7 +341,7 @@ static u64 current_ticks = 0;
 void Vdp2VBlankOUT(void)
 {
 	Vdp2Regs->TVSTAT = (Vdp2Regs->TVSTAT & ~0x0008) | 0x0002;
-
+	u32 cycles_start;
 
 	DCFlushRange(Vdp2Ram, 0x80000);
 	DCFlushRange(Vdp2ColorRam, 0x1000);
@@ -358,8 +359,12 @@ void Vdp2VBlankOUT(void)
 		GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
 		gfx_WindowTextureGen();
 		//We draw sprites first to not waste CPU time
+		cycles_start = gettime();
 		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 		Vdp1Draw();	//Create DL for GX
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+
+		cycles_start = gettime();
 		GX_SetZMode(GX_ENABLE, GX_LESS, GX_TRUE);
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
 		VIDSoftVdp2DrawScreens();
@@ -369,24 +374,21 @@ void Vdp2VBlankOUT(void)
 		//Vdp1NoDraw();
 		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 		VIDSoftVdp2DrawEnd();	//Make this use another function
+		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
 	} else {
+		cycles_start = gettime();
 		Vdp1NoDraw();	//Do nothing
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	}
 
 	VIDSoftVdp1SwapFrameBuffer();
 	FPSDisplay();
 	osd_MsgShow();
-
+	osd_ProfDraw();
 
 	//XXX: Limit FPS.. we can do better than this
-	if (YabauseGetTicks() - current_ticks < yabsys.OneFrameTime - 32) {
-		VIDEO_WaitVSync();
-	}
-	//VIDEO_WaitVSync();
-	current_ticks = YabauseGetTicks();
-
-	YuiSwapBuffers();
-
+	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
+	current_ticks = gettime();
 
 	/* this should be done after a frame change or a plot trigger */
 	Vdp1External.manualchange = 0;

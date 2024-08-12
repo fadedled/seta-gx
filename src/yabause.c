@@ -20,9 +20,6 @@
 */
 
 #include <sys/types.h>
-#ifdef WIN32
-#include <windows.h>
-#endif
 #include <string.h>
 #include "yabause.h"
 #include "cs0.h"
@@ -43,21 +40,10 @@
 #include "bios.h"
 
 
-#ifdef HAVE_LIBSDL
- #if defined(__APPLE__) || defined(GEKKO)
-  #include <SDL/SDL.h>
- #else
-  #include "SDL.h"
- #endif
-#endif
-#if defined(_MSC_VER) || !defined(HAVE_SYS_TIME_H)
-#include <time.h>
-#else
+
+
 #include <sys/time.h>
-#endif
-#ifdef _arch_dreamcast
-#include <arch/timer.h>
-#endif
+
 #ifdef GEKKO
 #include <ogc/lwp_watchdog.h>
 #include <string.h>
@@ -492,8 +478,6 @@ int YabauseEmulate(void) {
      return 0;
    }
    #endif
-	char str[128] = {0};
-	u64 prof_cycles[8] = {0};
 	u64 cycles_start;
 	while (!oneframeexec) {
       PROFILE_START("Total Emulation");
@@ -505,21 +489,15 @@ int YabauseEmulate(void) {
          yabsys.SH2CycleFrac += cyclesinc;
          u32 sh2cycles = (yabsys.SH2CycleFrac >> (YABSYS_TIMING_BITS + 1)) << 1;
          yabsys.SH2CycleFrac &= ((YABSYS_TIMING_MASK << 1) | 1);
-
-         PROFILE_START("MSH2");
-         cycles_start = gettime();
-         SH2Exec(MSH2, sh2cycles);
-         PROFILE_STOP("MSH2");
-         prof_cycles[0] += gettime() - cycles_start;
-		 osd_CyclesSet(0, prof_cycles[0]);
-
-         PROFILE_START("SSH2");
-         cycles_start = gettime();
-         if (yabsys.IsSSH2Running)
-            SH2Exec(SSH2, sh2cycles);
-         PROFILE_STOP("SSH2");
-         prof_cycles[1] += gettime() - cycles_start;
-		 osd_CyclesSet(1, prof_cycles[1]);
+			//Run the main SH2
+			cycles_start = gettime();
+			SH2Exec(MSH2, sh2cycles);
+			osd_ProfAddTime(PROF_SH2M, gettime() - cycles_start);
+			//Run the secondary SH2
+			cycles_start = gettime();
+			if (yabsys.IsSSH2Running)
+				SH2Exec(SSH2, sh2cycles);
+			osd_ProfAddTime(PROF_SH2S, gettime() - cycles_start);
 
 #ifndef SCSP_PLUGIN
 #ifdef USE_SCSP2
@@ -549,12 +527,10 @@ int YabauseEmulate(void) {
             PROFILE_STOP("hblankin");
          }
 
-         PROFILE_START("SCU");
-         cycles_start = gettime();
-         ScuExec(sh2cycles / 2);
-         PROFILE_STOP("SCU");
-         prof_cycles[2] += gettime() - cycles_start;
-		 osd_CyclesSet(2, prof_cycles[2]);
+		//SCU
+		cycles_start = gettime();
+		ScuExec(sh2cycles / 2);
+		osd_ProfAddTime(PROF_SCU, gettime() - cycles_start);
 
       }
 
@@ -563,6 +539,7 @@ int YabauseEmulate(void) {
       PROFILE_START("68K");
       M68KSync();  // Wait for the previous iteration to finish
       PROFILE_STOP("68K");
+	  osd_ProfAddTime(PROF_M68K, 1);
 #endif
 #else
       if(SCSCore->id == SCSCORE_SCSP1)
@@ -570,6 +547,7 @@ int YabauseEmulate(void) {
          PROFILE_START("68K");
          M68KSync();  // Wait for the previous iteration to finish
          PROFILE_STOP("68K");
+		 osd_ProfAddTime(PROF_M68K, 2);
       }
 #endif
 
@@ -587,6 +565,7 @@ int YabauseEmulate(void) {
 #ifndef USE_SCSP2
          PROFILE_START("SCSP");
          ScspExec();
+		 osd_ProfAddTime(PROF_SCSP, 1);
          PROFILE_STOP("SCSP");
 #endif
 #else
@@ -595,6 +574,7 @@ int YabauseEmulate(void) {
             PROFILE_START("SCSP");
             SCSCore->Exec(0);  // 0 is dummy value
             PROFILE_STOP("SCSP");
+			osd_ProfAddTime(PROF_SCSP, 2);
          }
 #endif
          yabsys.DecilineCount = 0;
@@ -619,19 +599,14 @@ int YabauseEmulate(void) {
       }
 
       yabsys.UsecFrac += usecinc;
-      PROFILE_START("SMPC");
       cycles_start = gettime();
       SmpcExec(yabsys.UsecFrac >> YABSYS_TIMING_BITS);
-      PROFILE_STOP("SMPC");
-      prof_cycles[3] += gettime() - cycles_start;
-		osd_CyclesSet(2, prof_cycles[3]);
+      osd_ProfAddTime(PROF_SMPC, gettime() - cycles_start);
 
-      PROFILE_START("CDB");
-      cycles_start = gettime();
-      Cs2Exec(yabsys.UsecFrac >> YABSYS_TIMING_BITS);
-      PROFILE_STOP("CDB");
-      prof_cycles[4] += gettime() - cycles_start;
-	  osd_CyclesSet(2, prof_cycles[4]);
+	//CD BLOCK
+	cycles_start = gettime();
+	Cs2Exec(yabsys.UsecFrac >> YABSYS_TIMING_BITS);
+	osd_ProfAddTime(PROF_CDB, gettime() - cycles_start);
       yabsys.UsecFrac &= YABSYS_TIMING_MASK;
 
 #ifndef SCSP_PLUGIN
@@ -648,6 +623,7 @@ int YabauseEmulate(void) {
          }
          M68KExec(cycles);
          PROFILE_STOP("68K");
+		 osd_ProfAddTime(PROF_M68K, 3);
       }
 #endif
 #else
@@ -664,6 +640,7 @@ int YabauseEmulate(void) {
          }
          M68KExec(cycles);
          PROFILE_STOP("68K");
+		 osd_ProfAddTime(PROF_M68K, 4);
       }
 #endif
 

@@ -3097,7 +3097,7 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_InitTexObjLOD(&tex_obj_vdp1, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 	GX_LoadTexObj(&tex_obj_vdp1, GX_TEXMAP0);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT7, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
 		GX_Position2s16(0, 0);
 		GX_TexCoord2f32(0.0, 0.0);
 		GX_Position2s16(disp.w << !disp.highres, 0);

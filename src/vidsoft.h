@@ -55,6 +55,7 @@ void VIDSoftOnScreenDebugMessage(char *string, ...);
 void VIDSoftVdp1SwapFrameBuffer(void);
 void VIDSoftVdp1EraseFrameBuffer(void);
 
+void gfx_WindowTextureGen(void);
 
 void VidSoftTexConvert(u32 ram_addr);
 

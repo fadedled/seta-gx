@@ -4,6 +4,8 @@
 #include "osd.h"
 #include "gui.h"
 #include "../yabause.h"
+#include <ogcsys.h>
+#include <ogc/lwp_watchdog.h>
 
 
 
@@ -128,37 +130,111 @@ void osd_MsgShow(void)
 		GX_End();
 	}
 
-
-	u32 colors[8] = {0xFF0000FF, 0x00FF00FF, 0x00FFFFFF, 0xFFFF00FF,
-					0xFF00FFFF, 0xFFFF00FF, 0x0000FFFF,	0xFFFFFFFF};
-	//Only if alpha is checked
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &colors[7]));
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CC_ZERO, GX_CA_KONST);
-	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_NONE);
-
-	u32 cycle_x = 8;
-	u32 cycle_y = 440;
-	for (u32 i = 0; i < 5; ++i, cycle_x += 4) {
-		GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &colors[i]));
-		GX_Begin(GX_QUADS, GX_VTXFMT7, 4);
-			GX_Position2u16(cycle_x + 4, cycle_y - cycle_data[i]);	// Top Left
-			GX_Position2u16(cycle_x, cycle_y - cycle_data[i]);	// Top Right
-			GX_Position2u16(cycle_x, cycle_y);	// Bottom Right
-			GX_Position2u16(cycle_x + 4, cycle_y);	// Bottom Left
-		GX_End();
-	}
-
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &colors[7]));
-	GX_Begin(GX_LINES, GX_VTXFMT7, 4);
-		GX_Position2u16(4, cycle_y - 100);	// Top Left
-		GX_Position2u16(24, cycle_y - 100);	// Top Right
-		GX_Position2u16(4, cycle_y);	// Bottom Right
-		GX_Position2u16(24, cycle_y);	// Bottom Left
-	GX_End();
-
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 	osd.count = 0;
 }
+#define MAX_PROF_COUNTERS	16
 
+u32 system_cycles;
+struct ProfCounter {
+	char *name;
+	u32	is_active;
+	u32	value;
+} prof_counters[MAX_PROF_COUNTERS];
+
+void osd_ProfInit(u32 sys_cycles)
+{
+	system_cycles = sys_cycles;
+}
+
+
+void osd_ProfAddCounter(u32 indx, char *name)
+{
+	prof_counters[indx].name = name;
+	prof_counters[indx].is_active = 1;
+}
+
+
+void osd_ProfAddTime(u32 indx, u32 ticks)
+{
+	if (prof_counters[indx].is_active) {
+		prof_counters[indx].value += ticks;
+	}
+}
+
+
+void osd_ProfDraw(void)
+{
+	char tstr[64];
+	u32 y = 360, x = 8;
+	u32 total = 0;
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+
+	GX_SetNumChans(0);
+	GX_SetNumTexGens(1);
+	GX_SetNumTevStages(1);
+
+	GX_LoadTexObjPreloaded(&gui_tobj, &gui_treg, GX_TEXMAP0);
+	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_1);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1_2);
+
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+
+	for (u32 i = 0; i < MAX_PROF_COUNTERS; ++i) {
+		if (prof_counters[i].is_active) {
+			x = 8;
+			u32 us = (u32) ticks_to_microsecs(prof_counters[i].value);
+			total += us;
+			u32 numc = sprintf(tstr, "%5s:%6d", prof_counters[i].name, us);
+			GX_Begin(GX_QUADS, GX_VTXFMT1, 4 * numc);
+			prof_counters[i].value = 0;
+			for (u32 j = 0; j < numc; ++j) {
+				u32 chr_x = ((tstr[j]) & 0x1F);
+				u32 chr_y = (((tstr[j]) >> 5) & 0x3);
+				GX_Position2s16(x , y);					// Top Left
+				GX_TexCoord2u16(chr_x, chr_y);
+				GX_Position2s16(x + 8, y);			// Top Right
+				GX_TexCoord2u16(chr_x + 1, chr_y);
+				GX_Position2s16(x + 8, y + 8);	// Bottom Right
+				GX_TexCoord2u16(chr_x + 1, chr_y + 1);
+				GX_Position2s16(x, y + 8);			// Bottom Left
+				GX_TexCoord2u16(chr_x, chr_y + 1);
+				x += 8;
+			}
+			GX_End();
+			y += 8;
+		}
+	}
+	x = 8;
+	u32 numc = sprintf(tstr, "%5s:%6d", "TOTAL", total);
+	GX_Begin(GX_QUADS, GX_VTXFMT1, 4 * numc);
+	for (u32 j = 0; j < numc; ++j) {
+		u32 chr_x = ((tstr[j]) & 0x1F);
+		u32 chr_y = (((tstr[j]) >> 5) & 0x3);
+		GX_Position2s16(x , y);				// Top Left
+		GX_TexCoord2u16(chr_x, chr_y);
+		GX_Position2s16(x + 8, y);			// Top Right
+		GX_TexCoord2u16(chr_x + 1, chr_y);
+		GX_Position2s16(x + 8, y + 8);		// Bottom Right
+		GX_TexCoord2u16(chr_x + 1, chr_y + 1);
+		GX_Position2s16(x, y + 8);			// Bottom Left
+		GX_TexCoord2u16(chr_x, chr_y + 1);
+		x += 8;
+	}
+	GX_End();
+
+
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 8, 8);
+}
