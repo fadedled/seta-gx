@@ -592,7 +592,7 @@ void gfx_DrawWindowTex(u32 wctl, u32 priority)
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0,  GX_DIRECT);
 
-	GX_LoadPosMtxImm(mat[GXMTX_IDENTITY], GXMTX_IDENTITY);
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
 	//TODO: Optimize this
 	u32 comp_op = 7;
@@ -712,7 +712,7 @@ void gfx_WindowTextureGen(void)
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
 
-	GX_LoadPosMtxImm(mat[GXMTX_IDENTITY], GXMTX_IDENTITY);
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -2225,8 +2225,6 @@ static void LoadLineParamsSprite(vdp2draw_struct * info, u32 line)
 
 int VIDSoftInit(void)
 {
-   //if (TitanInit() == -1)
-      //return -1;
 	guMtxIdentity(mat[GXMTX_IDENTITY]);
 	guMtxIdentity(mat[GXMTX_VDP1]);
 	guMtxIdentity(mat[GXMTX_VDP2_BG]);
@@ -2486,8 +2484,10 @@ static u32 modeToColor(void)
 		Vdp1GetSpritePixelInfo(Vdp2Regs->SPCTL & 0xF, &colr, &spi);
 	}
 	//Set priority
-	if (!(*((u32*)chr_addr)) && ((spr_w + (cmd.CMDSIZE & 0xF8)) < 16)) {
-		SGX_SetZOffset(0);
+	SGX_SetZOffset(priority_arr[spi.priority] + 14);
+
+	if (!(*((u32*)chr_addr)) && (cmd.CMDSIZE == 0x0101)) {
+		SGX_SetZOffset(14);
 	} else {
 		SGX_SetZOffset(priority_arr[spi.priority] + 14);
 	}
@@ -2521,7 +2521,7 @@ static u32 modeToColor(void)
 		case 2: // Colorbank 6-bit
 		case 3: // Colorbank 7-bit
 		case 4: // Colorbank 8-bit
-			SGX_TlutLoadCRAMImm(tlut_pos & 0x7F0, trn_code, GX_TLUT_256);
+			SGX_TlutLoadCRAMImm(tlut_pos & 0x7F0, trn_code, 2 << tex_mode);
 			//Change address and size
 			SGX_SetTex(chr_addr, GX_TF_CI8, spr_w, spr_h, TLUT_INDX_IMM8);
 			SGX_SpriteConverterSet(spr_w >> 3, SPRITE_8BPP, cmd.CMDSRCA & 3);

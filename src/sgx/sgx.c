@@ -193,6 +193,8 @@ void SGX_Init(void)
 	};
 	GX_SetIndTexMatrix(GX_ITM_2, indmat_cell8, 4);
 
+	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
+	wgPipe->F32 = 16777215.0f;
 
 	memset(tlut_dirty, 1, sizeof(tlut_dirty));
 }
@@ -316,13 +318,8 @@ void SGX_TlutCRAMUpdate(void)
 
 void SGX_SetZOffset(u32 offset)
 {
-	static const f32 z_step = 16777215.0f * 0.00390625f;
-	u32 z = 16777215.0f - (z_step * (f32)((255 - offset) & 0xFF));
-
-	GX_LOAD_XF_REGS(0x101C, 1); //Viewport Z
-	wgPipe->F32 = z;
-	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
-	wgPipe->F32 = 16777215.0f;
+	GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
+	wgPipe->F32 = (f32)(offset << 16);
 }
 
 
