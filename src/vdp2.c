@@ -353,7 +353,13 @@ void Vdp2VBlankOUT(void)
 	GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
 	GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
-
+#if USE_NEW_VDP1
+	cycles_start = gettime();
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
+	Vdp1Draw();	//Create DL for GX
+	osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+	VIDSoftVdp1SwapFrameBuffer();
+#else
 	if (Vdp2Regs->TVMD & 0x8000) {
 		//Generate sprite Window texture
 		GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
@@ -365,7 +371,7 @@ void Vdp2VBlankOUT(void)
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 
 		cycles_start = gettime();
-		GX_SetZMode(GX_ENABLE, GX_LESS, GX_TRUE);
+		GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
 		VIDSoftVdp2DrawScreens();
 
@@ -380,11 +386,11 @@ void Vdp2VBlankOUT(void)
 		Vdp1NoDraw();	//Do nothing
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	}
-
 	VIDSoftVdp1SwapFrameBuffer();
 	FPSDisplay();
 	osd_MsgShow();
 	osd_ProfDraw();
+#endif
 
 	//XXX: Limit FPS.. we can do better than this
 	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);

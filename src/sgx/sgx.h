@@ -12,6 +12,7 @@
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))
 #define TLUT_INDX_IMM4			(((GX_TLUT_16) << 10) | (0x380 & 0x3ff))
 #define TLUT_INDX_IMM8			(((GX_TLUT_256) << 10) | (0x381 & 0x3ff))
+#define TLUT_INDX_CLRBANK		(((GX_TLUT_256) << 10) | 0x3F0)
 
 #define GXMTX_IDENTITY			GX_PNMTX0
 #define GXMTX_VDP1				GX_PNMTX1
@@ -34,7 +35,7 @@
 #define PRI_NBG2(x)					(((f32)(x)) - (8.0f - (0.125f * 1.0f)))
 #define PRI_NBG3(x)					(((f32)(x)) - (8.0f - (0.125f * 0.0f)))
 
-
+#define	USE_NEW_VDP1		0
 
 
 void SGX_Init(void);
@@ -59,5 +60,17 @@ void SGX_TlutLoadCRAMImm(u32 pos, u32 trn_code, u32 size);
 void SGX_TlutCRAMUpdate(void);
 void SGX_ColorRamDirty(u32 pos);
 
+//Functions for Vdp1 Drawing
+void SGX_Vdp1Begin(void);
+void SGX_Vdp1End(void);
+void SGX_Vdp1DrawNormalSpr(void);
+void SGX_Vdp1DrawScaledSpr(void);
+void SGX_Vdp1DrawDistortedSpr(void);
+void SGX_Vdp1DrawPolygon(void);
+void SGX_Vdp1DrawPolyline(void);
+void SGX_Vdp1DrawLine(void);
+void SGX_Vdp1UserClip(void);
+void SGX_Vdp1SysClip(void);
+void SGX_Vdp1LocalCoord(void);
 
 #endif //__VID_GX_H__

@@ -390,7 +390,7 @@ void InitGX(void )
 	gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
     GX_Init(gp_fifo, DEFAULT_FIFO_SIZE);
 
-    GX_SetCopyClear((GXColor){0, 0, 0, 0xFF}, GX_MAX_Z24);
+    GX_SetCopyClear((GXColor){0, 0, 0, 0xFF}, 0);
     GX_SetDispCopyGamma(GX_GM_1_0);
 
 	GX_SetDispCopyYScale(1.0);

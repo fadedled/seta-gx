@@ -2506,6 +2506,7 @@ static u32 modeToColor(void)
 			return 0x7f7f7f00; break;
 		case 1: // LUT 4-bit
 			u32 colorlut = (colr << 3) & 0x7FFFF;
+			SGX_SetZOffset(priority_arr[0] + 14);
 			//Upload palette
 			//XXX: palette uploading should be done once per frame (for color bank, the other will be done per sprite)
 			if (trn_code) {
@@ -2527,6 +2528,7 @@ static u32 modeToColor(void)
 			SGX_SpriteConverterSet(spr_w >> 3, SPRITE_8BPP, cmd.CMDSRCA & 3);
 			return 0x7f7f7f00; break;
 		case 5: // RGB
+			SGX_SetZOffset(priority_arr[0] + 14);
 			SGX_TlutLoadCRAMImm(0, 0, GX_TLUT_16);	//XXX: prevents flickering... for now
 			SGX_SetTex(chr_addr, GX_TF_RGB5A3, spr_w, spr_h, 0);
 			SGX_SpriteConverterSet(spr_w >> 3, SPRITE_16BPP, cmd.CMDSRCA & 3);

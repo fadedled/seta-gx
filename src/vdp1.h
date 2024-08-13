@@ -121,6 +121,31 @@ typedef struct
    u16 CMDGRDA;
 } vdp1cmd_struct;
 
+
+//New Command struct
+typedef struct Vdp1Cmd_t {
+	u16 CTRL;
+	u16 LINK;
+	u16 PMOD;
+	u16 COLR;
+	u16 SRCA;
+	u16 SIZE;
+	s16 XA;
+	s16 YA;
+	s16 XB;
+	s16 YB;
+	s16 XC;
+	s16 YC;
+	s16 XD;
+	s16 YD;
+	u16 GRDA;
+	u16 _padding;
+} Vdp1Cmd;
+
+//Poinet to current command
+extern Vdp1Cmd *vdp1cmd;
+
+
 int Vdp1Init(void);
 void Vdp1DeInit(void);
 int VideoInit(int coreid);

@@ -110,7 +110,11 @@ static const u16 cell8_tex[] ATTRIBUTE_ALIGN(32) = {
 static GXTlutRegion* __SGX_CalcTlutRegion(u32 idx)
 {
 	struct __gx_tlutregion *ptr = (struct __gx_tlutregion*) &tlut_region;
+#if USE_NEW_VDP1
+	ptr->tmem_addr_conf = 0x65000000 | TLUT_INDX_CLRBANK;
+#else
 	ptr->tmem_addr_conf = 0x65000000 | idx;
+#endif
 	ptr->tmem_addr_base = (GX_TL_RGB5A3 << 10) | (ptr->tmem_addr_conf & 0x3ff);
 	return &tlut_region;
 }
@@ -135,7 +139,6 @@ void SGX_Init(void)
 	GX_SetTlutRegionCallback(__SGX_CalcTlutRegion);
 
 	//337920 bytes of indirect textures
-	u32 tex_ofs_tmp = 0;
 	u32 tex_ofs = 0;
 	for (u32 i = 1; i < 64; ++i) {
 		u32 size = ((i >> 2) + ((i & 0x3) > 0)) * 64;
@@ -195,6 +198,24 @@ void SGX_Init(void)
 
 	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
 	wgPipe->F32 = 16777215.0f;
+
+	//Set the color bank.
+	u32 *tlut_data = (u32*) memalign(32, 0x200);
+	u32 *dst = tlut_data;
+	u32 val = 0x80008001;
+	for (int i = 0; i < 128; ++i) {
+		*dst = val;
+		++dst;
+		val += 0x00020002;
+	}
+	*tlut_data = 0x00008001;
+	DCFlushRange(tlut_data, 0x200);
+
+	GXTlutObj tlut;
+	GX_InitTlutObj(&tlut, tlut_data, GX_TL_RGB5A3, 256);
+	GX_LoadTlut(&tlut, TLUT_INDX_CLRBANK);
+
+	free(tlut_data);
 
 	memset(tlut_dirty, 1, sizeof(tlut_dirty));
 }
@@ -319,7 +340,7 @@ void SGX_TlutCRAMUpdate(void)
 void SGX_SetZOffset(u32 offset)
 {
 	GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
-	wgPipe->F32 = (f32)(offset << 16);
+	wgPipe->F32 = (f32)(16777215 - (offset << 16));
 }
 
 

@@ -33,7 +33,7 @@
 #define VDP1_PTE_SIZE 		VDP1_RAM_SIZE / 4096
 
 u8 vdp1_regs[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
-
+Vdp1Cmd *vdp1cmd;
 u8 *Vdp1Ram;
 u8 *Vdp1FrameBuffer;
 Vdp1 *Vdp1Regs;
@@ -381,10 +381,12 @@ void Vdp1Draw(void) {
 		return;
 	}
 
+#if USE_NEW_VDP1
+	SGX_Vdp1Begin();
+#else
 	VIDSoftVdp1DrawStart();
-	//Transform textures to wii format
-	//vdp1_BuildVram();
-	//DCFlushRange(wii_vram, 0x80000);
+#endif
+	//TODO: Only do this once.
 	DCFlushRange(Vdp1Ram, 0x80000);
 	Vdp1Regs->addr = 0;
 	returnAddr = 0xFFFFFFFF;
@@ -399,9 +401,32 @@ void Vdp1Draw(void) {
 
    command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr);
 
+	vdp1cmd = (Vdp1Cmd*) (Vdp1Ram + Vdp1Regs->addr);
    while (!(command & 0x8000) && commandCounter < 2048) { // fix me
       // First, process the command
       if (!(command & 0x4000)) { // if (!skip)
+#if USE_NEW_VDP1
+			switch (command & 0x000F) {
+				case 0: SGX_Vdp1DrawNormalSpr();    break;
+				case 1: SGX_Vdp1DrawScaledSpr();    break;
+				case 2: SGX_Vdp1DrawDistortedSpr(); break;
+				case 3: SGX_Vdp1DrawDistortedSpr(); break;
+				case 4: SGX_Vdp1DrawPolygon();      break;
+				case 5: SGX_Vdp1DrawPolyline();     break;
+				case 6: SGX_Vdp1DrawLine();         break;
+				case 7: SGX_Vdp1DrawPolyline();     break;
+				case 8: SGX_Vdp1UserClip();         break;
+				case 9: SGX_Vdp1SysClip();          break;
+				case 10: SGX_Vdp1LocalCoord();      break;
+				case 11: SGX_Vdp1UserClip();        break;
+				default: // Abort
+					Vdp1Regs->EDSR |= 2;
+					VIDSoftVdp1DrawEnd();
+					Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
+					Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+					return;
+			}
+#else
          switch (command & 0x000F) {
             case 0: // normal sprite draw
 				//VidSoftTexConvert(Vdp1Regs->addr);
@@ -452,6 +477,7 @@ void Vdp1Draw(void) {
                Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
                return;
          }
+#endif
       }
 
 		if (Vdp1Regs->EDSR & 0x02){
@@ -488,6 +514,7 @@ void Vdp1Draw(void) {
 		}
 
 		command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr & 0x7FFFF);
+		vdp1cmd = (Vdp1Cmd*) (Vdp1Ram + Vdp1Regs->addr);
 		commandCounter++;
 		if (command & 0x8000) {
 			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
