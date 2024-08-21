@@ -199,24 +199,6 @@ void SGX_Init(void)
 	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
 	wgPipe->F32 = 16777215.0f;
 
-	//Set the color bank.
-	u32 *tlut_data = (u32*) memalign(32, 0x200);
-	u32 *dst = tlut_data;
-	u32 val = 0x80008001;
-	for (int i = 0; i < 128; ++i) {
-		*dst = val;
-		++dst;
-		val += 0x00020002;
-	}
-	*tlut_data = 0x00008001;
-	DCFlushRange(tlut_data, 0x200);
-
-	GXTlutObj tlut;
-	GX_InitTlutObj(&tlut, tlut_data, GX_TL_RGB5A3, 256);
-	GX_LoadTlut(&tlut, TLUT_INDX_CLRBANK);
-
-	free(tlut_data);
-
 	memset(tlut_dirty, 1, sizeof(tlut_dirty));
 }
 
@@ -377,6 +359,8 @@ void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	if (fmt > 7) {
 		u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
 		GX_LOAD_BP_REG(tlut_addr);
+		u32 tlut_addr_conf = 0x65000000 | tlut;
+		GX_LOAD_BP_REG(tlut_addr_conf);
 	}
 	//Flush Texture State
 	GX_LOAD_BP_REG(0x0F << 24);
@@ -420,3 +404,4 @@ void SGX_SetVdp2Texture(void *img_addr, u32 tlut)
 	u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
 	GX_LOAD_BP_REG(tlut_addr);
 }
+

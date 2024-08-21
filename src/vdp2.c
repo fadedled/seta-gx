@@ -315,13 +315,13 @@ void Vdp2HBlankOUT(void) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void FPSDisplay(void)
+static void FPSDisplay(u32 p)
 {
    static int fpsframecount = 0;
    static u64 fpsticks;
 
 	char msg[64] = {0};
-	sprintf(msg, "FPS: %d", fps);
+	sprintf(msg, "FPS: %d", p);
    //OSDPushMessage(OSDMSG_FPS, 1, "%02d/%02d FPS %d %d %s %s", fps, yabsys.IsPal ? 50 : 60, framecounter, lagframecounter, MovieStatus, InputDisplayString);
 	osd_MsgAdd(20, 20, 0xFF0000FF, msg);
 	fpsframecount++;
@@ -360,10 +360,15 @@ void Vdp2VBlankOUT(void)
 	osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	VIDSoftVdp1SwapFrameBuffer();
 #else
+	u32 tpi, tpo, bpi, bpo, cpi, cc;
 	if (Vdp2Regs->TVMD & 0x8000) {
 		//Generate sprite Window texture
+		GX_ClearPixMetric();
 		GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
 		gfx_WindowTextureGen();
+		GX_DrawDone();
+		GX_Flush();
+		GX_ReadPixMetric(&tpi, &tpo, &bpi, &bpo, &cpi, &cc);
 		//We draw sprites first to not waste CPU time
 		cycles_start = gettime();
 		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
@@ -387,7 +392,7 @@ void Vdp2VBlankOUT(void)
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	}
 	VIDSoftVdp1SwapFrameBuffer();
-	FPSDisplay();
+	FPSDisplay(cc);
 	osd_MsgShow();
 	osd_ProfDraw();
 #endif

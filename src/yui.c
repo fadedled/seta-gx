@@ -476,8 +476,25 @@ void InitGX(void )
 	SGX_Init();
 
 
+	//Set the color bank.
+	u32 *tlut_data = (u32*) memalign(32, 0x200);
+	u32 *dst = tlut_data;
+	u32 val = 0x80008001;
+	for (int i = 0; i < 128; ++i) {
+		*dst = val;
+		++dst;
+		val += 0x00020002;
+	}
+	*tlut_data = 0x00008001;
+	DCFlushRange(tlut_data, 0x200);
+
+	GXTlutObj tlut;
+	GX_InitTlutObj(&tlut, tlut_data, GX_TL_RGB5A3, 256);
+	GX_LoadTlut(&tlut, TLUT_INDX_CLRBANK);
+
     VIDEO_SetBlack(FALSE);
 	VIDEO_Flush();
+	free(tlut_data);
 }
 
 
