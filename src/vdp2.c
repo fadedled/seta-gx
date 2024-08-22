@@ -346,19 +346,20 @@ void Vdp2VBlankOUT(void)
 	DCFlushRange(Vdp2Ram, 0x80000);
 	DCFlushRange(Vdp2ColorRam, 0x1000);
 	VIDSoftVdp2DrawStart();
-	SGX_InvalidateVRAM();
-	//GX_InvalidateTexAll();
-	SGX_TlutCRAMUpdate();
+	//SGX_InvalidateVRAM();
+	GX_InvalidateTexAll();
+	//SGX_TlutCRAMUpdate();
 
 	GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
 	GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
 #if USE_NEW_VDP1
 	cycles_start = gettime();
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	Vdp1Draw();	//Create DL for GX
 	osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	VIDSoftVdp1SwapFrameBuffer();
+	SGX_Vdp1ProcessFramebuffer();
+	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #else
 	u32 tpi, tpo, bpi, bpo, cpi, cc;
 	if (Vdp2Regs->TVMD & 0x8000) {
@@ -395,10 +396,10 @@ void Vdp2VBlankOUT(void)
 	FPSDisplay(cc);
 	osd_MsgShow();
 	osd_ProfDraw();
+	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #endif
 
 	//XXX: Limit FPS.. we can do better than this
-	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 	current_ticks = gettime();
 
 	/* this should be done after a frame change or a plot trigger */

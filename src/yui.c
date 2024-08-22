@@ -390,7 +390,7 @@ void InitGX(void )
 	gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
     GX_Init(gp_fifo, DEFAULT_FIFO_SIZE);
 
-    GX_SetCopyClear((GXColor){0, 0, 0, 0xFF}, 0);
+    GX_SetCopyClear((GXColor){0, 0, 0, 0}, 0);
     GX_SetDispCopyGamma(GX_GM_1_0);
 
 	GX_SetDispCopyYScale(1.0);
@@ -419,6 +419,11 @@ void InitGX(void )
 	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+
+	//VDP1 vertex format
+	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 
 	//PASSCLR
 	//d +- ((1-c)*a + c*b)
@@ -474,27 +479,8 @@ void InitGX(void )
     GX_SetDispCopyGamma(GX_GM_1_0);
 
 	SGX_Init();
-
-
-	//Set the color bank.
-	u32 *tlut_data = (u32*) memalign(32, 0x200);
-	u32 *dst = tlut_data;
-	u32 val = 0x80008001;
-	for (int i = 0; i < 128; ++i) {
-		*dst = val;
-		++dst;
-		val += 0x00020002;
-	}
-	*tlut_data = 0x00008001;
-	DCFlushRange(tlut_data, 0x200);
-
-	GXTlutObj tlut;
-	GX_InitTlutObj(&tlut, tlut_data, GX_TL_RGB5A3, 256);
-	GX_LoadTlut(&tlut, TLUT_INDX_CLRBANK);
-
-    VIDEO_SetBlack(FALSE);
+	VIDEO_SetBlack(FALSE);
 	VIDEO_Flush();
-	free(tlut_data);
 }
 
 

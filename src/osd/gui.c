@@ -74,6 +74,7 @@ static void gui_DrawItems(GuiItems *items, u32 width)
 	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[3]));
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
 
 	for (int i = 0; i < shown_entries; ++i) {
 		u32 x = ofs_x + 8, y = (i * 10) + ofs_y;
@@ -84,18 +85,18 @@ static void gui_DrawItems(GuiItems *items, u32 width)
 			/*not while m_ptr, must use index for this because of circular buffering*/
 			while (len) {
 				//XXX: Use a texCoordGen for this.
-				f32 chr_x = (f32) ((*str) & 0x1F) * 0.03125;
-				f32 chr_y = (f32) (((*str) >> 5) & 0x3) * 0.125;
+				f32 chr_x = (f32) ((*str) & 0x1F);
+				f32 chr_y = (f32) (((*str) >> 5) & 0x3);
 				u32 spacing = 8;
 				x -= (8 - spacing);
 				GX_Position2u16(x <<1, y<<1);					// Top Left
 				GX_TexCoord2f32(chr_x, chr_y);
 				GX_Position2u16((x + 8)<<1, y<<1);			// Top Right
-				GX_TexCoord2f32(chr_x + 0.03125, chr_y);
+				GX_TexCoord2f32(chr_x + 1, chr_y);
 				GX_Position2u16((x + 8)<<1, (y + 8)<<1);	// Bottom Right
-				GX_TexCoord2f32(chr_x + 0.03125, chr_y + 0.125);
+				GX_TexCoord2f32(chr_x + 1, chr_y + 1);
 				GX_Position2u16(x<<1, (y + 8)<<1);			// Bottom Left
-				GX_TexCoord2f32(chr_x, chr_y + 0.125);
+				GX_TexCoord2f32(chr_x, chr_y + 1);
 				x += 8;
 				++str;
 				--len;
@@ -123,6 +124,8 @@ static void gui_DrawItems(GuiItems *items, u32 width)
 void gui_Draw(GuiItems *items)
 {
 	/*Reserve GX_VTXFMT7 for OSD & GUI*/
+	GX_SetViewport(0, 0, 640.0f, 480.0f, 0.0f, 1.0f);
+	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);

@@ -125,6 +125,9 @@ int Vdp1Init(void) {
 	Vdp1Regs->TVMR = 0;
 	Vdp1Regs->FBCR = 0;
 	Vdp1Regs->PTMR = 0;
+
+
+	SGX_Vdp1Init();
 	return 0;
 }
 
@@ -132,7 +135,8 @@ int Vdp1Init(void) {
 
 //DONE
 void Vdp1DeInit(void) {
-	//Nothing...
+	//Nothing...?
+	SGX_Vdp1Deinit();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -523,7 +527,9 @@ void Vdp1Draw(void) {
    }
 	//Get vram out of the cache
 	//DCFlushRange(wii_vram, 0x80000);
-
+	#if USE_NEW_VDP1
+	SGX_Vdp1End();
+	#endif
    // we set two bits to 1
    Vdp1Regs->EDSR |= 2;
    Vdp1Regs->COPR = Vdp1Regs->addr >> 3;

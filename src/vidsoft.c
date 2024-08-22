@@ -3073,7 +3073,7 @@ void VIDSoftVdp2DrawEnd(void)
 
 	GX_PixModeSync();
 
-	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
+	//GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 	GX_SetScissor(0, 0, 640, disp.h << disp.scale_y);
 

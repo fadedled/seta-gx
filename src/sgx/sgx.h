@@ -46,7 +46,7 @@ void SGX_EndVdp1(void);
 
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
-
+void SGX_LoadTlut(void *data_addr, u32 tlut);
 void SGX_SetZOffset(u32 offset);
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id);
 
@@ -61,8 +61,11 @@ void SGX_TlutCRAMUpdate(void);
 void SGX_ColorRamDirty(u32 pos);
 
 //Functions for Vdp1 Drawing
+void SGX_Vdp1Init(void);
+void SGX_Vdp1Deinit(void);
 void SGX_Vdp1Begin(void);
 void SGX_Vdp1End(void);
+void SGX_Vdp1ProcessFramebuffer(void);
 void SGX_Vdp1DrawNormalSpr(void);
 void SGX_Vdp1DrawScaledSpr(void);
 void SGX_Vdp1DrawDistortedSpr(void);

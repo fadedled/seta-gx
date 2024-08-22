@@ -4,7 +4,7 @@
 #include "../vdp1.h"
 #include "../vdp2.h"
 #include "../osd/gui.h"
-
+#include <malloc.h>
 #include "../../res/tex_swizzler.inc"
 
 #define TREG_VDPTEX			0
@@ -52,6 +52,9 @@ do {								\
 } while(0)
 
 
+#define __FLUSH_TEX_STATE		GX_LOAD_BP_REG(0x0F << 24)
+
+extern Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //XXX: divide?
 static u16 tlut_14bpp_ram[0x800] ATTRIBUTE_ALIGN(32);
@@ -71,6 +74,7 @@ static GXTexObj    ind_texs[64][3][4];
 static GXTexRegion ind_cellreg8;
 static GXTexObj    ind_celltex8;
 
+u32 *tlut_data;
 //==============================================================================
 //Structs for gx tlutregions and tlutobj to see if we can configure them directly
 
@@ -200,6 +204,18 @@ void SGX_Init(void)
 	wgPipe->F32 = 16777215.0f;
 
 	memset(tlut_dirty, 1, sizeof(tlut_dirty));
+
+	//Set the color bank.
+	tlut_data = (u32*) memalign(32, 0x200);
+	u32 val = 0x80008001;
+	u32 *dst = tlut_data;
+	for (int i = 0; i < 128; ++i) {
+		*dst = val;
+		++dst;
+		val += 0x00020002;
+	}
+	*tlut_data = 0x00008001;
+	DCFlushRange(tlut_data, 0x200);
 }
 
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
@@ -345,11 +361,21 @@ void SGX_BeginVdp1(void)
 	GX_LOAD_BP_REG(tex_maddr);
 }
 
+void SGX_LoadTlut(void *data_addr, u32 tlut)
+{
+	u32 tlut_addr = 0x64000000 | (MEM_VIRTUAL_TO_PHYSICAL(data_addr) >> 5);
+	u32 tlut_addr_conf = 0x65000000 | tlut;
+	__FLUSH_TEX_STATE;
+		GX_LOAD_BP_REG(tlut_addr);
+		GX_LOAD_BP_REG(tlut_addr_conf);
+	__FLUSH_TEX_STATE;
+}
+
 
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 {
 	//Flush Texture State
-	GX_LOAD_BP_REG(0x0F << 24);
+	__FLUSH_TEX_STATE;
 	//Set texture address and size
 	u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
 	u32 tex_size = 0x88000000 | (fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu);
@@ -357,13 +383,11 @@ void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	GX_LOAD_BP_REG(tex_size);
 	//If tlut is used set its address
 	if (fmt > 7) {
-		u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
+		u32 tlut_addr = 0x98000000 | (GX_TL_RGB5A3 << 10) | (tlut & 0x3ff);
 		GX_LOAD_BP_REG(tlut_addr);
-		u32 tlut_addr_conf = 0x65000000 | tlut;
-		GX_LOAD_BP_REG(tlut_addr_conf);
 	}
 	//Flush Texture State
-	GX_LOAD_BP_REG(0x0F << 24);
+	__FLUSH_TEX_STATE;
 }
 
 
