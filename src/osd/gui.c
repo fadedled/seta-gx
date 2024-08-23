@@ -14,6 +14,27 @@ extern u8 osd_texture_4bpp[];
 #define GUI_SYSTEX_W	256
 #define GUI_SYSTEX_H	64
 
+#define CURSOR_COLOR_A	0x0842
+#define CURSOR_COLOR_B	0x259d
+
+
+static u32 cursor_time;
+
+static u32 __menu_LerpBGR565(u32 a, u32 b, u8 t) {
+	u32 r_a = (a & 0x001F);
+	u32 g_a = (a & 0x07E0);
+	u32 b_a = (a & 0xF800);
+
+	u32 r_b = (b & 0x001F);
+	u32 g_b = (b & 0x07E0);
+	u32 b_b = (b & 0xF800);
+
+	u32 lr = (r_a + ((r_b - r_a)*t >> 8)) & 0x001F;
+	u32 lg = (g_a + ((g_b - g_a)*t >> 8)) & 0x07E0;
+	u32 lb = (b_a + ((b_b - b_a)*t >> 8)) & 0xF800;
+	return lr | lg | lb;
+}
+
 
 
 const u32 gui_palette[] = {
@@ -54,26 +75,43 @@ void gui_Init(void)
 static void gui_DrawItems(GuiItems *items, u32 width)
 {
 	u32 ofs_x = items->x, ofs_y = items->y;
+	u32 shown_entries = (items->count > items->disp_count ? items->disp_count : items->count);
+	u32 cursor_pos = items->cursor - items->disp_offset;
+	u32 cursor_y = ofs_y + (cursor_pos * 10) - 1;
+	u16 cursor_color = __menu_LerpBGR565(CURSOR_COLOR_A, CURSOR_COLOR_B, cursor_time);
 
+	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+		GX_Position2u16(ofs_x, cursor_y);			// Top Left
+		GX_Color1u16(cursor_color);
+		GX_Position2u16((ofs_x + width), cursor_y);		// Top Right
+		GX_Color1u16(cursor_color);
+		GX_Position2u16((ofs_x + width), (cursor_y + 10));	// Bottom Right
+		GX_Color1u16(cursor_color);
+		GX_Position2u16(ofs_x, (cursor_y + 10));		// Bottom Left
+		GX_Color1u16(cursor_color);
+	GX_End();
+
+
+
+	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetNumChans(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumTevStages(1);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_A8_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_ZERO, GX_CA_KONST, GX_CA_ZERO);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 	GX_InitTexObj(&gui_tobj, osd_texture_4bpp, GUI_SYSTEX_W, GUI_SYSTEX_H, GX_TF_I4, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&gui_tobj, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 	GX_LoadTexObj(&gui_tobj, GX_TEXMAP0);
 
-	u32 shown_entries = (items->count > items->disp_count ? items->disp_count : items->count);
-	u32 cursor_pos = items->cursor - items->disp_offset;
-
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[3]));
-	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
 
 	for (int i = 0; i < shown_entries; ++i) {
@@ -81,104 +119,127 @@ static void gui_DrawItems(GuiItems *items, u32 width)
 		u32 len = items->item[i + items->disp_offset].len;
 		u8 *str = items->item[i + items->disp_offset].data;
 
-		GX_Begin(GX_QUADS, GX_VTXFMT7, 4 * len);
-			/*not while m_ptr, must use index for this because of circular buffering*/
-			while (len) {
-				//XXX: Use a texCoordGen for this.
-				f32 chr_x = (f32) ((*str) & 0x1F);
-				f32 chr_y = (f32) (((*str) >> 5) & 0x3);
-				u32 spacing = 8;
-				x -= (8 - spacing);
-				GX_Position2u16(x <<1, y<<1);					// Top Left
-				GX_TexCoord2f32(chr_x, chr_y);
-				GX_Position2u16((x + 8)<<1, y<<1);			// Top Right
-				GX_TexCoord2f32(chr_x + 1, chr_y);
-				GX_Position2u16((x + 8)<<1, (y + 8)<<1);	// Bottom Right
-				GX_TexCoord2f32(chr_x + 1, chr_y + 1);
-				GX_Position2u16(x<<1, (y + 8)<<1);			// Bottom Left
-				GX_TexCoord2f32(chr_x, chr_y + 1);
-				x += 8;
-				++str;
-				--len;
-			}
+		GX_Begin(GX_QUADS, GX_VTXFMT3, 4 * len);
+		/*not while m_ptr, must use index for this because of circular buffering*/
+		while (len) {
+			//XXX: Use a texCoordGen for this.
+			f32 chr_x = (f32) ((*str) & 0x1F);
+			f32 chr_y = (f32) (((*str) >> 5) & 0x3);
+			u32 spacing = 8;
+			x -= (8 - spacing);
+			GX_Position2u16(x, y);					// Top Left
+			GX_Color1u16(0xFFFF);
+			GX_TexCoord2u8(chr_x, chr_y);
+			GX_Position2u16(x + 8, y);			// Top Right
+			GX_Color1u16(0xFFFF);
+			GX_TexCoord2u8(chr_x + 1, chr_y);
+			GX_Position2u16(x + 8, y + 8);	// Bottom Right
+			GX_Color1u16(0xFFFF);
+			GX_TexCoord2u8(chr_x + 1, chr_y + 1);
+			GX_Position2u16(x, y + 8);			// Bottom Left
+			GX_Color1u16(0xFFFF);
+			GX_TexCoord2u8(chr_x, chr_y + 1);
+			x += 8;
+			++str;
+			--len;
+		}
 		GX_End();
 	}
 
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[2]));
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CC_ZERO, GX_CA_KONST);
+	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_NONE);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
 
-	u32 cursor_y = ofs_y + (cursor_pos * 10) - 1;
-	GX_Begin(GX_QUADS, GX_VTXFMT7, 4);
-		GX_Position2u16(ofs_x <<1, cursor_y<<1);			// Top Left
-		GX_Position2u16((ofs_x + width)<<1, cursor_y<<1);		// Top Right
-		GX_Position2u16((ofs_x + width)<<1, (cursor_y + 10)<<1);	// Bottom Right
-		GX_Position2u16(ofs_x<<1, (cursor_y + 10)<<1);		// Bottom Left
-	GX_End();
+	GX_SetNumChans(1);
+	GX_SetNumTexGens(0);
+	GX_SetNumTevStages(1);
+
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP_NULL, GX_COLOR0);
 }
 
 void gui_Draw(GuiItems *items)
 {
 	/*Reserve GX_VTXFMT7 for OSD & GUI*/
-	GX_SetViewport(0, 0, 640.0f, 480.0f, 0.0f, 1.0f);
 	GX_SetScissor(0, 0, 640, 480);
+	GX_SetCurrentMtx(GX_PNMTX1);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_NONE);
 
-	GX_SetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XY, GX_U16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
-
-	GX_SetNumChans(0);
-	GX_SetNumTexGens(1);
+	GX_SetNumChans(1);
+	GX_SetNumTexGens(0);
 	GX_SetNumTevStages(1);
 
-	GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_KONST, GX_CA_TEXA, GX_CA_ZERO);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 
-	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
-	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
-
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP_NULL, GX_COLOR0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 	GX_LoadTexObjPreloaded(&gui_tobj, &gui_treg, GX_TEXMAP0);
 
 	//Only if alpha is checked
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[0]));
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CC_ZERO, GX_CA_KONST);
-	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_NONE);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 
-	GX_SetCurrentMtx(GX_PNMTX0);
+	GX_Begin(GX_QUADS, GX_VTXFMT3, 2 << 2);
+		GX_Position2u16(24 , 0);			// Top Left
+		GX_Color1u16(0xb9c5);
+		GX_Position2u16(250, 0);		// Top Right
+		GX_Color1u16(0xb9c5);
+		GX_Position2u16(250, 240);	// Bottom Right
+		GX_Color1u16(0xb9c5);
+		GX_Position2u16(24 , 240);		// Bottom Left
+		GX_Color1u16(0xb9c5);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT7, 4);
-		GX_Position2u16(0 , 0);			// Top Left
-		GX_Position2u16(320<<1, 0);		// Top Right
-		GX_Position2u16(320<<1, 240<<1);	// Bottom Right
-		GX_Position2u16(0, 240<<1);		// Bottom Left
+		GX_Position2u16(250, 0);			// Top Left
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(320, 0);		// Top Right
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(320, 240);	// Bottom Right
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(250, 240);		// Bottom Left
+		GX_Color1u16(0xdbeb);
 	GX_End();
 
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[1]));
-
-	GX_Begin(GX_LINES, GX_VTXFMT7, 6);
-		//Horizontal Strip
-		GX_Position2u16(0, 226<<1);
-		GX_Position2u16(320<<1, 226<<1);
-		GX_Position2u16(0, 236<<1);	// Bottom Right
-		GX_Position2u16(320<<1, 236<<1);		// Bottom Left
+	GX_Begin(GX_LINES, GX_VTXFMT3, 1 << 1);
 		//Vertical Strip
-		GX_Position2u16(block_4kb[0]<<1, 0);	// Bottom Right
-		GX_Position2u16(200<<1, 240<<1);		// Bottom Left
+		GX_Position2u16(250, 0);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_Position2u16(250, 240);		// Bottom Left
+		GX_Color1u16(0xFFFF);
 	GX_End();
 
-	gui_DrawItems(items, 200);
-	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) &gui_palette[4]));
+	gui_DrawItems(items, 250);
+
+	GX_Begin(GX_QUADS, GX_VTXFMT3, 1 << 2);
+		GX_Position2u16(0, 216);
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(320, 216);
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(320, 232);	// Bottom Right
+		GX_Color1u16(0xdbeb);
+		GX_Position2u16(0, 232);		// Bottom Left
+		GX_Color1u16(0xdbeb);
+	GX_End();
+
+	GX_Begin(GX_LINES, GX_VTXFMT3, 2 << 1);
+		//Horizontal Strip
+		GX_Position2u16(0, 216);
+		GX_Color1u16(0xFFFF);
+		GX_Position2u16(320, 216);
+		GX_Color1u16(0xFFFF);
+		GX_Position2u16(0, 232);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_Position2u16(320, 232);		// Bottom Left
+		GX_Color1u16(0xFFFF);
+	GX_End();
+	cursor_time++;
 }

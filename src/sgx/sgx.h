@@ -15,8 +15,9 @@
 #define TLUT_INDX_CLRBANK		(((GX_TLUT_256) << 10) | 0x3F0)
 
 #define GXMTX_IDENTITY			GX_PNMTX0
-#define GXMTX_VDP1				GX_PNMTX1
-#define GXMTX_VDP2_BG			GX_PNMTX2
+#define GXMTX_IDENTITY_2X		GX_PNMTX1
+#define GXMTX_VDP1				GX_PNMTX2
+#define GXMTX_VDP2_BG			GX_PNMTX3
 
 #define TLUT_TYPE_FULL			0x0
 #define TLUT_TYPE_4BPP			0x80
@@ -35,7 +36,7 @@
 #define PRI_NBG2(x)					(((f32)(x)) - (8.0f - (0.125f * 1.0f)))
 #define PRI_NBG3(x)					(((f32)(x)) - (8.0f - (0.125f * 0.0f)))
 
-#define	USE_NEW_VDP1		0
+#define	USE_NEW_VDP1		1
 
 
 void SGX_Init(void);

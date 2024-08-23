@@ -136,6 +136,15 @@ void SGX_Init(void)
 	gui_Init();
 	GX_SetArray(GX_VA_TEX0, tex_array, sizeof(*tex_array) * 2);
 
+	//Set matrices
+	Mtx ident_mtx;
+	guMtxIdentity(ident_mtx);
+	GX_LoadPosMtxImm(ident_mtx, GXMTX_IDENTITY);
+	guMtxScale(ident_mtx, 2.0f, 2.0f, 1.0f);
+	GX_LoadPosMtxImm(ident_mtx, GXMTX_IDENTITY_2X);
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
+
+
 	//Set the texcache regions
 	GX_InitTexCacheRegion(&tex_region[0], GX_FALSE, 0, GX_TEXCACHE_128K, 0, GX_TEXCACHE_NONE);
 	GX_InitTexCacheRegion(&tex_region[1], GX_FALSE, 0, GX_TEXCACHE_32K,  0x80000, GX_TEXCACHE_32K);
