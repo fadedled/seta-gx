@@ -234,7 +234,7 @@ static struct Display {
 } disp = {0, 0, DISP_W_A, 240, 0, 0};
 
 
-#define GUI_FILENAMES_MAX		20
+#define GUI_FILENAMES_MAX		15
 
 
 GuiItems filename_items = { 0, 0, 0, GUI_FILENAMES_MAX, 0, 10, NULL };

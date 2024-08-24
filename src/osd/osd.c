@@ -31,7 +31,6 @@ u8 msg_buffer[0x800];
 u32 msg_index = 0;
 u64 cycle_data[8];
 
-extern u8 osd_texture_4bpp[];
 extern yabsys_struct yabsys;
 
 

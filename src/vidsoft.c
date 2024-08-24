@@ -119,7 +119,7 @@ static int rbg0height = 0;
 int bad_cycle_setting[6] = { 0 };
 
 
-Mtx mat[8] ATTRIBUTE_ALIGN(32);
+Mtx mat[16] ATTRIBUTE_ALIGN(32);
 
 //Holds 3 matrices (Sprite, BG, Identity)
 //f32 mat[36] ATTRIBUTE_ALIGN(32);
