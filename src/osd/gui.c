@@ -120,23 +120,57 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 	GX_InitTexObjLOD(&gui_tobj, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 	GX_LoadTexObj(&gui_tobj, GX_TEXMAP0);
 
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 4, 8);
 
 	for (int i = 0; i < shown_entries; ++i) {
 		u32 x = ofs_x + 24, y = (i * 12) + ofs_y;
-		u32 len = items->item[i + items->disp_offset].len - 5;
-		u8 *str = (u8*) items->item[i + items->disp_offset].data;
+		u32 num = i + items->disp_offset;
+		u32 len = items->item[num].len - 5;
+		u8 *str = (u8*) items->item[num].data;
 		u32 padding = 0;
-		if (items->cursor == i + items->disp_offset && cursor_idle < 0) {
+		if (items->cursor == num && cursor_idle < 0) {
 			padding = cursor_idle >> 3;
 		}
 		x += padding;
-		GX_Begin(GX_QUADS, GX_VTXFMT3, 4 * len);
+		GX_Begin(GX_QUADS, GX_VTXFMT3, 4 * (len + 4));
+
+		u32 xnum = x - 8;
+			GX_Position2u16(xnum, y);					// Top Left
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(22, 4);
+			GX_Position2u16(xnum + 4, y);			// Top Right
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(23, 4);
+			GX_Position2u16(xnum + 4, y + 8);	// Bottom Right
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(23, 5);
+			GX_Position2u16(xnum, y + 8);			// Bottom Left
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(22, 5);
+		for (u32 i = 0; i < 3; ++i) {
+			u32 chr_x = (num % 10) + 12;
+			xnum -= 4;
+			//Draw the file number
+			GX_Position2u16(xnum, y);					// Top Left
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(chr_x, 4);
+			GX_Position2u16(xnum + 4, y);			// Top Right
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(chr_x + 1, 4);
+			GX_Position2u16(xnum + 4, y + 8);	// Bottom Right
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(chr_x + 1, 5);
+			GX_Position2u16(xnum, y + 8);			// Bottom Left
+			GX_Color1u16(0xbdd7);
+			GX_TexCoord2u8(chr_x, 5);
+			num /= 10;
+		}
+
 		/*not while m_ptr, must use index for this because of circular buffering*/
 		while (len) {
 			//XXX: Use a texCoordGen for this.
-			f32 chr_x = (f32) ((*str) & 0x1F);
-			f32 chr_y = (f32) (((*str) >> 5) & 0x3);
+			u32 chr_x = (*str & 0x1F) << 1;
+			u32 chr_y = (*str >> 5) & 0x3;
 			u32 spacing = 8;
 			x -= (8 - spacing);
 			GX_Position2u16(x, y);					// Top Left
@@ -144,10 +178,10 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 			GX_TexCoord2u8(chr_x, chr_y);
 			GX_Position2u16(x + 8, y);			// Top Right
 			GX_Color1u16(0xFFFF);
-			GX_TexCoord2u8(chr_x + 1, chr_y);
+			GX_TexCoord2u8(chr_x + 2, chr_y);
 			GX_Position2u16(x + 8, y + 8);	// Bottom Right
 			GX_Color1u16(0xFFFF);
-			GX_TexCoord2u8(chr_x + 1, chr_y + 1);
+			GX_TexCoord2u8(chr_x + 2, chr_y + 1);
 			GX_Position2u16(x, y + 8);			// Bottom Left
 			GX_Color1u16(0xFFFF);
 			GX_TexCoord2u8(chr_x, chr_y + 1);
