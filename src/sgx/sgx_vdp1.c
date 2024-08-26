@@ -58,6 +58,19 @@ u16 *color_tex ATTRIBUTE_ALIGN(32);
 u16 *alpha_tex ATTRIBUTE_ALIGN(32);
 u8 *z_tex ATTRIBUTE_ALIGN(32);
 
+
+//Texture for mesh creating
+static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
+	0x10, 0x10, 0x10, 0x10,
+	0x01, 0x01, 0x01, 0x01,
+	0x10, 0x10, 0x10, 0x10,
+	0x01, 0x01, 0x01, 0x01,
+	0x10, 0x10, 0x10, 0x10,
+	0x01, 0x01, 0x01, 0x01,
+	0x10, 0x10, 0x10, 0x10,
+	0x01, 0x01, 0x01, 0x01
+};
+
 GXTexObj tobj_color;
 extern u32 *tlut_data;
 void SGX_Vdp1Init(void)
@@ -92,7 +105,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
 	GX_SetDither(GX_FALSE);
 	//Load vdp1 matrix... should we clear the values?
-	GX_SetCurrentMtx(GXMTX_VDP1);
+
 
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -111,7 +124,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
 	//TODO: This blending does not work always
 	GX_SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
@@ -134,7 +147,7 @@ void SGX_Vdp1Begin(void)
 	u32 tex_maddr = 0x94000000;	//This will be modified per command
 	u32 tex_size = 0x88000000;	//This will be modified per command
 
-	GX_LOAD_BP_REG(tex_filt);
+	GX_LOAD_BP_REG(tex_filt | 5);	//Repeat
 	GX_LOAD_BP_REG(tex_lod);
 	GX_LOAD_BP_REG(tex_size);
 	GX_LOAD_BP_REG(tmem_even);
@@ -142,6 +155,34 @@ void SGX_Vdp1Begin(void)
 	GX_LOAD_BP_REG(tex_maddr);
 
 	SGX_LoadTlut(tlut_data, TLUT_INDX_CLRBANK);
+
+	//Draw the mesh z-texture
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	SGX_SetZOffset(20);
+	SGX_SetTex(mesh_tex, GX_TF_I4, 8, 8, 0);
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
+	GX_SetColorUpdate(GX_FALSE);
+	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Position2s16(0, 0);
+	GX_Color1u16(0);
+	GX_TexCoord1u16(0x0000);
+	GX_Position2s16(352, 0);
+	GX_Color1u16(0);
+	GX_TexCoord1u16(0x2C00);
+	GX_Position2s16(352, 240);
+	GX_Color1u16(0);
+	GX_TexCoord1u16(0x2C1E);
+	GX_Position2s16(0, 240);
+	GX_Color1u16(0);
+	GX_TexCoord1u16(0x001E);
+	GX_End();
+
+	SGX_SetZOffset(0);
+	GX_SetColorUpdate(GX_TRUE);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
+	GX_LOAD_BP_REG(tex_filt);	//Clamp Texure
+	GX_SetCurrentMtx(GXMTX_VDP1);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 }
 
 
@@ -323,6 +364,12 @@ static void __SGX_Vdp1SetConstantPart(u32 is_rgb)
 		GX_SetBlendMode(GX_BM_BLEND, GX_BL_ZERO, GX_BL_ONE, GX_LO_CLEAR);
 		GX_SetAlphaUpdate(GX_TRUE);
 		GX_SetDstAlpha(GX_TRUE, 0x7F); //Only when RGB or window
+	}
+	//Set mesh processing
+	if (vdp1cmd->PMOD & 0x100) {
+		GX_SetZMode(GX_ENABLE, GX_NEQUAL, GX_DISABLE);
+	} else {
+		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 	}
 }
 
