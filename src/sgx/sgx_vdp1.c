@@ -409,13 +409,13 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 			//Check for colorbanking...
 
 			u32 *pal = MEM_K0_TO_K1(Vdp1Ram + colorlut);
-			u32 cb = (*pal) & 0x7FF0;
-			u32 comp = cb;
+			u32 cb = *pal & 0x7FF0;
+			u32 msb = *pal & 0x80008000;
 			for (u32 i = 1; i < 8; ++i) {
-				comp &= *pal; //Make sure it follows the correct format
+				msb |= *pal & 0x80008000; //Make sure it follows the correct format
 				++pal;
 			}
-			if (cb == comp) {	//It uses colorbank code
+			if (!msb) {	//It uses colorbank code
 				__SGX_Vdp1SetConstantPart(0);
 				SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_CLRBANK);
 				SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
