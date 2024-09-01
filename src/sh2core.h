@@ -387,12 +387,4 @@ void FASTCALL DataArrayWriteLong(u32 addr, u32 val);
 void FASTCALL MSH2InputCaptureWriteWord(u32 addr, u16 data);
 void FASTCALL SSH2InputCaptureWriteWord(u32 addr, u16 data);
 
-#if defined(SH2_DYNAREC)
-extern SH2Interface_struct SH2Dynarec;
-#endif
-
-#if defined(SH2_DYNAREC)
-extern SH2Interface_struct SH2Dynarec;
-#endif
-
 #endif

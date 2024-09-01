@@ -168,12 +168,7 @@ int menuselect=1;
 int setmenuselect=0;
 int sounddriverselect=2;
 int videodriverselect=2;
-#ifdef HAVE_Q68
-//int m68kdriverselect=2;
-int m68kdriverselect=1; // c68k seems be better..
-#else
 int m68kdriverselect=1;
-#endif
 int scspdriverselect=2;
 int configurebuttonsselect=0;
 int WIIconfigurebuttonsselect=0;

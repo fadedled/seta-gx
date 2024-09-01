@@ -279,12 +279,6 @@ int	YabauseInit(yabauseinit_struct *init)
 
    yabsys.usequickload = 0;
 
-   #if defined(SH2_DYNAREC)
-   if(SH2Core->id==2) {
-     sh2_dynarec_init();
-   }
-   #endif
-
 
    YabauseResetNoLoad();
 
@@ -469,15 +463,6 @@ int YabauseEmulate(void) {
 	framecounter++;
 	LagFrameFlag = 1;
 
-   #if defined(SH2_DYNAREC)
-   if(SH2Core->id==2) {
-     if (yabsys.IsPal)
-       YabauseDynarecOneFrameExec(722,0); // m68kcycles,m68kcenticycles
-     else
-       YabauseDynarecOneFrameExec(716,20);
-     return 0;
-   }
-   #endif
 	u64 cycles_start;
 	while (!oneframeexec) {
       PROFILE_START("Total Emulation");
