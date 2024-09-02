@@ -24,17 +24,17 @@
 #include "memory.h"
 
 #define CART_NONE               0
-#define CART_PAR                1
-#define CART_BACKUPRAM4MBIT     2
-#define CART_BACKUPRAM8MBIT     3
-#define CART_BACKUPRAM16MBIT    4
-#define CART_BACKUPRAM32MBIT    5
+#define CART_PAR                1 /*Unused*/
+#define CART_BACKUPRAM4MBIT     2 /*Unused*/
+#define CART_BACKUPRAM8MBIT     3 /*Unused*/
+#define CART_BACKUPRAM16MBIT    4 /*Unused*/
+#define CART_BACKUPRAM32MBIT    5 /*Unused*/
 #define CART_DRAM8MBIT          6
 #define CART_DRAM32MBIT         7
-#define CART_NETLINK            8
+#define CART_NETLINK            8 /*Unused*/
 #define CART_ROM16MBIT          9
-#define CART_JAPMODEM          10
-#define CART_USBDEV            11
+#define CART_JAPMODEM          10 /*Unused*/
+#define CART_USBDEV            11 /*Unused*/
 
 typedef struct
 {
@@ -48,13 +48,6 @@ typedef struct
 	void FASTCALL (*Cs0WriteByte)(u32 addr, u8 val);
 	void FASTCALL (*Cs0WriteWord)(u32 addr, u16 val);
 	void FASTCALL (*Cs0WriteLong)(u32 addr, u32 val);
-
-	u8 FASTCALL (*Cs1ReadByte)(u32 addr);
-	u16 FASTCALL (*Cs1ReadWord)(u32 addr);
-	u32 FASTCALL (*Cs1ReadLong)(u32 addr);
-	void FASTCALL (*Cs1WriteByte)(u32 addr, u8 val);
-	void FASTCALL (*Cs1WriteWord)(u32 addr, u16 val);
-	void FASTCALL (*Cs1WriteLong)(u32 addr, u32 val);
 
 	u8 FASTCALL (*Cs2ReadByte)(u32 addr);
 	u16 FASTCALL (*Cs2ReadWord)(u32 addr);

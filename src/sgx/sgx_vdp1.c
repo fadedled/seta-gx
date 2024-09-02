@@ -235,8 +235,6 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		++alpha;
 	}
 	GX_RestoreWriteGatherPipe();
-	//TODO: use FGpipe...
-	//DCFlushRange(color_tex, 352*240*2);
 
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);

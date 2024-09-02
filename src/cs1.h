@@ -18,17 +18,22 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-#ifndef CS1_H
-#define CS1_H
+#ifndef __CS1_H__
+#define __CS1_H__
 
 #include "cs0.h"
 #include "memory.h"
 
-u8 FASTCALL 	Cs1ReadByte(u32);
-u16 FASTCALL 	Cs1ReadWord(u32);
-u32 FASTCALL 	Cs1ReadLong(u32);
-void FASTCALL 	Cs1WriteByte(u32, u8);
-void FASTCALL 	Cs1WriteWord(u32, u16);
-void FASTCALL 	Cs1WriteLong(u32, u32);
+/* cs1.h
+ * ---
+ * CS1 cartridge area for backup RAM, since we save directly
+ * to a file this is a useless feature. */
 
-#endif
+u8   cs1_Read8(u32);
+u16  cs1_Read16(u32);
+u32  cs1_Read32(u32);
+void cs1_Write8(u32, u8);
+void cs1_Write16(u32, u16);
+void cs1_Write32(u32, u32);
+
+#endif /*__CS1_H__*/

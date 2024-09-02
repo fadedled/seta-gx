@@ -22,76 +22,39 @@
 #include "cs1.h"
 #include "cs0.h"
 
-//////////////////////////////////////////////////////////////////////////////
 
-u8 FASTCALL Cs1ReadByte(u32 addr)
+u8 cs1_Read8(u32 addr)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFF)
-		return CartridgeArea->cartid;
-
-	return CartridgeArea->Cs1ReadByte(addr);
+	return 0xFF;
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-u16 FASTCALL Cs1ReadWord(u32 addr)
+u16 cs1_Read16(u32 addr)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFE)
-		return (0xFF00 | CartridgeArea->cartid);
-
-	return CartridgeArea->Cs1ReadWord(addr);
+	return 0xFFFF;
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-u32 FASTCALL Cs1ReadLong(u32 addr)
+u32 cs1_Read32(u32 addr)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFC)
-		return (0xFF00FF00 | (CartridgeArea->cartid << 16) | CartridgeArea->cartid);
-
-	return CartridgeArea->Cs1ReadLong(addr);
+	return 0xFFFFFFFF;
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-void FASTCALL Cs1WriteByte(u32 addr, u8 val)
+void cs1_Write8(u32 addr, u8 val)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFF)
-		return;
-
-	CartridgeArea->Cs1WriteByte(addr, val);
+	//Does nothing
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-void FASTCALL Cs1WriteWord(u32 addr, u16 val)
+void cs1_Write16(u32 addr, u16 val)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFE)
-		return;
-
-	CartridgeArea->Cs1WriteWord(addr, val);
+	//Does nothing
 }
 
-//////////////////////////////////////////////////////////////////////////////
 
-void FASTCALL Cs1WriteLong(u32 addr, u32 val)
+void cs1_Write32(u32 addr, u32 val)
 {
-	addr &= 0xFFFFFF;
-
-	if (addr ^ 0xFFFFFC)
-		return;
-
-	CartridgeArea->Cs1WriteLong(addr, val);
+	//Does nothing
 }
 
-//////////////////////////////////////////////////////////////////////////////

@@ -528,12 +528,12 @@ void MappedMemoryInit()
 								CartridgeArea->Cs0WriteWord,
 								CartridgeArea->Cs0WriteLong);
    //CS1
-	FillMemoryArea(0x80, 0xA0, &Cs1ReadByte,
-								&Cs1ReadWord,
-								&Cs1ReadLong,
-								&Cs1WriteByte,
-								&Cs1WriteWord,
-								&Cs1WriteLong);
+	FillMemoryArea(0x80, 0xA0, &cs1_Read8,
+								&cs1_Read16,
+								&cs1_Read32,
+								&cs1_Write8,
+								&cs1_Write16,
+								&cs1_Write32);
    //CS2 (CD-ROM Regs)
    FillMemoryArea(0xB0, 0xB2, &Cs2ReadByte,
                                 &Cs2ReadWord,
