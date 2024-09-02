@@ -1785,29 +1785,10 @@ void BupFormat(u32 device)
 {
    switch (device)
    {
-      case 0:
+      case 0: //Format local bup
          FormatBackupRam(bup_ram, 0x10000);
          break;
-      case 1:
-         if ((CartridgeArea->cartid & 0xF0) == 0x20)
-         {
-            switch (CartridgeArea->cartid & 0xF)
-            {
-               case 1:
-                  FormatBackupRam(CartridgeArea->bupram, 0x100000);
-                  break;
-               case 2:
-                  FormatBackupRam(CartridgeArea->bupram, 0x200000);
-                  break;
-               case 3:
-                  FormatBackupRam(CartridgeArea->bupram, 0x400000);
-                  break;
-               case 4:
-                  FormatBackupRam(CartridgeArea->bupram, 0x800000);
-                  break;
-               default: break;
-            }
-         }
+      case 1: //Format cart bup (will not happen)
          break;
       case 2:
          LOG("Formatting FDD not supported\n");

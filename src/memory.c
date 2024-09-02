@@ -28,7 +28,6 @@
 #include <ctype.h>
 
 #include "memory.h"
-#include "coffelf.h"
 #include "cs0.h"
 #include "cs1.h"
 #include "cs2.h"

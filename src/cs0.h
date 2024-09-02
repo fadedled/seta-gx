@@ -57,14 +57,12 @@ typedef struct
 	void FASTCALL (*Cs2WriteLong)(u32 addr, u32 val);
 
 	void *rom;
-	void *bupram;
 	void *dram;
 } cartridge_struct;
 
 extern cartridge_struct *CartridgeArea;
 
 int CartInit(const char *filename, int);
-void CartFlush(void);
 void CartDeInit(void);
 
 #endif
