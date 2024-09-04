@@ -28,8 +28,7 @@
 #include <ctype.h>
 
 #include "memory.h"
-#include "cs0.h"
-#include "cs1.h"
+#include "cart.h"
 #include "cs2.h"
 #include "debug.h"
 #include "error.h"
@@ -520,26 +519,14 @@ void MappedMemoryInit()
                                 &MSH2InputCaptureWriteWord,
                                 &UnhandledMemoryWriteLong);
    //CS0
-   FillMemoryArea(0x40, 0x80, CartridgeArea->Cs0ReadByte,
-								CartridgeArea->Cs0ReadWord,
-								CartridgeArea->Cs0ReadLong,
-								CartridgeArea->Cs0WriteByte,
-								CartridgeArea->Cs0WriteWord,
-								CartridgeArea->Cs0WriteLong);
+   FillMemoryArea(0x40, 0x80,   cs0_read8, cs0_read16, cs0_read32,
+								cs0_write8, cs0_write16, cs0_write32);
    //CS1
-	FillMemoryArea(0x80, 0xA0, &cs1_Read8,
-								&cs1_Read16,
-								&cs1_Read32,
-								&cs1_Write8,
-								&cs1_Write16,
-								&cs1_Write32);
+	FillMemoryArea(0x80, 0xA0,  cs1_Read8, cs1_Read16, cs1_Read32,
+								cs1_Write8, cs1_Write16, cs1_Write32);
    //CS2 (CD-ROM Regs)
-   FillMemoryArea(0xB0, 0xB2, &Cs2ReadByte,
-                                &Cs2ReadWord,
-                                &Cs2ReadLong,
-                                &Cs2WriteByte,
-                                &Cs2WriteWord,
-                                &Cs2WriteLong);
+   FillMemoryArea(0xB0, 0xB2,   cs0_read8, Cs2ReadWord, Cs2ReadLong,
+								cs0_write8, Cs2WriteWord, Cs2WriteLong);
 #ifndef SCSP_PLUGIN
    FillMemoryArea(0xB4, 0xB6, &SoundRamReadByte,
                                 &SoundRamReadWord,

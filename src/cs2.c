@@ -137,19 +137,20 @@ static INLINE void Cs2SetIRQ(u32 irq){
 //}
 
 //////////////////////////////////////////////////////////////////////////////
-
+#if 0
+//Probably unused
 u8 FASTCALL Cs2ReadByte(u32 addr)
 {
-   return CartridgeArea->Cs2ReadByte(addr);
+return CartridgeArea->Cs2ReadByte(addr);
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void FASTCALL Cs2WriteByte(u32 addr, u8 val)
 {
-   CartridgeArea->Cs2WriteByte(addr, val);
+CartridgeArea->Cs2WriteByte(addr, val);
 }
-
+#endif
 //////////////////////////////////////////////////////////////////////////////
 
 u16 FASTCALL Cs2ReadWord(u32 addr) {

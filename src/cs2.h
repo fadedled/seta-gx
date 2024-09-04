@@ -42,7 +42,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 #include "memory.h"
 #include "cdbase.h"
-#include "cs0.h"
 
 #ifdef __cplusplus
 extern "C" {

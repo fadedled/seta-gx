@@ -24,7 +24,7 @@
 #include "sh2core.h"
 #include "sh2int.h"
 #include "sh2idle.h"
-#include "cs0.h"
+#include "cart.h"
 #include "debug.h"
 #include "error.h"
 #include "memory.h"
@@ -124,7 +124,7 @@ static u32 FASTCALL FetchBios(u32 addr)
 
 static u32 FASTCALL FetchCs0(u32 addr)
 {
-   return CartridgeArea->Cs0ReadWord(addr);
+   return cs0_read16(addr);
 }
 
 //////////////////////////////////////////////////////////////////////////////

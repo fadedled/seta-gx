@@ -22,7 +22,7 @@
 #include <sys/types.h>
 #include <string.h>
 #include "yabause.h"
-#include "cs0.h"
+#include "cart.h"
 #include "cs2.h"
 #include "debug.h"
 #include "error.h"
@@ -155,7 +155,7 @@ int	YabauseInit(yabauseinit_struct *init)
 #endif
 
 #ifndef GEKKO
-   if (CartInit(init->cartpath, init->carttype) != 0)
+   if (cart_Init(init->carttype, init->cartpath) != 0)
    {
       YabSetError(YAB_ERR_CANNOTINIT, "Cartridge");
       return -1;
@@ -190,7 +190,7 @@ int	YabauseInit(yabauseinit_struct *init)
 #ifdef GEKKO
    Cs2GetRegionID(); //for getting itemnum
 
-   if (CartInit(init->cartpath, init->carttype) != 0)
+   if (cart_Init(init->carttype, init->cartpath) != 0)
    {
       YabSetError(YAB_ERR_CANNOTINIT, "Cartridge");
       return -1;
@@ -307,7 +307,7 @@ void YabauseDeInit(void) {
 	if (T123Save(bup_ram, 0x10000, 1, bupfilename) != 0)
          YabSetError(YAB_ERR_FILEWRITE, (void *)bupfilename);
 
-   CartDeInit();
+   cart_Deinit();
    Cs2DeInit();
    ScuDeInit();
    ScspDeInit();

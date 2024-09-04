@@ -18,7 +18,7 @@
 */
 
 #include "memory.h"
-#include "cs0.h"
+#include "cart.h"
 #include "debug.h"
 #include "sh2core.h"
 #include "bios.h"
@@ -395,11 +395,11 @@ static u32 GetDeviceStats(u32 device, u32 *size, u32 *addr, u32 *blocksize)
          *blocksize = 0x40;
          return 0;
       case 1:
-         if ((CartridgeArea->cartid & 0xF0) == 0x20)
+         if ((cart.id & 0xF0) == 0x20)
          {
             *addr = 0x04000000;
-            *size = 0x40000 << (CartridgeArea->cartid & 0x0F);
-            if (CartridgeArea->cartid == 0x24)
+            *size = 0x40000 << (cart.id & 0x0F);
+            if (cart.id == 0x24)
                *blocksize = 0x400;
             else
                *blocksize = 0x200;
@@ -686,7 +686,7 @@ static void FASTCALL BiosBUPInit(SH2_struct * sh)
    mem_Write16(sh->regs.R[6]+0x2, 1); // Number of partitions
 
    // Second Device
-   if ((CartridgeArea->cartid & 0xF0) == 0x20)
+   if ((cart.id & 0xF0) == 0x20)
    {
       mem_Write16(sh->regs.R[6]+0x4, 2); // ID
       mem_Write16(sh->regs.R[6]+0x6, 1); // Number of partitions
@@ -1622,7 +1622,7 @@ deviceinfo_struct *BupGetDeviceList(int *numdevices)
    deviceinfo_struct *device;
    int devicecount=1;
 
-   if ((CartridgeArea->cartid & 0xF0) == 0x20)
+   if ((cart.id & 0xF0) == 0x20)
       devicecount++;
 
    if ((device = (deviceinfo_struct *)malloc(devicecount * sizeof(deviceinfo_struct))) == NULL)
@@ -1636,10 +1636,10 @@ deviceinfo_struct *BupGetDeviceList(int *numdevices)
    device[0].id = 0;
    sprintf(device[0].name, "Internal Backup RAM");
 
-   if ((CartridgeArea->cartid & 0xF0) == 0x20)
+   if ((cart.id & 0xF0) == 0x20)
    {
       device[1].id = 1;
-      sprintf(device[1].name, "%d Mbit Backup RAM Cartridge", 1 << ((CartridgeArea->cartid & 0xF)+1));
+      sprintf(device[1].name, "%d Mbit Backup RAM Cartridge", 1 << ((cart.id & 0xF)+1));
    }
 
    // For now it's only internal backup ram and cartridge, no floppy :(
