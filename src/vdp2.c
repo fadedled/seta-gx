@@ -321,7 +321,7 @@ static void FPSDisplay(u32 p)
    static u64 fpsticks;
 
 	char msg[64] = {0};
-	sprintf(msg, "FPS: %d", p);
+	sprintf(msg, "FPS: %d", fps);
    //OSDPushMessage(OSDMSG_FPS, 1, "%02d/%02d FPS %d %d %s %s", fps, yabsys.IsPal ? 50 : 60, framecounter, lagframecounter, MovieStatus, InputDisplayString);
 	osd_MsgAdd(20, 20, 0xFF0000FF, msg);
 	fpsframecount++;
@@ -354,11 +354,16 @@ void Vdp2VBlankOUT(void)
 	GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
 #if USE_NEW_VDP1
-	cycles_start = gettime();
-	Vdp1Draw();	//Create DL for GX
-	osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+	if (Vdp2Regs->TVMD & 0x8000) {
+		cycles_start = gettime();
+		Vdp1Draw();	//Create DL for GX
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+		SGX_Vdp1ProcessFramebuffer();
+	} else {
+		Vdp1NoDraw();	//Do nothing
+	}
 	VIDSoftVdp1SwapFrameBuffer();
-	SGX_Vdp1ProcessFramebuffer();
+	osd_ProfDraw();
 	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #else
 	u32 tpi, tpo, bpi, bpo, cpi, cc;
@@ -394,7 +399,7 @@ void Vdp2VBlankOUT(void)
 	}
 	VIDSoftVdp1SwapFrameBuffer();
 	FPSDisplay(cc);
-	osd_MsgShow();
+	//osd_MsgShow();
 	osd_ProfDraw();
 	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #endif

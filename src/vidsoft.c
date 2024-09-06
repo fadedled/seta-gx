@@ -1070,7 +1070,7 @@ static void FASTCALL gfx_DrawScroll(vdp2draw_struct *info)
 
 	SetupScreenVars(info, &sinfo, info->PlaneAddr);
 
-	gfx_DrawWindowTex(info->wctl, (info->priority << 4) + info->prioffs);
+	//gfx_DrawWindowTex(info->wctl, (info->priority << 4) + info->prioffs);
 
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -3080,11 +3080,11 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	//Load these only when changed
 	u8 ofs_reg = gfx_GetColorOffset(0x40);	//sprite mask
 
-	SGX_SetZOffset(255);
+	SGX_SetZOffset(0);
 	//SET UP GX TEV STAGES for textures
 	GX_SetNumTevStages(1);
 	GX_SetNumTexGens(1);
@@ -3093,6 +3093,7 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 
 	GX_InitTexObj(&tex_obj_vdp1, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
@@ -3111,6 +3112,7 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_End();
 
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 #endif
 
 }

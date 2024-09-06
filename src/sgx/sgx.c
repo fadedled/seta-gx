@@ -347,7 +347,7 @@ void SGX_TlutCRAMUpdate(void)
 void SGX_SetZOffset(u32 offset)
 {
 	GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
-	wgPipe->F32 = (f32)(16777215 - (offset << 16));
+	wgPipe->F32 = (f32) (16777215 - offset);
 }
 
 
@@ -368,6 +368,26 @@ void SGX_BeginVdp1(void)
 	GX_LOAD_BP_REG(tmem_even);
 	GX_LOAD_BP_REG(tmem_odd);
 	GX_LOAD_BP_REG(tex_maddr);
+}
+
+void SGX_InitTex(u32 mapid, u32 use_rgb)
+{
+	u32 cache_regions[4] = {
+		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0xD8000 | (0x30000 >> 5)
+	};
+	//Texture regions
+	u32 reg = cache_regions[mapid];
+	mapid <<= 24;
+	u32 tmem_even = 0x8C000000 | mapid | reg;	// 128k cache
+	u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
+	//Texture filter
+	u32 tex_filt = 0x80000000 | mapid;
+	u32 tex_lod = 0x84000000 | mapid;
+
+	GX_LOAD_BP_REG(tex_filt);
+	GX_LOAD_BP_REG(tex_lod);
+	GX_LOAD_BP_REG(tmem_even);
+	GX_LOAD_BP_REG(tmem_odd);
 }
 
 void SGX_LoadTlut(void *data_addr, u32 tlut)
@@ -393,6 +413,25 @@ void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	//If tlut is used set its address
 	if (fmt > 7) {
 		u32 tlut_addr = 0x98000000 | (GX_TL_RGB5A3 << 10) | (tlut & 0x3ff);
+		GX_LOAD_BP_REG(tlut_addr);
+	}
+	//Flush Texture State
+	__FLUSH_TEX_STATE;
+}
+
+void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
+{
+	//Flush Texture State
+	__FLUSH_TEX_STATE;
+	//Set texture address and size
+	mapid <<= 24;
+	u32 tex_maddr = 0x94000000 | mapid | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
+	u32 tex_size = 0x88000000 | mapid | (fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu);
+	GX_LOAD_BP_REG(tex_maddr);
+	GX_LOAD_BP_REG(tex_size);
+	//If tlut is used set its address
+	if (fmt > 7) {
+		u32 tlut_addr = 0x98000000 | mapid | (GX_TL_RGB5A3 << 10) | (tlut & 0x3ff);
 		GX_LOAD_BP_REG(tlut_addr);
 	}
 	//Flush Texture State

@@ -59,6 +59,9 @@ u16 *alpha_tex ATTRIBUTE_ALIGN(32);
 u8 *z_tex ATTRIBUTE_ALIGN(32);
 
 
+
+u32 is_processed = 0;
+
 //Texture for mesh creating
 static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 	0x10, 0x10, 0x10, 0x10,
@@ -71,20 +74,15 @@ static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 	0x01, 0x01, 0x01, 0x01
 };
 
-GXTexObj tobj_color;
 extern u32 *tlut_data;
 void SGX_Vdp1Init(void)
 {
 	//Set initial matrix
-
-	GX_InitTexObj(&tobj_color, color_tex, 352, 240, GX_TF_RGB5A3, GX_CLAMP, GX_CLAMP, GX_FALSE);
-	GX_InitTexObjLOD(&tobj_color, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-
 	guMtxIdentity(vdp1mtx);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	color_tex = (u16*) memalign(32, 704*512);
 	alpha_tex = (u16*) memalign(32, 704*512*2);
-	z_tex = (u8*) memalign(32, 704*512);
+	z_tex = (u8*) memalign(32, 704*256);
 }
 
 void SGX_Vdp1Deinit(void)
@@ -105,7 +103,6 @@ void SGX_Vdp1Begin(void)
 	GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
 	GX_SetDither(GX_FALSE);
 	//Load vdp1 matrix... should we clear the values?
-
 
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -133,26 +130,15 @@ void SGX_Vdp1Begin(void)
 
 	//ONLY FOR CONSTATNS
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
-	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KASEL_1_8);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_1_8);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP1, GX_TEV_SWAP1);
 
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 
 	//Set how the textures are set up
 	//TODO: do this in another function
-	u32 tmem_even = 0x8C000000 | 0x100000 | 0x20000;	//128K even cache
-	u32 tmem_odd = 0x90000000;	//No odd tmem cache
-	u32 tex_filt = 0x80000000;	//No filter
-	u32 tex_lod = 0x84000000;	//No LOD
-	u32 tex_maddr = 0x94000000;	//This will be modified per command
-	u32 tex_size = 0x88000000;	//This will be modified per command
-
-	GX_LOAD_BP_REG(tex_filt | 5);	//Repeat
-	GX_LOAD_BP_REG(tex_lod);
-	GX_LOAD_BP_REG(tex_size);
-	GX_LOAD_BP_REG(tmem_even);
-	GX_LOAD_BP_REG(tmem_odd);
-	GX_LOAD_BP_REG(tex_maddr);
+	SGX_InitTex(GX_TEXMAP0, 0);
+	GX_LOAD_BP_REG(0x80000005);	//Repeat
 
 	SGX_LoadTlut(tlut_data, TLUT_INDX_CLRBANK);
 
@@ -180,9 +166,10 @@ void SGX_Vdp1Begin(void)
 	SGX_SetZOffset(0);
 	GX_SetColorUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
-	GX_LOAD_BP_REG(tex_filt);	//Clamp Texure
+	GX_LOAD_BP_REG(0x80000000);	//Clamp Texure
 	GX_SetCurrentMtx(GXMTX_VDP1);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
+
 }
 
 
@@ -205,47 +192,75 @@ static const uint16_t color_mask[16] =
 
 void SGX_Vdp1ProcessFramebuffer(void)
 {
-	u32 type = Vdp2Regs->SPCTL & 0xF;
-	u32 pri_shf = priority_shift[type];
-	u32 pri_msk = priority_mask[type];
-	u32 alp_shf = alpha_shift[type];
-	u32 alp_msk = alpha_mask[type];
-	u32 col_msk = color_mask[type];
-	u32 col_offset = (Vdp2Regs->CRAOFB << 4) & 0x700;
+	if (!is_processed) {
+		u32 type = Vdp2Regs->SPCTL & 0xF;
+		u32 pri_shf = priority_shift[type];
+		u32 pri_msk = priority_mask[type];
+		u32 alp_shf = alpha_shift[type];
+		u32 alp_msk = alpha_mask[type];
+		u32 col_msk = color_mask[type];
+		u32 col_offset = (Vdp2Regs->CRAOFB << 4) & 0x700;
+		u32 priority_arr[8] = {14, 14, 14, 14, 14, 14, 14, 14};
+		//XXX: we can make this faster
+		priority_arr[0] += (Vdp2Regs->PRISA & 0x7) << 4;
+		priority_arr[1] += ((Vdp2Regs->PRISA >> 8) & 0x7) << 4;
+		priority_arr[2] += (Vdp2Regs->PRISB & 0x7) << 4;
+		priority_arr[3] += ((Vdp2Regs->PRISB >> 8) & 0x7) << 4;
+		priority_arr[4] += (Vdp2Regs->PRISC & 0x7) << 4;
+		priority_arr[5] += ((Vdp2Regs->PRISC >> 8) & 0x7) << 4;
+		priority_arr[6] += (Vdp2Regs->PRISD & 0x7) << 4;
+		priority_arr[7] += ((Vdp2Regs->PRISD >> 8) & 0x7) << 4;
 
-	//Process the sprite data
-	u16 *dst = (u16*) GX_RedirectWriteGatherPipe(color_tex);
-	u16 *src = color_tex;
-	u16 *alpha = alpha_tex;
-	u16 *cram = (u16*) Vdp2ColorRam;
-	//TODO: Correctly handle other resmodes
-	for (u32 i = 0; i < 352*240; ++i) {
-		//Get values
-		u32 pix = *src;
-		//Check if msb == 0
-		if (!(*alpha & 0xFF00)) {
-			//TODO: Check MSB of cram first.
-			if (pix & 0x7FFF) {
-				pix = cram[((pix & col_msk) + col_offset) & 0x7FF] | 0x8000;
-				//TODO: Get other data (MSB shadow, priority, colorcalc, normalshadow)
+		//TODO: Check this value for setting CC, RGB mode or
+		//Vdp2Regs->SPCTL
+
+		//Process VDP1 Framebuffer data
+		u16 *dst = (u16*) GX_RedirectWriteGatherPipe(color_tex);
+		u16 *src = color_tex;
+		u16 *alpha = alpha_tex;
+		u16 *cram = (u16*) Vdp2ColorRam;
+		//TODO: Correctly handle other resmodes
+		for (u32 i = 0; i < 352*240; ++i) {
+			//Get values
+			u32 pix = *src;
+			//Check if msb == 0
+			if (!(*alpha & 0xFF00)) {
+				//TODO: Check MSB of cram first.
+				if (pix & 0x7FFF) {
+					//Note that pri = 0 does not draw
+					*alpha = priority_arr[((pix >> pri_shf) & pri_msk)];
+					pix = cram[((pix & col_msk) + col_offset) & 0x7FF] | 0x8000;
+					//TODO: Get other data (MSB shadow, colorcalc, normalshadow)
+				} else {
+					*alpha = 0;
+				}
+			} else {
+				*alpha = priority_arr[0];
 			}
+			*dst = pix;
+			++src;
+			++alpha;
 		}
-		*dst = pix;
-		++src;
-		++alpha;
+		GX_RestoreWriteGatherPipe();
+		//TODO: Currently the alpha texture is rewritten, should be in another texture
+		DCFlushRange(alpha_tex, 352*240*2);
+		is_processed = 1;
 	}
-	GX_RestoreWriteGatherPipe();
-
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
 
 	//Set up general TEV
-	GX_SetNumTevStages(1);
+	GX_SetNumTevStages(2);
 	GX_SetNumTexGens(1);
 	GX_SetNumChans(0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+
+	SGX_InitTex(GX_TEXMAP1, 0);
+	SGX_SetOtherTex(GX_TEXMAP1, alpha_tex, GX_TF_IA8, 352, 240, 0);
+
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
 
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -253,6 +268,13 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
+	GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
+	GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
+
+	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z16, 0);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 
 	//Set how the textures are set up
@@ -272,6 +294,9 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		GX_Position2s16(0, 240);
 		GX_TexCoord1u16(0x0001);
 	GX_End();
+
+	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
+	GX_SetScissor(0, 0, 640, 480);
 }
 
 
@@ -301,6 +326,9 @@ void SGX_Vdp1End(void)
 	//GX_SetTexCopySrc(0, 0, 640, 480);
 	//GX_SetTexCopyDst(640, 480, GX_TF_RGB565, GX_FALSE);
 	//GX_CopyTex(win_tex, GX_TRUE);
+
+	//frame must be processed now
+	is_processed = 0;
 }
 
 
@@ -725,7 +753,7 @@ void SGX_Vdp1UserClip(void)
 void SGX_Vdp1SysClip(void)
 {
 	//TODO: should clamp value.
-	GX_SetScissor(0, 0, vdp1cmd->XC, vdp1cmd->YC);
+	GX_SetScissor(0, 0, vdp1cmd->XC + 1, vdp1cmd->YC + 1);
 }
 
 void SGX_Vdp1LocalCoord(void)

@@ -42,7 +42,9 @@
 void SGX_Init(void);
 
 void SGX_BeginVdp1(void);
+void SGX_InitTex(u32 mapid, u32 use_rgb);
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
+void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_EndVdp1(void);
 
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);

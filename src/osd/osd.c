@@ -173,6 +173,7 @@ void osd_ProfDraw(void)
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
 
+	GX_SetScissor(0, 0, 640, 480);
 	GX_SetNumChans(0);
 	GX_SetNumTexGens(1);
 	GX_SetNumTevStages(1);
