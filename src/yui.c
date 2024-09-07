@@ -416,9 +416,14 @@ void InitGX(void )
     GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
 
 	//VDP1 vertex format
-	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS,  GX_POS_XY,   GX_S16, 1);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
+
+	//GUI vertex format
+	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 
 	//PASSCLR
 	//d +- ((1-c)*a + c*b)

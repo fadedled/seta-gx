@@ -363,7 +363,7 @@ void Vdp2VBlankOUT(void)
 		Vdp1NoDraw();	//Do nothing
 	}
 	VIDSoftVdp1SwapFrameBuffer();
-	osd_ProfDraw();
+	//osd_ProfDraw();
 	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #else
 	u32 tpi, tpo, bpi, bpo, cpi, cc;

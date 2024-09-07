@@ -88,7 +88,7 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 		--cursor_idle;
 	}
 
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2u16(ofs_x, cursor_y);			// Top Left
 		GX_Color1u16(cursor_color);
 		GX_Position2u16((ofs_x + width), cursor_y);		// Top Right
@@ -132,7 +132,7 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 			padding = cursor_idle >> 3;
 		}
 		x += padding;
-		GX_Begin(GX_QUADS, GX_VTXFMT3, 4 * (len + 4));
+		GX_Begin(GX_QUADS, GX_VTXFMT4, 4 * (len + 4));
 
 		u32 xnum = x - 8;
 			GX_Position2u16(xnum, y);					// Top Left
@@ -237,7 +237,7 @@ void gui_Draw(GuiItems *items)
 	//Only if alpha is checked
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 1 << 2);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 1 << 2);
 		GX_Position2u16(24 , 0);			// Top Left
 		GX_Color1u16(0xb9c5);
 		GX_Position2u16(250, 0);		// Top Right
@@ -250,7 +250,7 @@ void gui_Draw(GuiItems *items)
 
 	gui_DrawItems(items, 250, 216);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 2 << 2);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 2 << 2);
 
 		GX_Position2u16(250, 0);			// Top Left
 		GX_Color1u16(0xdbeb);
@@ -273,7 +273,7 @@ void gui_Draw(GuiItems *items)
 
 	GX_End();
 
-	GX_Begin(GX_LINES, GX_VTXFMT3, 3 << 1);
+	GX_Begin(GX_LINES, GX_VTXFMT4, 3 << 1);
 		//Vertical Strip
 		GX_Position2u16(250, 0);	// Bottom Right
 		GX_Color1u16(0xFFFF);

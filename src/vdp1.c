@@ -405,6 +405,7 @@ void Vdp1Draw(void) {
 
    command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr);
 
+	//TODO: See if SGX_Vdp1End() is necesary in all returns.
 	vdp1cmd = (Vdp1Cmd*) (Vdp1Ram + Vdp1Regs->addr);
    while (!(command & 0x8000) && commandCounter < 2048) { // fix me
       // First, process the command
@@ -425,9 +426,9 @@ void Vdp1Draw(void) {
 				case 11: SGX_Vdp1UserClip();        break;
 				default: // Abort
 					Vdp1Regs->EDSR |= 2;
-					VIDSoftVdp1DrawEnd();
 					Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
 					Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+					SGX_Vdp1End();
 					return;
 			}
 #else
@@ -487,6 +488,7 @@ void Vdp1Draw(void) {
 		if (Vdp1Regs->EDSR & 0x02){
 			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
 			Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+			SGX_Vdp1End();
 			return;
 		}
 
@@ -497,14 +499,14 @@ void Vdp1Draw(void) {
 			break;
 		case 1: // ASSIGN, jump to CMDLINK
 			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
-			if (Vdp1Regs->addr == 0) {return;}
+			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
 			break;
 		case 2: // CALL, call a subroutine
 			if (returnAddr == 0xFFFFFFFF)
 				returnAddr = Vdp1Regs->addr + 0x20;
 
 			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
-			if (Vdp1Regs->addr == 0) {return;}
+			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
 			break;
 		case 3: // RETURN, return from subroutine
 			if (returnAddr != 0xFFFFFFFF) {
@@ -513,7 +515,7 @@ void Vdp1Draw(void) {
 			}
 			else
 				Vdp1Regs->addr += 0x20;
-			if (Vdp1Regs->addr == 0) {return;}
+			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
 			break;
 		}
 
@@ -559,8 +561,29 @@ void Vdp1NoDraw(void) {
 
    while (!(command & 0x8000) && commandCounter < 2000) { // fix me
       // First, process the command
-      if (!(command & 0x4000)) { // if (!skip)
-         switch (command & 0x000F) {
+	   if (!(command & 0x4000)) { // if (!skip)
+#if USE_NEW_VDP1
+		   switch (command & 0x000F) {
+			   case 0: break;
+			   case 1: break;
+			   case 2: break;
+			   case 3: break;
+			   case 4: break;
+			   case 5: break;
+			   case 6: break;
+			   case 7: break;
+			   case 8: SGX_Vdp1UserClip();         break;
+			   case 9: SGX_Vdp1SysClip();          break;
+			   case 10: SGX_Vdp1LocalCoord();      break;
+			   case 11: SGX_Vdp1UserClip();        break;
+			   default: // Abort
+				   Vdp1Regs->EDSR |= 2;
+				   Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
+				   Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+				   return;
+		   }
+#else
+		   switch (command & 0x000F) {
             case 0: // normal sprite draw
             case 1: // scaled sprite draw
             case 2: // distorted sprite draw
@@ -589,6 +612,7 @@ void Vdp1NoDraw(void) {
                Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
                return;
          }
+#endif
       }
 
 		// Next, determine where to go next

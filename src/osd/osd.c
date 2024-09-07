@@ -234,7 +234,5 @@ void osd_ProfDraw(void)
 	}
 	GX_End();
 
-
-
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 8, 8);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 }

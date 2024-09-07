@@ -79,6 +79,10 @@ void SGX_Vdp1Init(void)
 {
 	//Set initial matrix
 	guMtxIdentity(vdp1mtx);
+	SGX_InitTex(GX_TEXMAP0, 0);
+	SGX_InitTex(GX_TEXMAP1, 0);
+	SGX_InitTex(GX_TEXMAP2, 0);
+	SGX_InitTex(GX_TEXMAP3, 0);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	color_tex = (u16*) memalign(32, 704*512);
 	alpha_tex = (u16*) memalign(32, 704*512*2);
@@ -115,7 +119,6 @@ void SGX_Vdp1Begin(void)
 	GX_SetNumChans(1);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 
 	//XXX: this is for paletted sprites, Konst is for transparency, gouraud is always active and half
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -169,7 +172,7 @@ void SGX_Vdp1Begin(void)
 	GX_LOAD_BP_REG(0x80000000);	//Clamp Texure
 	GX_SetCurrentMtx(GXMTX_VDP1);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
-
+	is_processed = 0;
 }
 
 
@@ -256,12 +259,12 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetNumChans(0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 
-	SGX_InitTex(GX_TEXMAP1, 0);
 	SGX_SetOtherTex(GX_TEXMAP1, alpha_tex, GX_TF_IA8, 352, 240, 0);
 
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
+
 
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
@@ -284,7 +287,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(0, 0);
 		GX_TexCoord1u16(0x0000);
 		GX_Position2s16(352, 0);
@@ -328,7 +331,6 @@ void SGX_Vdp1End(void)
 	//GX_CopyTex(win_tex, GX_TRUE);
 
 	//frame must be processed now
-	is_processed = 0;
 }
 
 
@@ -506,7 +508,7 @@ void SGX_Vdp1DrawNormalSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
@@ -568,7 +570,7 @@ void SGX_Vdp1DrawScaledSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
@@ -609,6 +611,18 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	s32 x3 = vdp1cmd->XD;
 	s32 y3 = vdp1cmd->YD;
 	//TODO: Extend to leftmost edge
+	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
+	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
+
+	x0 = (x0 << 1) + ((((x0 - cx) >> 30) & ~1) + 1);
+	y0 = (y0 << 1) + ((((y0 - cy) >> 30) & ~1) + 1);
+	x1 = (x1 << 1) + ((((x1 - cx) >> 30) & ~1) + 1);
+	y1 = (y1 << 1) + ((((y1 - cy) >> 30) & ~1) + 1);
+	x2 = (x2 << 1) + ((((x2 - cx) >> 30) & ~1) + 1);
+	y2 = (y2 << 1) + ((((y2 - cy) >> 30) & ~1) + 1);
+	x3 = (x3 << 1) + ((((x3 - cx) >> 30) & ~1) + 1);
+	y3 = (y3 << 1) + ((((y3 - cy) >> 30) & ~1) + 1);
+
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(1);
@@ -650,7 +664,18 @@ void SGX_Vdp1DrawPolygon(void)
 	s32 y2 = vdp1cmd->YC;
 	s32 x3 = vdp1cmd->XD;
 	s32 y3 = vdp1cmd->YD;
-	//TODO: Extend to leftmost edge..
+	//TODO: Extend to leftmost edge
+	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
+	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
+
+	x0 = (x0 << 1) + ((((x0 - cx) >> 30) & ~1) + 1);
+	y0 = (y0 << 1) + ((((y0 - cy) >> 30) & ~1) + 1);
+	x1 = (x1 << 1) + ((((x1 - cx) >> 30) & ~1) + 1);
+	y1 = (y1 << 1) + ((((y1 - cy) >> 30) & ~1) + 1);
+	x2 = (x2 << 1) + ((((x2 - cx) >> 30) & ~1) + 1);
+	y2 = (y2 << 1) + ((((y2 - cy) >> 30) & ~1) + 1);
+	x3 = (x3 << 1) + ((((x3 - cx) >> 30) & ~1) + 1);
+	y3 = (y3 << 1) + ((((y3 - cy) >> 30) & ~1) + 1);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
@@ -696,7 +721,7 @@ void SGX_Vdp1DrawPolyline(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_LINESTRIP, GX_VTXFMT3, 5);
+	GX_Begin(GX_LINESTRIP, GX_VTXFMT4, 5);
 		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
@@ -732,7 +757,7 @@ void SGX_Vdp1DrawLine(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_LINES, GX_VTXFMT3, 2);
+	GX_Begin(GX_LINES, GX_VTXFMT4, 2);
 		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
