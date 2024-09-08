@@ -235,6 +235,8 @@ void gui_Draw(GuiItems *items)
 	GX_LoadTexObjPreloaded(&gui_tobj, &gui_treg, GX_TEXMAP0);
 
 	//Only if alpha is checked
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 1 << 2);

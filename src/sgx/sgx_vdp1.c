@@ -64,14 +64,14 @@ u32 is_processed = 0;
 
 //Texture for mesh creating
 static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
-	0x10, 0x10, 0x10, 0x10,
-	0x01, 0x01, 0x01, 0x01,
-	0x10, 0x10, 0x10, 0x10,
-	0x01, 0x01, 0x01, 0x01,
-	0x10, 0x10, 0x10, 0x10,
-	0x01, 0x01, 0x01, 0x01,
-	0x10, 0x10, 0x10, 0x10,
-	0x01, 0x01, 0x01, 0x01
+	0xF0, 0xF0, 0xF0, 0xF0,
+	0x0F, 0x0F, 0x0F, 0x0F,
+	0xF0, 0xF0, 0xF0, 0xF0,
+	0x0F, 0x0F, 0x0F, 0x0F,
+	0xF0, 0xF0, 0xF0, 0xF0,
+	0x0F, 0x0F, 0x0F, 0x0F,
+	0xF0, 0xF0, 0xF0, 0xF0,
+	0x0F, 0x0F, 0x0F, 0x0F
 };
 
 extern u32 *tlut_data;
@@ -134,7 +134,7 @@ void SGX_Vdp1Begin(void)
 	//ONLY FOR CONSTATNS
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_1_8);
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP1, GX_TEV_SWAP1);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 
@@ -146,12 +146,14 @@ void SGX_Vdp1Begin(void)
 	SGX_LoadTlut(tlut_data, TLUT_INDX_CLRBANK);
 
 	//Draw the mesh z-texture
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
-	SGX_SetZOffset(20);
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
 	SGX_SetTex(mesh_tex, GX_TF_I4, 8, 8, 0);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 	GX_SetColorUpdate(GX_FALSE);
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 	GX_Position2s16(0, 0);
 	GX_Color1u16(0);
 	GX_TexCoord1u16(0x0000);
@@ -166,7 +168,7 @@ void SGX_Vdp1Begin(void)
 	GX_TexCoord1u16(0x001E);
 	GX_End();
 
-	SGX_SetZOffset(0);
+	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 	GX_SetColorUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 	GX_LOAD_BP_REG(0x80000000);	//Clamp Texure
@@ -253,8 +255,9 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
 
+	GX_InvalidateTexAll();
 	//Set up general TEV
-	GX_SetNumTevStages(2);
+	GX_SetNumTevStages(1);
 	GX_SetNumTexGens(1);
 	GX_SetNumChans(0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
@@ -276,7 +279,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
 
-	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z16, 0);
+	//GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z16, 0);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 
@@ -284,7 +287,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	SGX_SetTex(color_tex, GX_TF_RGB5A3, 352, 240, 0);
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP1, GX_TEV_SWAP1);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
@@ -297,8 +300,9 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		GX_Position2s16(0, 240);
 		GX_TexCoord1u16(0x0001);
 	GX_End();
-
-	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 352, 240);
+	//GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetScissor(0, 0, 640, 480);
 }
 

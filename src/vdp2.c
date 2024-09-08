@@ -345,7 +345,7 @@ void Vdp2VBlankOUT(void)
 
 	DCFlushRange(Vdp2Ram, 0x80000);
 	DCFlushRange(Vdp2ColorRam, 0x1000);
-	VIDSoftVdp2DrawStart();
+	//VIDSoftVdp2DrawStart();
 	//SGX_InvalidateVRAM();
 	GX_InvalidateTexAll();
 	//SGX_TlutCRAMUpdate();
