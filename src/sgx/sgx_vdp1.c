@@ -150,6 +150,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetTevDirect(GX_TEVSTAGE0);
 	SGX_SetTex(mesh_tex, GX_TF_I4, 8, 8, 0);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_ENABLE, GX_ENABLE);
 	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 	GX_SetColorUpdate(GX_FALSE);
@@ -171,6 +172,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 	GX_SetColorUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_ENABLE);
 	GX_LOAD_BP_REG(0x80000000);	//Clamp Texure
 	GX_SetCurrentMtx(GXMTX_VDP1);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
@@ -250,24 +252,28 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		//TODO: Currently the alpha texture is rewritten, should be in another texture
 		DCFlushRange(alpha_tex, 352*240*2);
 		is_processed = 1;
+		//TODO: Only invalidate used tex
+		GX_InvalidateTexAll();
 	}
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-
-	GX_InvalidateTexAll();
 	//Set up general TEV
-	GX_SetNumTevStages(1);
+	GX_SetNumTevStages(2);
 	GX_SetNumTexGens(1);
 	GX_SetNumChans(0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
 
-	SGX_SetOtherTex(GX_TEXMAP1, alpha_tex, GX_TF_IA8, 352, 240, 0);
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 
+	SGX_SetTex(color_tex, GX_TF_RGB5A3, 352, 240, 0);
+	SGX_SetOtherTex(GX_TEXMAP2, alpha_tex, GX_TF_IA8, 352, 240, 0);
 
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
@@ -279,14 +285,11 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
 
-	//GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z16, 0);
+	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z16, 0);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 
 	//Set how the textures are set up
-	SGX_SetTex(color_tex, GX_TF_RGB5A3, 352, 240, 0);
-	GX_SetNumIndStages(0);
-	GX_SetTevDirect(GX_TEVSTAGE0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP1, GX_TEV_SWAP1);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
@@ -300,8 +303,9 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		GX_Position2s16(0, 240);
 		GX_TexCoord1u16(0x0001);
 	GX_End();
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 352, 240);
-	//GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
+	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetScissor(0, 0, 640, 480);
 }
@@ -606,26 +610,26 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	tex_flip 	|= (-(vdp1cmd->CTRL & 0x20) >> 5) & 0x00FF;
 
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA;
-	s32 y0 = vdp1cmd->YA;
-	s32 x1 = vdp1cmd->XB;
-	s32 y1 = vdp1cmd->YB;
-	s32 x2 = vdp1cmd->XC;
-	s32 y2 = vdp1cmd->YC;
-	s32 x3 = vdp1cmd->XD;
-	s32 y3 = vdp1cmd->YD;
+	s32 x0 = vdp1cmd->XA << 1;
+	s32 y0 = vdp1cmd->YA << 1;
+	s32 x1 = vdp1cmd->XB << 1;
+	s32 y1 = vdp1cmd->YB << 1;
+	s32 x2 = vdp1cmd->XC << 1;
+	s32 y2 = vdp1cmd->YC << 1;
+	s32 x3 = vdp1cmd->XD << 1;
+	s32 y3 = vdp1cmd->YD << 1;
 	//TODO: Extend to leftmost edge
 	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
 	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
-	x0 = (x0 << 1) + ((((x0 - cx) >> 30) & ~1) + 1);
-	y0 = (y0 << 1) + ((((y0 - cy) >> 30) & ~1) + 1);
-	x1 = (x1 << 1) + ((((x1 - cx) >> 30) & ~1) + 1);
-	y1 = (y1 << 1) + ((((y1 - cy) >> 30) & ~1) + 1);
-	x2 = (x2 << 1) + ((((x2 - cx) >> 30) & ~1) + 1);
-	y2 = (y2 << 1) + ((((y2 - cy) >> 30) & ~1) + 1);
-	x3 = (x3 << 1) + ((((x3 - cx) >> 30) & ~1) + 1);
-	y3 = (y3 << 1) + ((((y3 - cy) >> 30) & ~1) + 1);
+	x0 += (((x0 - cx) >> 31) & ~1);
+	y0 += (((y0 - cy) >> 31) & ~1);
+	x1 += (((x1 - cx) >> 31) & ~1);
+	y1 += (((y1 - cy) >> 31) & ~1);
+	x2 += (((x2 - cx) >> 31) & ~1);
+	y2 += (((y2 - cy) >> 31) & ~1);
+	x3 += (((x3 - cx) >> 31) & ~1);
+	y3 += (((y3 - cy) >> 31) & ~1);
 
 
 	//Set up the texture processing depending on mode.
@@ -660,26 +664,26 @@ void SGX_Vdp1DrawDistortedSpr(void)
 void SGX_Vdp1DrawPolygon(void)
 {
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA;
-	s32 y0 = vdp1cmd->YA;
-	s32 x1 = vdp1cmd->XB;
-	s32 y1 = vdp1cmd->YB;
-	s32 x2 = vdp1cmd->XC;
-	s32 y2 = vdp1cmd->YC;
-	s32 x3 = vdp1cmd->XD;
-	s32 y3 = vdp1cmd->YD;
+	s32 x0 = vdp1cmd->XA << 1;
+	s32 y0 = vdp1cmd->YA << 1;
+	s32 x1 = vdp1cmd->XB << 1;
+	s32 y1 = vdp1cmd->YB << 1;
+	s32 x2 = vdp1cmd->XC << 1;
+	s32 y2 = vdp1cmd->YC << 1;
+	s32 x3 = vdp1cmd->XD << 1;
+	s32 y3 = vdp1cmd->YD << 1;
 	//TODO: Extend to leftmost edge
 	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
 	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
-	x0 = (x0 << 1) + ((((x0 - cx) >> 30) & ~1) + 1);
-	y0 = (y0 << 1) + ((((y0 - cy) >> 30) & ~1) + 1);
-	x1 = (x1 << 1) + ((((x1 - cx) >> 30) & ~1) + 1);
-	y1 = (y1 << 1) + ((((y1 - cy) >> 30) & ~1) + 1);
-	x2 = (x2 << 1) + ((((x2 - cx) >> 30) & ~1) + 1);
-	y2 = (y2 << 1) + ((((y2 - cy) >> 30) & ~1) + 1);
-	x3 = (x3 << 1) + ((((x3 - cx) >> 30) & ~1) + 1);
-	y3 = (y3 << 1) + ((((y3 - cy) >> 30) & ~1) + 1);
+	x0 += (((x0 - cx) >> 31) & ~1);
+	y0 += (((y0 - cy) >> 31) & ~1);
+	x1 += (((x1 - cx) >> 31) & ~1);
+	y1 += (((y1 - cy) >> 31) & ~1);
+	x2 += (((x2 - cx) >> 31) & ~1);
+	y2 += (((y2 - cy) >> 31) & ~1);
+	x3 += (((x3 - cx) >> 31) & ~1);
+	y3 += (((y3 - cy) >> 31) & ~1);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);

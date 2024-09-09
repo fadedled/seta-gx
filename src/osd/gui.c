@@ -121,6 +121,8 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 	GX_LoadTexObj(&gui_tobj, GX_TEXMAP0);
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 4, 8);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
+
 
 	for (int i = 0; i < shown_entries; ++i) {
 		u32 x = ofs_x + 24, y = (i * 12) + ofs_y;
@@ -297,6 +299,8 @@ void gui_Draw(GuiItems *items)
 		cursor_inc = -cursor_inc;
 	}
 
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 8, 8);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
+	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
+
 	GX_SetLineWidth(1 << 2, 0);
 }
