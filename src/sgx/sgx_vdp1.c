@@ -136,7 +136,7 @@ void SGX_Vdp1Begin(void)
 
 	//ONLY FOR CONSTATNS
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
-	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_1_8);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
@@ -261,6 +261,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		//TODO: Only invalidate used tex
 		GX_InvalidateTexAll();
 	}
+	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -302,11 +303,11 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(0, 0);
 		GX_TexCoord1u16(0x0000);
-		GX_Position2s16(352, 0);
+		GX_Position2s16(352*2, 0);
 		GX_TexCoord1u16(0x0100);
-		GX_Position2s16(352, 240);
+		GX_Position2s16(352*2, 240*2);
 		GX_TexCoord1u16(0x0101);
-		GX_Position2s16(0, 240);
+		GX_Position2s16(0, 240*2);
 		GX_TexCoord1u16(0x0001);
 	GX_End();
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
@@ -616,27 +617,26 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	tex_flip 	|= (-(vdp1cmd->CTRL & 0x20) >> 5) & 0x00FF;
 
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA << 1;
-	s32 y0 = vdp1cmd->YA << 1;
-	s32 x1 = vdp1cmd->XB << 1;
-	s32 y1 = vdp1cmd->YB << 1;
-	s32 x2 = vdp1cmd->XC << 1;
-	s32 y2 = vdp1cmd->YC << 1;
-	s32 x3 = vdp1cmd->XD << 1;
-	s32 y3 = vdp1cmd->YD << 1;
+	s32 x0 = vdp1cmd->XA;
+	s32 y0 = vdp1cmd->YA;
+	s32 x1 = vdp1cmd->XB;
+	s32 y1 = vdp1cmd->YB;
+	s32 x2 = vdp1cmd->XC;
+	s32 y2 = vdp1cmd->YC;
+	s32 x3 = vdp1cmd->XD;
+	s32 y3 = vdp1cmd->YD;
 	//TODO: Extend to leftmost edge
 	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
 	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
-	x0 += (((x0 - cx) >> 31) & ~1);
-	y0 += (((y0 - cy) >> 31) & ~1);
-	x1 += (((x1 - cx) >> 31) & ~1);
-	y1 += (((y1 - cy) >> 31) & ~1);
-	x2 += (((x2 - cx) >> 31) & ~1);
-	y2 += (((y2 - cy) >> 31) & ~1);
-	x3 += (((x3 - cx) >> 31) & ~1);
-	y3 += (((y3 - cy) >> 31) & ~1);
-
+	x0 += (((u32)(x0 - cx) >> 31) ^ 1);
+	y0 += (((u32)(y0 - cy) >> 31) ^ 1);
+	x1 += (((u32)(x1 - cx) >> 31) ^ 1);
+	y1 += (((u32)(y1 - cy) >> 31) ^ 1);
+	x2 += (((u32)(x2 - cx) >> 31) ^ 1);
+	y2 += (((u32)(y2 - cy) >> 31) ^ 1);
+	x3 += (((u32)(x3 - cx) >> 31) ^ 1);
+	y3 += (((u32)(y3 - cy) >> 31) ^ 1);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(1);
@@ -648,7 +648,7 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
@@ -670,41 +670,41 @@ void SGX_Vdp1DrawDistortedSpr(void)
 void SGX_Vdp1DrawPolygon(void)
 {
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA << 1;
-	s32 y0 = vdp1cmd->YA << 1;
-	s32 x1 = vdp1cmd->XB << 1;
-	s32 y1 = vdp1cmd->YB << 1;
-	s32 x2 = vdp1cmd->XC << 1;
-	s32 y2 = vdp1cmd->YC << 1;
-	s32 x3 = vdp1cmd->XD << 1;
-	s32 y3 = vdp1cmd->YD << 1;
+	s32 x0 = vdp1cmd->XA;
+	s32 y0 = vdp1cmd->YA;
+	s32 x1 = vdp1cmd->XB;
+	s32 y1 = vdp1cmd->YB;
+	s32 x2 = vdp1cmd->XC;
+	s32 y2 = vdp1cmd->YC;
+	s32 x3 = vdp1cmd->XD;
+	s32 y3 = vdp1cmd->YD;
 	//TODO: Extend to leftmost edge
 	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
 	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
-	x0 += (((x0 - cx) >> 31) & ~1);
-	y0 += (((y0 - cy) >> 31) & ~1);
-	x1 += (((x1 - cx) >> 31) & ~1);
-	y1 += (((y1 - cy) >> 31) & ~1);
-	x2 += (((x2 - cx) >> 31) & ~1);
-	y2 += (((y2 - cy) >> 31) & ~1);
-	x3 += (((x3 - cx) >> 31) & ~1);
-	y3 += (((y3 - cy) >> 31) & ~1);
+	x0 += (((u32)(x0 - cx) >> 31) ^ 1);
+	y0 += (((u32)(y0 - cy) >> 31) ^ 1);
+	x1 += (((u32)(x1 - cx) >> 31) ^ 1);
+	y1 += (((u32)(y1 - cy) >> 31) ^ 1);
+	x2 += (((u32)(x2 - cx) >> 31) ^ 1);
+	y2 += (((u32)(y2 - cy) >> 31) ^ 1);
+	x3 += (((u32)(x3 - cx) >> 31) ^ 1);
+	y3 += (((u32)(y3 - cy) >> 31) ^ 1);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	u32 konst = SGX_TORGB565(colr);
-	u32 colors[4] = {konst, konst, konst, konst};
+	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+	GX_SetTevKColor(GX_KCOLOR0, konst);
+	u32 colors[4] = {0};
 	if (vdp1cmd->PMOD & 0x4) {
 		__SGX_GetGouraud(colors);
 	}
-
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT3, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
@@ -724,12 +724,13 @@ void SGX_Vdp1DrawPolyline(void)
 {
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	u32 konst = SGX_TORGB565(colr);
-	u32 colors[4] = {konst, konst, konst, konst};
+	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+	GX_SetTevKColor(GX_KCOLOR0, konst);
+	u32 colors[4] = {0};
 	if (vdp1cmd->PMOD & 0x4) {
 		__SGX_GetGouraud(colors);
 	}
@@ -760,12 +761,13 @@ void SGX_Vdp1DrawLine(void)
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	u32 konst = SGX_TORGB565(colr);
-	u32 colors[4] = {konst, konst, konst, konst};
+	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+	GX_SetTevKColor(GX_KCOLOR0, konst);
+	u32 colors[4] = {0};
 	if (vdp1cmd->PMOD & 0x4) {
 		__SGX_GetGouraud(colors);
 	}

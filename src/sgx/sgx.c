@@ -478,3 +478,4 @@ void SGX_SetVdp2Texture(void *img_addr, u32 tlut)
 	GX_LOAD_BP_REG(tlut_addr);
 }
 
+
