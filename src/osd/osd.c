@@ -216,6 +216,8 @@ void osd_ProfDraw(void)
 			y += 8;
 		}
 	}
+
+
 	x = 8;
 	u32 numc = sprintf(tstr, "%5s:%6d", "TOTAL", total);
 	GX_Begin(GX_QUADS, GX_VTXFMT1, 4 * numc);

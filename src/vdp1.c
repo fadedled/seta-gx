@@ -126,8 +126,6 @@ int Vdp1Init(void) {
 	Vdp1Regs->FBCR = 0;
 	Vdp1Regs->PTMR = 0;
 
-
-	SGX_Vdp1Init();
 	return 0;
 }
 
@@ -136,13 +134,13 @@ int Vdp1Init(void) {
 //DONE
 void Vdp1DeInit(void) {
 	//Nothing...?
-	SGX_Vdp1Deinit();
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 //HALF-DONE
 int VideoInit(int coreid) {
+#if 0
 	// Make sure the core is freed
 	VIDSoftDeInit();
 
@@ -154,7 +152,7 @@ int VideoInit(int coreid) {
 		//XXX: this is wrong?
 		VIDSoftVdp1Reset();
 	}
-
+#endif
 	return 0;
 }
 
@@ -162,7 +160,7 @@ int VideoInit(int coreid) {
 //////////////////////////////////////////////////////////////////////////////
 
 void VideoDeInit(void) {
-	VIDSoftDeInit();
+	//VIDSoftDeInit();
 }
 //////////////////////////////////////////////////////////////////////////////
 
@@ -172,7 +170,7 @@ void Vdp1Reset(void) {
 	Vdp1Regs->PTMR = 0;
 	Vdp1Regs->MODR = 0x1000; // VDP1 Version 1
 	Vdp1Regs->ENDR = 0;
-	VIDSoftVdp1Reset();
+	//VIDSoftVdp1Reset();
 
 	Vdp1Regs->userclipX1 = 0;
 	Vdp1Regs->userclipY1 = 0;

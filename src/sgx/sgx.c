@@ -225,6 +225,7 @@ void SGX_Init(void)
 	}
 	*tlut_data = 0x00008001;
 	DCFlushRange(tlut_data, 0x200);
+	SGX_Vdp1Init();
 }
 
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)

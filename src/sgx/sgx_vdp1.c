@@ -55,6 +55,7 @@ Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
 u16 *color_tex ATTRIBUTE_ALIGN(32);
+u16 *output_tex ATTRIBUTE_ALIGN(32);
 u16 *alpha_tex ATTRIBUTE_ALIGN(32);
 u8 *z_tex ATTRIBUTE_ALIGN(32);
 
@@ -85,8 +86,10 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP3, 0);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	color_tex = (u16*) memalign(32, 704*512);
+	output_tex = (u16*) memalign(32, 704*512);
 	alpha_tex = (u16*) memalign(32, 704*512*2);
 	z_tex = (u8*) memalign(32, 704*256);
+	GX_TexModeSync();
 }
 
 void SGX_Vdp1Deinit(void)
@@ -141,6 +144,7 @@ void SGX_Vdp1Begin(void)
 	//Set how the textures are set up
 	//TODO: do this in another function
 	SGX_InitTex(GX_TEXMAP0, 0);
+	GX_TexModeSync();
 	GX_LOAD_BP_REG(0x80000005);	//Repeat
 
 	SGX_LoadTlut(tlut_data, TLUT_INDX_CLRBANK);
@@ -222,7 +226,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 		//Vdp2Regs->SPCTL
 
 		//Process VDP1 Framebuffer data
-		u16 *dst = (u16*) GX_RedirectWriteGatherPipe(color_tex);
+		u16 *dst = output_tex;//(u16*) GX_RedirectWriteGatherPipe(output_tex);
 		u16 *src = color_tex;
 		u16 *alpha = alpha_tex;
 		u16 *cram = (u16*) Vdp2ColorRam;
@@ -246,10 +250,12 @@ void SGX_Vdp1ProcessFramebuffer(void)
 			}
 			*dst = pix;
 			++src;
+			++dst;
 			++alpha;
 		}
-		GX_RestoreWriteGatherPipe();
+		//GX_RestoreWriteGatherPipe();
 		//TODO: Currently the alpha texture is rewritten, should be in another texture
+		DCFlushRange(output_tex, 352*240*2);
 		DCFlushRange(alpha_tex, 352*240*2);
 		is_processed = 1;
 		//TODO: Only invalidate used tex
@@ -272,7 +278,7 @@ void SGX_Vdp1ProcessFramebuffer(void)
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 
-	SGX_SetTex(color_tex, GX_TF_RGB5A3, 352, 240, 0);
+	SGX_SetTex(output_tex, GX_TF_RGB5A3, 352, 240, 0);
 	SGX_SetOtherTex(GX_TEXMAP2, alpha_tex, GX_TF_IA8, 352, 240, 0);
 
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);

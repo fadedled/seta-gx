@@ -480,6 +480,7 @@ void InitGX(void )
     GX_SetDispCopyGamma(GX_GM_1_0);
 
 	SGX_Init();
+
 	VIDEO_SetBlack(FALSE);
 	VIDEO_Flush();
 }
