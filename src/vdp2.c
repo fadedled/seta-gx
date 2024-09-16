@@ -357,8 +357,8 @@ void Vdp2VBlankOUT(void)
 	if (Vdp2Regs->TVMD & 0x8000) {
 		cycles_start = gettime();
 		Vdp1Draw();	//Create DL for GX
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 		SGX_Vdp1ProcessFramebuffer();
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	} else {
 		Vdp1NoDraw();	//Do nothing
 	}
