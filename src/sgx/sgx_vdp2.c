@@ -60,13 +60,11 @@ struct CellFormatData {
 	u32 char_ctl;	/*Character control settings*/
 	u32 color_fmt;	/*Color format*/
 	u32 char_size; 	/*Size of char data (8 or 16 pixel)*/
-	u32 ptrn_supp;		/*Constant data of pattern*/
-	u32 ptrn_char_shft;	/*Shift of character data in pattern name*/
-	u32 ptrn_char_mask;	/*Mask of character data in pattern name */
+	u32 ptrn_supp;		/*Constant data of pattern (cc.pri, palette and char)*/
+	u32 ptrn_chr_shft;	/*Shift of character data in pattern name*/
 	u32 ptrn_flip_shft;	/*Shift of flip data in pattern name*/
-	u32 ptrn_flip_mask;	/*Mask of flip data in pattern name */
 	u32 ptrn_pal_shft;	/*Shift of palette data in pattern name*/
-	u32 ptrn_pal_mask;	/*Mask of palette data in pattern name */
+	u32 ptrn_mask;		/*Mask of character & palette data in pattern name */
 } cell;
 
 extern u32 *tlut_data;
@@ -81,51 +79,61 @@ void SGX_Vdp2Init(void)
 
 static void __Vdp2SetPatternData(void)
 {
-	u32 supp_data = 0;
-	cell.ptrn_char_shft = 0;
-	cell.ptrn_char_mask = 0;
-	cell.ptrn_flip_shft = 0;
-	cell.ptrn_flip_mask = 0;
-	cell.ptrn_pal_shft = 0;
-	cell.ptrn_pal_mask = 0;
+	u32 supp_data = cell.ptrn_supp & 0x8000;
 	//One word pattern data
-	if (cell.ptrn_supp & 0x8000) {
+	if (supp_data) {
 		// Get ColorCalc and Pri bits
-		supp_data = (cell.ptrn_supp & 0x0300) << 20;
+		supp_data |= (cell.ptrn_supp & 0x0300) << 20;
 		//Auxiliary mode defines flip function
 		if (!(cell.ptrn_supp & 0x4000)) {
-			cell.ptrn_flip_shft = 20;
-			cell.ptrn_flip_mask = 0xC00;
+			cell.ptrn_flip_shft = 10;
 			//Char size mode sets character number
 			if (cell.char_size == 8) {
 				supp_data |= (cell.ptrn_supp & 0x1F) << 10;
-				cell.ptrn_char_shft = 0;
+				cell.ptrn_chr_shft = 0;
+				cell.ptrn_mask = 0x03FF;
 			} else {
 				supp_data |= (cell.ptrn_supp & 0x1C) << 10;
 				supp_data |= (cell.ptrn_supp & 0x3);
-				cell.ptrn_char_shft = 2;
+				cell.ptrn_chr_shft = 2;
+				cell.ptrn_mask = 0x0FFC;
 			}
-			cell.ptrn_char_mask = 0x3FF;
 		} else {
+			cell.ptrn_flip_shft = 30;
 			//Char size mode sets character number
 			if (cell.char_size == 8) {
 				supp_data |= (cell.ptrn_supp & 0x1C) << 10;
-				cell.ptrn_char_shft = 0;
+				cell.ptrn_chr_shft = 0;
+				cell.ptrn_mask = 0x0FFF;
 			} else {
 				supp_data |= (cell.ptrn_supp & 0x10) << 10;
 				supp_data |= (cell.ptrn_supp & 0x3);
-				cell.ptrn_char_shft = 2;
+				cell.ptrn_chr_shft = 2;
+				cell.ptrn_mask = 0x3FFC;
 			}
-			cell.ptrn_char_mask = 0xFFF;
 		}
 		//Color format defines palette
 		if (cell.color_fmt) {	//non 16 color count
 			cell.ptrn_pal_shft = 8;
-			cell.ptrn_pal_mask = 0x7000;
+			cell.ptrn_mask |= 0x700000;
 		} else {	//16 color count
+			//TODO: add color ram offset
 			supp_data |= (cell.ptrn_supp & 0xE0) << 15;
-			cell.ptrn_pal_shft = 4;
-			cell.ptrn_pal_mask = 0xF000;
+			cell.ptrn_pal_shft = 12;
+			cell.ptrn_mask |= 0x7F0000;
+		}
+	} else {
+		cell.ptrn_mask = 0x00003FFF;
+		cell.ptrn_flip_shft = 30;
+		cell.ptrn_pal_shft = 0;
+		cell.ptrn_chr_shft = 0;
+
+		if (cell.color_fmt) {	//non 16 color count
+			cell.ptrn_mask |= 0x700000;
+		} else {	//16 color count
+			//TODO: add color ram offset
+			//supp_data |= ;
+			cell.ptrn_mask |= 0x7F0000;
 		}
 	}
 	cell.ptrn_supp = supp_data;
@@ -192,8 +200,50 @@ static void SGX_Vdp2DrawCellSimple(void)
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 
-	u32 x = 0;
-	u32 y = 0;
+	//TODO: add scaling and screen dims to the format
+	u32 x_max = (352 / cell.char_size) + 1;
+	u32 y_max = (240 / cell.char_size) + 1;
+
+	u32 x_ofs = 0;
+	u32 y_ofs = 0;
+
+	u32 *ptrn_data = (u32*) (Vdp2Ram);
+
+	for (u32 y = 0; y < y_max; ++y) {
+		for (u32 x = 0; x < x_max; ++x) {
+			u32 ptrn;
+			if (cell.ptrn_supp & 0x8000) {
+				ptrn = *((u16*) ptrn_data);
+			} else {
+				ptrn = *((u32*) ptrn_data);
+			}
+
+			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
+			u32 prcc = ptrn + cell.ptrn_supp;
+			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
+			u32 chr = (((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) & 0x3FFF;
+
+			SGX_SetVdp2Texture(Vdp2Ram + chr, pal);
+
+			//TODO: Change tex matrix to do flipping
+			//GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, flip);
+
+			//TODO: Set VtxFrmt5
+			GX_Begin(GX_QUADS, GX_VTXFMT5, 4);
+				GX_Position2u8(x, y);
+				GX_TexCoord1u16(0x0000);
+				GX_Position2u8(x + 1, y);
+				GX_TexCoord1u16(0x0100);
+				GX_Position2u8(x + 1, y + 1);
+				GX_TexCoord1u16(0x0101);
+				GX_Position2u8(x, y + 1);
+				GX_TexCoord1u16(0x0001);
+			GX_End();
+
+			++x_ofs;
+		}
+		++y_ofs;
+	}
 }
 
 
@@ -211,7 +261,7 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
 		__Vdp2ReadNBG(3);	//Draw NBG3
-		SGX_Vdp2DrawScrollSimple();
+		SGX_Vdp2DrawCellSimple();
 	}
 
 	//If NBG0 2048/32786/16M mode is enabled, don't draw
@@ -220,7 +270,7 @@ void SGX_Vdp2Draw(void)
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
 		__Vdp2ReadNBG(2);	//Draw NBG2
-		SGX_Vdp2DrawScrollSimple();
+		SGX_Vdp2DrawCellSimple();
 	}
 
 	//Copy the screens to texture...
@@ -234,7 +284,7 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			SGX_Vdp2DrawScroll();
+			SGX_Vdp2DrawCell();
 		}
 	}
 
@@ -245,7 +295,7 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			SGX_Vdp2DrawScroll();
+			SGX_Vdp2DrawCell();
 		}
 	}
 	//TODO: handle Rotation BGs
