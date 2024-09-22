@@ -65,6 +65,15 @@ struct CellFormatData {
 	u32 ptrn_flip_shft;	/*Shift of flip data in pattern name*/
 	u32 ptrn_pal_shft;	/*Shift of palette data in pattern name*/
 	u32 ptrn_mask;		/*Mask of character & palette data in pattern name */
+
+	u32 xscroll;			/*X increment*/
+	u32 yscroll; 			/*Y increment*/
+	u32 page_mask;		/*page mask*/
+	u32 page_shft;		/*page shift*/
+	u32 plane_mask;		/*plane mask*/
+	u32 xmap_shft;		/*map bit shift for x axis*/
+	u32 ymap_shft;		/*map bit shift for y axis*/
+	u8 *map_addr[16]; 	/* addresses of maps*/
 } cell;
 
 extern u32 *tlut_data;
@@ -137,6 +146,13 @@ static void __Vdp2SetPatternData(void)
 		}
 	}
 	cell.ptrn_supp = supp_data;
+
+
+	cell.page_mask = (0x20 << (cell.char_size == 8)) - 1;
+	cell.page_shft = 5 + (cell.char_size == 8);
+	cell.xmap_shft = cell.page_shft + (cell.plane_mask & 1);
+	cell.ymap_shft = cell.page_shft + (cell.plane_mask >>  1) - 1;
+	cell.plane_mask = cell.plane_mask << (cell.page_shft << 1);
 }
 
 static void __Vdp2ReadNBG(u32 bg_id)
@@ -145,22 +161,38 @@ static void __Vdp2ReadNBG(u32 bg_id)
 		case 0: {	//Normal BG 0
 			cell.char_ctl = Vdp2Regs->CHCTLA & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCN0;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 0) & 0x3;
+			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
+			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
+			//u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 16;
+			//cell.map_addr[0] = Vdp2Ram + (((map_offset | ) << ) & 0x7FF00)
+			//TODO: add RBG1
 		} break;
 		case 1: {	//Normal BG 1
 			cell.char_ctl = (Vdp2Regs->CHCTLA >> 8) & 0x3F;
 			cell.ptrn_supp = Vdp2Regs->PNCN1;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 2) & 0x3;
+			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
+			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
 		} break;
 		case 2: {	//Normal BG 2
 			cell.char_ctl = (Vdp2Regs->CHCTLB & 0x1) | ((Vdp2Regs->CHCTLB << 3) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN2;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 4) & 0x3;
+			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
+			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
 		} break;
 		case 3: {	//Normal BG 3
 			cell.char_ctl = ((Vdp2Regs->CHCTLB >> 4) & 0x1) | ((Vdp2Regs->CHCTLB >> 1) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN3;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3;
+			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
+			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
 		} break;
 		case 4: {	//Rotation BG
 			cell.char_ctl = (Vdp2Regs->CHCTLB >> 8) & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCR;
+			//??? Will not draw yet
 		} break;
 	}
 	//TODO:Check if bitmap is used
@@ -204,20 +236,23 @@ static void SGX_Vdp2DrawCellSimple(void)
 	u32 x_max = (352 / cell.char_size) + 1;
 	u32 y_max = (240 / cell.char_size) + 1;
 
-	u32 x_ofs = 0;
-	u32 y_ofs = 0;
-
-	u32 *ptrn_data = (u32*) (Vdp2Ram);
+	u32 x_tile = ((cell.xscroll >> 8) / cell.char_size);
+	u32 y_tile = ((cell.yscroll >> 8) / cell.char_size);
 
 	for (u32 y = 0; y < y_max; ++y) {
 		for (u32 x = 0; x < x_max; ++x) {
+			//Get pattern data
+			u32 yaddr = ((y_tile & cell.page_mask) | ((y_tile & (cell.page_mask+1)) << 1)) << cell.page_shft;
+			u32 xaddr = ((x_tile & cell.page_mask) | ((x_tile & (cell.page_mask+1)) << cell.page_shft));
+			u32 map = ((y_tile >> cell.ymap_shft) & 2) | ((x_tile >> cell.xmap_shft) & 1);
+			u32 addr = (yaddr | xaddr) & cell.plane_mask;
+
 			u32 ptrn;
 			if (cell.ptrn_supp & 0x8000) {
-				ptrn = *((u16*) ptrn_data);
+				ptrn = *((u16*) (cell.map_addr[map] + (addr << 1)));
 			} else {
-				ptrn = *((u32*) ptrn_data);
+				ptrn = *((u32*) (cell.map_addr[map] + (addr << 2)));
 			}
-
 			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
 			u32 prcc = ptrn + cell.ptrn_supp;
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
@@ -240,9 +275,10 @@ static void SGX_Vdp2DrawCellSimple(void)
 				GX_TexCoord1u16(0x0001);
 			GX_End();
 
-			++x_ofs;
+			//Get next pattern address
+			++x_tile;
 		}
-		++y_ofs;
+		++y_tile;
 	}
 }
 
