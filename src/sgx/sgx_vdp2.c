@@ -164,8 +164,12 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 0) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
-			//u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 16;
-			//cell.map_addr[0] = Vdp2Ram + (((map_offset | ) << ) & 0x7FF00)
+			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 6;
+			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			//TODO: add RBG1
 		} break;
 		case 1: {	//Normal BG 1
@@ -174,6 +178,12 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 2) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
+			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 4) & 0x7) << 6;
+			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 2: {	//Normal BG 2
 			cell.char_ctl = (Vdp2Regs->CHCTLB & 0x1) | ((Vdp2Regs->CHCTLB << 3) & 0x10);
@@ -181,6 +191,12 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 4) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
+			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 8) & 0x7) << 6;
+			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 3: {	//Normal BG 3
 			cell.char_ctl = ((Vdp2Regs->CHCTLB >> 4) & 0x1) | ((Vdp2Regs->CHCTLB >> 1) & 0x10);
@@ -188,6 +204,12 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
+			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 12) & 0x7) << 6;
+			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 4: {	//Rotation BG
 			cell.char_ctl = (Vdp2Regs->CHCTLB >> 8) & 0x7F;
