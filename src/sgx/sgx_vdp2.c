@@ -152,7 +152,7 @@ static void __Vdp2SetPatternData(void)
 	cell.page_shft = 5 + (cell.char_size == 8);
 	cell.xmap_shft = cell.page_shft + (cell.plane_mask & 1);
 	cell.ymap_shft = cell.page_shft + (cell.plane_mask >>  1) - 1;
-	cell.plane_mask = cell.plane_mask << (cell.page_shft << 1);
+	cell.plane_mask = (cell.plane_mask << (cell.page_shft << 1)) | ((1 << (cell.page_shft << 1)) - 1);
 }
 
 static void __Vdp2ReadNBG(u32 bg_id)
@@ -164,7 +164,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 0) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
-			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -178,7 +178,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 2) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
-			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 4) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -191,7 +191,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 4) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
-			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 8) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -204,7 +204,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
-			u32 map_shft = 11 + (cell.char_ctl & 1) + ((cell.ptrn_supp >> 15) & 1);
+			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 12) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -236,13 +236,13 @@ static void SGX_Vdp2DrawBitmap(void)
 }
 
 /*Draws a simple Cell background:
- * All char color count.
- * All char sizes
- * All Ptrn Name data size
- * All plane sizes
- * 4 plane count
- * Scale function
- * Mosaic function
+ * All char color count. []
+ * All char sizes []
+ * All Ptrn Name data size [x]
+ * All plane sizes [x]
+ * 4 plane count [x]
+ * Scale function []
+ * Mosaic function []
  * No line scroll
  * No vertical cell scroll function
  */
@@ -250,19 +250,20 @@ static void SGX_Vdp2DrawCellSimple(void)
 {
 	guMtxIdentity(vdp2mtx);
 	guMtxScale(vdp2mtx, cell.char_size, cell.char_size, 0.0f);
-	//guMtxTrans(vdp2mtx, ((f32)(cell.xscroll & -(cell.char_size << 8))) / 256.0f,
-	//		   ((f32)(cell.yscroll & -(cell.char_size << 8))) / 256.0f, 0.0f);
+	vdp2mtx[0][3] = -(((f32)(cell.xscroll)) / 256.0f);
+	vdp2mtx[1][3] = -(((f32)(cell.yscroll)) / 256.0f);
 	GX_LoadPosMtxImm(vdp2mtx, GXMTX_VDP2);
 	GX_SetCurrentMtx(GXMTX_VDP2);
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 
 	//TODO: add scaling and screen dims to the format
-	u32 x_max = (352 / cell.char_size) + 1;
-	u32 y_max = (240 / cell.char_size) + 1;
 
 	u32 x_tile = ((cell.xscroll >> 8) / cell.char_size);
 	u32 y_tile = ((cell.yscroll >> 8) / cell.char_size);
+	u32 x_max = x_tile + ((352 / cell.char_size) + 1);
+	u32 y_max = y_tile + ((240 / cell.char_size) + 1);
+
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
 	switch (cell.color_fmt) {
@@ -287,13 +288,14 @@ static void SGX_Vdp2DrawCellSimple(void)
 		} break;
 	}
 
-	for (u32 y = 0; y < y_max; ++y) {
-		for (u32 x = 0; x < x_max; ++x) {
+	for (u32 y = y_tile; y < y_max; ++y) {
+		u32 yaddr = ((y & cell.page_mask) | ((y & (cell.page_mask+1)) << 1)) << cell.page_shft;
+		u32 map = ((y >> cell.ymap_shft) & 2);
+		for (u32 x = x_tile; x < x_max; ++x) {
 			//Get pattern data
-			u32 yaddr = ((y_tile & cell.page_mask) | ((y_tile & (cell.page_mask+1)) << 1)) << cell.page_shft;
-			u32 xaddr = ((x_tile & cell.page_mask) | ((x_tile & (cell.page_mask+1)) << cell.page_shft));
-			u32 map = ((y_tile >> cell.ymap_shft) & 2) | ((x_tile >> cell.xmap_shft) & 1);
+			u32 xaddr = ((x & cell.page_mask) | ((x & (cell.page_mask+1)) << cell.page_shft));
 			u32 addr = (yaddr | xaddr) & cell.plane_mask;
+			map = (map & 2) | ((x >> cell.xmap_shft) & 1);
 
 			u32 ptrn;
 			if (cell.ptrn_supp & 0x8000) {
@@ -306,7 +308,7 @@ static void SGX_Vdp2DrawCellSimple(void)
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
 			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
 
-			SGX_SetVdp2Texture(Vdp2Ram + chr + (x << 5), 0);
+			SGX_SetVdp2Texture(Vdp2Ram + chr, 0);
 
 			//TODO: Change tex matrix to do flipping
 			//GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, flip);
@@ -324,9 +326,7 @@ static void SGX_Vdp2DrawCellSimple(void)
 			GX_End();
 
 			//Get next pattern address
-			++x_tile;
 		}
-		++y_tile;
 	}
 }
 
@@ -369,6 +369,7 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
 		__Vdp2ReadNBG(3);	//Draw NBG3
 		GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
+		GX_SetScissor(352, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -379,6 +380,7 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
 		__Vdp2ReadNBG(2);	//Draw NBG2
 		GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
+		GX_SetScissor(0, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -394,6 +396,7 @@ void SGX_Vdp2Draw(void)
 			SGX_Vdp2DrawBitmap();
 		} else {
 			GX_SetViewport(352, 0, 640, 480, 0.0f, 1.0f);
+			GX_SetScissor(352, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
@@ -406,12 +409,14 @@ void SGX_Vdp2Draw(void)
 			SGX_Vdp2DrawBitmap();
 		} else {
 			GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
+			GX_SetScissor(0, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
 	//TODO: handle Rotation BGs
 	//Copy the screens to texture...
 	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
+	GX_SetScissor(0, 0, 640, 480);
 }
 
 
