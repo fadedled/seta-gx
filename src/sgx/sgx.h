@@ -80,4 +80,6 @@ void SGX_Vdp1UserClip(void);
 void SGX_Vdp1SysClip(void);
 void SGX_Vdp1LocalCoord(void);
 
+void SGX_Vdp2Draw(void);
+
 #endif //__VID_GX_H__

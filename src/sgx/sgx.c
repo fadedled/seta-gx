@@ -470,12 +470,13 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut)
 {
 	//Set texture address and size
+	__FLUSH_TEX_STATE;
 	u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
 	GX_LOAD_BP_REG(tex_maddr);
-
+	__FLUSH_TEX_STATE;
 	//If tlut is used set its address
-	u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
-	GX_LOAD_BP_REG(tlut_addr);
+	//u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
+	//GX_LOAD_BP_REG(tlut_addr);
 }
 
 

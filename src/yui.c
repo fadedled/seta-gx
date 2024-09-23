@@ -420,6 +420,10 @@ void InitGX(void )
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 
+	//VDP2 vertex format
+	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
+
 	//GUI vertex format
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);

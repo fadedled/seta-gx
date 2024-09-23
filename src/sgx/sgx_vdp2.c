@@ -249,8 +249,11 @@ static void SGX_Vdp2DrawBitmap(void)
 static void SGX_Vdp2DrawCellSimple(void)
 {
 	guMtxIdentity(vdp2mtx);
+	guMtxScale(vdp2mtx, cell.char_size, cell.char_size, 0.0f);
+	//guMtxTrans(vdp2mtx, ((f32)(cell.xscroll & -(cell.char_size << 8))) / 256.0f,
+	//		   ((f32)(cell.yscroll & -(cell.char_size << 8))) / 256.0f, 0.0f);
 	GX_LoadPosMtxImm(vdp2mtx, GXMTX_VDP2);
-
+	GX_SetCurrentMtx(GXMTX_VDP2);
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 
@@ -260,6 +263,29 @@ static void SGX_Vdp2DrawCellSimple(void)
 
 	u32 x_tile = ((cell.xscroll >> 8) / cell.char_size);
 	u32 y_tile = ((cell.yscroll >> 8) / cell.char_size);
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
+	switch (cell.color_fmt) {
+		case 0:{
+			SGX_BeginVdp2Scroll(GX_TF_I4, cell.char_size);
+			GX_SetNumIndStages(0);
+			GX_SetTevDirect(GX_TEVSTAGE0);
+		} break;
+		case 1: {
+			SGX_BeginVdp2Scroll(GX_TF_I8, cell.char_size);
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_8BPP);
+		} break;
+		case 2: { // 16bpp (11 bits used)
+			SGX_BeginVdp2Scroll(GX_TF_IA8, cell.char_size);
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_8BPP);
+		} break;
+		case 3: {
+			SGX_BeginVdp2Scroll(GX_TF_RGB5A3, cell.char_size);
+		} break;
+		case 4: {
+			SGX_BeginVdp2Scroll(GX_TF_RGBA8, cell.char_size);
+		} break;
+	}
 
 	for (u32 y = 0; y < y_max; ++y) {
 		for (u32 x = 0; x < x_max; ++x) {
@@ -278,9 +304,9 @@ static void SGX_Vdp2DrawCellSimple(void)
 			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
 			u32 prcc = ptrn + cell.ptrn_supp;
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
-			u32 chr = (((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) & 0x3FFF;
+			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
 
-			SGX_SetVdp2Texture(Vdp2Ram + chr, pal);
+			SGX_SetVdp2Texture(Vdp2Ram + chr + (x << 5), 0);
 
 			//TODO: Change tex matrix to do flipping
 			//GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, flip);
@@ -308,6 +334,29 @@ static void SGX_Vdp2DrawCellSimple(void)
 //Begins the Vdp1 Drawing Process
 void SGX_Vdp2Draw(void)
 {
+	GX_SetScissor(0, 0, 640, 480);
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	//Set up general TEV
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	//GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
+
+	//SGX_SetTex(output_tex, GX_TF_RGB5A3, 352, 240, 0);
+	//SGX_SetOtherTex(GX_TEXMAP2, alpha_tex, GX_TF_IA8, 352, 240, 0);
+
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
 	//Setup GX things (vertex format, )
 	u32 scr_pri = 0;
 	u32 scr_enable = 0;
@@ -319,6 +368,7 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
 		__Vdp2ReadNBG(3);	//Draw NBG3
+		GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -328,6 +378,7 @@ void SGX_Vdp2Draw(void)
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
 		__Vdp2ReadNBG(2);	//Draw NBG2
+		GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -342,7 +393,8 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			SGX_Vdp2DrawCell();
+			GX_SetViewport(352, 0, 640, 480, 0.0f, 1.0f);
+			SGX_Vdp2DrawCellSimple();
 		}
 	}
 
@@ -353,12 +405,13 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			SGX_Vdp2DrawCell();
+			GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
+			SGX_Vdp2DrawCellSimple();
 		}
 	}
 	//TODO: handle Rotation BGs
-
 	//Copy the screens to texture...
+	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
 }
 
 
