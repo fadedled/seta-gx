@@ -322,6 +322,9 @@ void SGX_Vdp1ProcessFramebuffer(void)
 //and then proceses it depending on the sprite type
 void SGX_Vdp1End(void)
 {
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	return;
 	GXColor cc = {0x00, 0x00, 0x00, 0xFF};
 	GXColor cc_res = {0x00, 0x00, 0x00, 0x00};
 	GX_DrawDone();

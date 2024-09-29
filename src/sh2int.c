@@ -2136,6 +2136,127 @@ static void FASTCALL SH2sleep(SH2_struct * sh)
 
 //////////////////////////////////////////////////////////////////////////////
 
+
+opcodefunc opcode_0000_arr[64] ATTRIBUTE_ALIGN(32) = {
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcsr, SH2bsrf,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2clrt, SH2nop, SH2stsmach, SH2rts,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcgbr, sh2_IllegalInst,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2sett, SH2div0u, SH2stsmacl, SH2sleep,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, SH2stcvbr, SH2braf,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	SH2clrmac, SH2movt, SH2stspr, SH2rte,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl0, SH2movwl0, SH2movll0, SH2macl
+};
+
+opcodefunc opcode_0010_arr[16] ATTRIBUTE_ALIGN(32) = {
+	SH2movbs, SH2movws, SH2movls, sh2_IllegalInst,
+	SH2movbm, SH2movwm, SH2movlm, SH2div0s,
+	SH2tst, SH2y_and, SH2y_xor, SH2y_or,
+	SH2cmpstr, SH2xtrct, SH2mulu, SH2muls
+};
+
+opcodefunc opcode_0011_arr[16] ATTRIBUTE_ALIGN(32) = {
+	SH2cmpeq, sh2_IllegalInst, SH2cmphs, SH2cmpge,
+	SH2div1, SH2dmulu, SH2cmphi, SH2cmpgt,
+	SH2sub, sh2_IllegalInst, SH2subc, SH2subv,
+	SH2add, SH2dmuls, SH2addc, SH2addv
+};
+
+opcodefunc opcode_0100_arr[64] ATTRIBUTE_ALIGN(32) = {
+	SH2shll, SH2shlr, SH2stsmmach, SH2stcmsr,
+	SH2rotl, SH2rotr, SH2ldsmmach, SH2ldcmsr,
+	SH2shll2, SH2shlr2, SH2ldsmach, SH2jsr,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcsr, SH2macw,
+	SH2dt, SH2cmppz, SH2stsmmacl, SH2stcmgbr,
+	sh2_IllegalInst, SH2cmppl, SH2ldsmmacl, SH2ldcmgbr,
+	SH2shll8, SH2shlr8, SH2ldsmacl, SH2tas,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcgbr, SH2macw,
+	SH2shal, SH2shar, SH2stsmpr, SH2stcmvbr,
+	SH2rotcl, SH2rotcr, SH2ldsmpr, SH2ldcmvbr,
+	SH2shll16, SH2shlr16, SH2ldspr, SH2jmp,
+	sh2_IllegalInst, sh2_IllegalInst, SH2ldcvbr, SH2macw,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst,
+	sh2_IllegalInst, sh2_IllegalInst, sh2_IllegalInst, SH2macw
+};
+
+opcodefunc opcode_0110_arr[16] ATTRIBUTE_ALIGN(32) = {
+	SH2movbl, SH2movwl, SH2movll, SH2mov,
+	SH2movbp, SH2movwp, SH2movlp, SH2y_not,
+	SH2swapb, SH2swapw, SH2negc, SH2neg,
+	SH2extub, SH2extuw, SH2extsb, SH2extsw
+};
+
+opcodefunc opcode_1000_arr[16] ATTRIBUTE_ALIGN(32) = {
+	SH2movbs4, SH2movws4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2movbl4, SH2movwl4, sh2_IllegalInst, sh2_IllegalInst,
+	SH2cmpim, SH2bt, sh2_IllegalInst, SH2bf,
+	sh2_IllegalInst, SH2bts, sh2_IllegalInst, SH2bfs
+};
+
+opcodefunc opcode_1100_arr[16] ATTRIBUTE_ALIGN(32) = {
+	SH2movbsg, SH2movwsg, SH2movlsg, SH2trapa,
+	SH2movblg, SH2movwlg, SH2movllg, SH2mova,
+	SH2tsti, SH2andi, SH2xori, SH2ori,
+	SH2tstm, SH2andm, SH2xorm, SH2orm
+};
+
+static void sh2_opcode0000(SH2_struct * sh) { opcode_0000_arr[sh->instruction & 0x3F](sh); }
+static void sh2_opcode0010(SH2_struct * sh) { opcode_0010_arr[sh->instruction & 0xF](sh); }
+static void sh2_opcode0011(SH2_struct * sh) { opcode_0011_arr[sh->instruction & 0xF](sh); }
+static void sh2_opcode0100(SH2_struct * sh) { opcode_0100_arr[sh->instruction & 0x3F](sh); }
+static void sh2_opcode0110(SH2_struct * sh) { opcode_0110_arr[sh->instruction & 0xF](sh); }
+static void sh2_opcode1000(SH2_struct * sh) { opcode_1000_arr[(sh->instruction >> 8) & 0xF](sh); }
+static void sh2_opcode1100(SH2_struct * sh) { opcode_1100_arr[(sh->instruction >> 8) & 0xF](sh); }
+
+
+opcodefunc opcode_arr[16] ATTRIBUTE_ALIGN(32) = {
+	//Opcodes 0000xxxxxxxxxxx : 64 entries
+	sh2_opcode0000,
+	//Opcodes 0001xxxxxxxxxxx : 1 entrie
+	SH2movls4,
+	//Opcodes 0010xxxxxxxxxxx : 16 entries
+	sh2_opcode0010,
+	//Opcodes 0011xxxxxxxxxxx : 16 entries
+	sh2_opcode0011,
+	//Opcodes 0100xxxxxxxxxxx : 64 entries
+	sh2_opcode0100,
+	//Opcodes 0101xxxxxxxxxxx : 1 entries
+	SH2movll4,
+	//Opcodes 0110xxxxxxxxxxx : 16 entries
+	sh2_opcode0110,
+	//Opcodes 0111xxxxxxxxxxx : 1 entries
+	SH2addi,
+	//Opcodes 1000xxxxxxxxxxx : 16 entries
+	sh2_opcode1000,
+	//Opcodes 1001xxxxxxxxxxx : 1 entries
+	SH2movwi,
+	//Opcodes 1010xxxxxxxxxxx : 1 entries
+	SH2bra,
+	//Opcodes 1011xxxxxxxxxxx : 1 entries
+	SH2bsr,
+	//Opcodes 1100xxxxxxxxxxx : 16 entries
+	sh2_opcode1100,
+	//Opcodes 1101xxxxxxxxxxx : 1 entries
+	SH2movli,
+	//Opcodes 1110xxxxxxxxxxx : 1 entries
+	SH2movi,
+	//Opcodes 1111xxxxxxxxxxx : 1 entries
+	sh2_IllegalInst,
+};
+
+
+
+
 #if 0
 opcodefunc opcode_arr[224] ATTRIBUTE_ALIGN(32) = {
 //Opcodes 0000xxxxxxxxxxx : 64 entries
@@ -2239,7 +2360,7 @@ opcodefunc FASTCALL decode(u16 instruction)
 
 #endif
 
-opcodefunc opcode_arr[1024] ATTRIBUTE_ALIGN(32) = {
+opcodefunc opcode33_arr[1024] ATTRIBUTE_ALIGN(32) = {
 	//Opcodes 0000xxxxxxxxxxx : 64 entries
 	sh2_IllegalInst, sh2_IllegalInst, SH2stcsr, SH2bsrf,
 	SH2movbs0, SH2movws0, SH2movls0, SH2mull,
@@ -2547,8 +2668,7 @@ static void FASTCALL SH2delay(SH2_struct * sh, u32 addr)
 		sh->instruction = fetchlist[(addr >> 20) & 0x0FF](addr);
 
 	// Execute it
-	decode(sh->instruction)(sh);
-	//opcodes[sh->instruction](sh);
+	opcode_arr[(sh->instruction >> 12) & 0xF](sh);
 
 	sh->regs.PC -= 2;
 }
@@ -2559,10 +2679,6 @@ static void FASTCALL SH2delay(SH2_struct * sh, u32 addr)
 int SH2InterpreterInit()
 {
    int i;
-
-   // Initialize any internal variables
-   //for(i = 0;i < 0x10000;i++)
-     // opcodes[i] = decode(i);
 
    for (i = 0; i < 0x100; i++)
    {
@@ -2743,8 +2859,7 @@ FASTCALL void SH2DebugInterpreterExec(SH2_struct *context, u32 cycles)
       context->instruction = fetchlist[(context->regs.PC >> 20) & 0x0FF](context->regs.PC);
 
 		// Execute it
-		decode(context->instruction)(context);
-      //opcodes[context->instruction](context);
+		opcode_arr[(context->instruction >> 12) & 0xF](context);
 
 #ifdef EMULATEUBC
 	  if (ubcinterrupt)
@@ -2770,14 +2885,9 @@ FASTCALL void SH2InterpreterExec(SH2_struct *context, u32 cycles)
 
    while(context->cycles < cycles)
    {
-      // Fetch Instruction
+      // Fetch Instruction and execute it
       context->instruction = fetchlist[(context->regs.PC >> 20) & 0x0FF](context->regs.PC);
-
-      // Execute it decode(context->instruction)(context);
-	  u32 main_op = ((context->instruction >> 6) & 0x3C0);
-	  u32 shft = ((context->instruction >> 12) & 0x8);
-	  opcode_arr[main_op + ((context->instruction >> shft) & 0x3F)](context);
-	  //opcodes[context->instruction](context);
+	  opcode_arr[(context->instruction >> 12) & 0xF](context);
    }
 }
 

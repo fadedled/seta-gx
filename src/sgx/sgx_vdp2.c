@@ -147,7 +147,6 @@ static void __Vdp2SetPatternData(void)
 	}
 	cell.ptrn_supp = supp_data;
 
-
 	cell.page_mask = (0x20 << (cell.char_size == 8)) - 1;
 	cell.page_shft = 5 + (cell.char_size == 8);
 	cell.xmap_shft = cell.page_shft + (cell.plane_mask & 1);
@@ -308,24 +307,24 @@ static void SGX_Vdp2DrawCellSimple(void)
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
 			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
 
-			SGX_SetVdp2Texture(Vdp2Ram + chr, 0);
+			//Set texture address and size
+			u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(Vdp2Ram + chr) >> 5);
+			GX_LOAD_BP_REG(tex_maddr);
+			//If tlut is used set its address
+			//u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
+			//GX_LOAD_BP_REG(tlut_addr);
 
 			//TODO: Change tex matrix to do flipping
 			//GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, flip);
 
 			//TODO: Set VtxFrmt5
+			u32 vert = (((x & 0xFF) << 24) | ((y & 0xFF) << 16));
 			GX_Begin(GX_QUADS, GX_VTXFMT5, 4);
-				GX_Position2u8(x, y);
-				GX_TexCoord1u16(0x0000);
-				GX_Position2u8(x + 1, y);
-				GX_TexCoord1u16(0x0100);
-				GX_Position2u8(x + 1, y + 1);
-				GX_TexCoord1u16(0x0101);
-				GX_Position2u8(x, y + 1);
-				GX_TexCoord1u16(0x0001);
+				wgPipe->U32 = vert;
+				wgPipe->U32 = vert + 0x01000100;
+				wgPipe->U32 = vert + 0x01010101;
+				wgPipe->U32 = vert + 0x00010001;
 			GX_End();
-
-			//Get next pattern address
 		}
 	}
 }

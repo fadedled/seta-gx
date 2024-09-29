@@ -426,7 +426,6 @@ void Vdp1Draw(void) {
 					Vdp1Regs->EDSR |= 2;
 					Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
 					Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-					SGX_Vdp1End();
 					return;
 			}
 #else
@@ -486,7 +485,6 @@ void Vdp1Draw(void) {
 		if (Vdp1Regs->EDSR & 0x02){
 			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
 			Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-			SGX_Vdp1End();
 			return;
 		}
 
@@ -497,14 +495,14 @@ void Vdp1Draw(void) {
 			break;
 		case 1: // ASSIGN, jump to CMDLINK
 			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
-			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
+			if (Vdp1Regs->addr == 0) {return;}
 			break;
 		case 2: // CALL, call a subroutine
 			if (returnAddr == 0xFFFFFFFF)
 				returnAddr = Vdp1Regs->addr + 0x20;
 
 			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
-			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
+			if (Vdp1Regs->addr == 0) {return;}
 			break;
 		case 3: // RETURN, return from subroutine
 			if (returnAddr != 0xFFFFFFFF) {
@@ -513,7 +511,7 @@ void Vdp1Draw(void) {
 			}
 			else
 				Vdp1Regs->addr += 0x20;
-			if (Vdp1Regs->addr == 0) {SGX_Vdp1End(); return;}
+			if (Vdp1Regs->addr == 0) {return;}
 			break;
 		}
 

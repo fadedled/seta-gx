@@ -355,14 +355,16 @@ void Vdp2VBlankOUT(void)
 
 #if USE_NEW_VDP1
 	if (Vdp2Regs->TVMD & 0x8000) {
-		cycles_start = gettime();
-		Vdp1Draw();	//Create DL for GX
-		//SGX_Vdp1ProcessFramebuffer();
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+
 
 		cycles_start = gettime();
 		SGX_Vdp2Draw();
 		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
+
+		cycles_start = gettime();
+		Vdp1Draw();	//Create DL for GX
+		//SGX_Vdp1ProcessFramebuffer();
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	} else {
 		Vdp1NoDraw();	//Do nothing
 	}
