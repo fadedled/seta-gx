@@ -194,15 +194,15 @@ void SGX_Init(void)
 	tex_ofs += 32;
 
 	f32 indmat8[2][3] = {
-		{1.0f/2.0f, 0, 0},
-		{0, 1.0f/16.0f, 0}
+		{1.0f/4.0f, 0, 0},
+		{0, 1.0f/32.0f, 0}
 	};
 	f32 indmat4[2][3] = {
-		{1.0f/4.0f, 0, 0},
-		{0, 1.0f/16.0f, 0}
+		{1.0f/8.0f, 0, 0},
+		{0, 1.0f/32.0f, 0}
 	};
-	GX_SetIndTexMatrix(GX_ITM_0, indmat8, 4);
-	GX_SetIndTexMatrix(GX_ITM_1, indmat4, 4);
+	GX_SetIndTexMatrix(GX_ITM_0, indmat8, 5);
+	GX_SetIndTexMatrix(GX_ITM_1, indmat4, 5);
 	f32 indmat_cell8[2][3] = {
 		{1.0f/2.0f, 0, 0},
 		{0, 1.0f/4.0f, 0}
