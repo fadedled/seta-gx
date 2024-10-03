@@ -339,31 +339,6 @@ void SH2GetRegisters(SH2_struct *context, sh2regs_struct * r);
 void SH2SetRegisters(SH2_struct *context, sh2regs_struct * r);
 void SH2WriteNotify(u32 start, u32 length);
 
-void SH2SetBreakpointCallBack(SH2_struct *context, void (*func)(void *, u32));
-int SH2AddCodeBreakpoint(SH2_struct *context, u32 addr);
-int SH2DelCodeBreakpoint(SH2_struct *context, u32 addr);
-codebreakpoint_struct *SH2GetBreakpointList(SH2_struct *context);
-void SH2ClearCodeBreakpoints(SH2_struct *context);
-
-static INLINE void SH2HandleBreakpoints(SH2_struct *context)
-{
-   int i;
-
-   for (i=0; i < context->bp.numcodebreakpoints; i++) {
-      if ((context->regs.PC == context->bp.codebreakpoint[i].addr) && context->bp.inbreakpoint == 0) {
-         context->bp.inbreakpoint = 1;
-         if (context->bp.BreakpointCallBack)
-             context->bp.BreakpointCallBack(context, context->bp.codebreakpoint[i].addr);
-         context->bp.inbreakpoint = 0;
-      }
-   }
-}
-
-int SH2AddMemoryBreakpoint(SH2_struct *context, u32 addr, u32 flags);
-int SH2DelMemoryBreakpoint(SH2_struct *context, u32 addr);
-memorybreakpoint_struct *SH2GetMemoryBreakpointList(SH2_struct *context);
-void SH2ClearMemoryBreakpoints(SH2_struct *context);
-
 void DMAExec(void);
 void DMATransfer(u32 *CHCR, u32 *SAR, u32 *DAR, u32 *TCR, u32 *VCRDMA);
 

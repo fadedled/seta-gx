@@ -2321,10 +2321,6 @@ int SH2InterpreterInit()
       }
    }
 
-   SH2ClearCodeBreakpoints(MSH2);
-   SH2ClearCodeBreakpoints(SSH2);
-   SH2ClearMemoryBreakpoints(MSH2);
-   SH2ClearMemoryBreakpoints(SSH2);
    MSH2->breakpointEnabled = 0;
    SSH2->breakpointEnabled = 0;
 
@@ -2334,8 +2330,6 @@ int SH2InterpreterInit()
 int SH2DebugInterpreterInit() {
 
   SH2InterpreterInit();
-  MSH2->breakpointEnabled = 1;
-  SSH2->breakpointEnabled = 1;
   return 0;
 }
 
@@ -2410,7 +2404,6 @@ FASTCALL void SH2DebugInterpreterExec(SH2_struct *context, u32 cycles)
       int ubcinterrupt=0, ubcflag=0;
 #endif
 
-      SH2HandleBreakpoints(context);
 
 #ifdef SH2_TRACE
       sh2_trace(context, context->regs.PC);
