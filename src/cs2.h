@@ -407,8 +407,6 @@ extern "C" {
   int Cs2ReadFilteredSector(u32 rfsFAD, partition_struct **partition);
   u8 Cs2GetIP(int autoregion);
   u8 Cs2GetRegionID(void);
-  int Cs2SaveState(FILE *);
-  int Cs2LoadState(FILE *, int, int);
   u32 Cs2GetMasterStackAdress(void);
   u32 Cs2GetSlaveStackAdress(void);
   u64 Cs2GetGameId();
