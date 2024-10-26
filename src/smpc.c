@@ -74,58 +74,56 @@ int SmpcSetClockSync(int clocksync, u32 basetime) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-void SmpcDeInit(void) {
-
-   if (SmpcInternalVars)
-      free(SmpcInternalVars);
-   SmpcInternalVars = NULL;
+void SmpcDeInit(void)
+{
+	if (SmpcInternalVars) {
+		free(SmpcInternalVars);
+	}
+	SmpcInternalVars = NULL;
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void SmpcRecheckRegion(void) {
-   if (SmpcInternalVars == NULL)
-      return;
+	if (SmpcInternalVars == NULL) {
+		return;
+	}
 
-   if (SmpcInternalVars->regionsetting == REGION_AUTODETECT)
-   {
-      // Time to autodetect the region using the cd block
-      SmpcInternalVars->regionid = Cs2GetRegionID();
+	if (SmpcInternalVars->regionsetting == REGION_AUTODETECT) {
+		// Time to autodetect the region using the cd block
+		SmpcInternalVars->regionid = Cs2GetRegionID();
 
-      // Since we couldn't detect the region from the CD, let's assume
-      // it's japanese
-      if (SmpcInternalVars->regionid == 0)
-         SmpcInternalVars->regionid = 1;
-   }
-   else
-      Cs2GetIP(0);
+		// Since we couldn't detect the region from the CD, let's assume
+		// it's japanese
+		SmpcInternalVars->regionid += !SmpcInternalVars->regionid;
+	} else {
+		Cs2GetIP(0);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void SmpcReset(void) {
 	memset(smpc_regs, 0, 0x80);
-   memset((void *)SmpcInternalVars->SMEM, 0, 4);
+	memset((void *)SmpcInternalVars->SMEM, 0, 4);
 
-   SmpcRecheckRegion();
+	SmpcRecheckRegion();
 
-   SmpcInternalVars->dotsel = 0;
-   SmpcInternalVars->mshnmi = 0;
-   SmpcInternalVars->sysres = 0;
-   SmpcInternalVars->sndres = 0;
-   SmpcInternalVars->cdres = 0;
-   SmpcInternalVars->resd = 1;
-   SmpcInternalVars->ste = 0;
-   SmpcInternalVars->resb = 0;
+	SmpcInternalVars->dotsel = 0;
+	SmpcInternalVars->mshnmi = 0;
+	SmpcInternalVars->sysres = 0;
+	SmpcInternalVars->sndres = 0;
+	SmpcInternalVars->cdres = 0;
+	SmpcInternalVars->resd = 1;
+	SmpcInternalVars->ste = 0;
+	SmpcInternalVars->resb = 0;
 
-   SmpcInternalVars->intback=0;
-   SmpcInternalVars->intbackIreg0=0;
-   SmpcInternalVars->firstPeri=0;
+	SmpcInternalVars->intback=0;
+	SmpcInternalVars->intbackIreg0=0;
+	SmpcInternalVars->firstPeri=0;
 
-   SmpcInternalVars->timing=0;
-
-   //memset((void *)&SmpcInternalVars->port1, 0, sizeof(PortData_struct));
-   //memset((void *)&SmpcInternalVars->port2, 0, sizeof(PortData_struct));
+	SmpcInternalVars->timing=0;
+	SMPC_REG_OREG(31) = 0xD;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -175,11 +173,12 @@ static void SmpcINTBACKStatus(void) {
 	}
 	//WII clock
 	localtime_r(&tmp, &times);
-
-	year[0] = (1900 + times.tm_year) / 1000;
-	year[1] = ((1900 + times.tm_year) % 1000) / 100;
-	year[2] = (((1900 + times.tm_year) % 1000) % 100) / 10;
-	year[3] = (((1900 + times.tm_year) % 1000) % 100) % 10;
+	times.tm_year += 1900;
+	//Get year digits
+	year[0] = times.tm_year / 1000;
+	year[1] = (times.tm_year / 100) % 10;
+	year[2] = (times.tm_year / 10) % 10;
+	year[3] = times.tm_year % 10;
 	SMPC_REG_OREG(1) = (year[0] << 4) | year[1];
 	SMPC_REG_OREG(2) = (year[2] << 4) | year[3];
 	SMPC_REG_OREG(3) = (times.tm_wday << 4) | (times.tm_mon + 1);
@@ -375,6 +374,7 @@ void SmpcExec(s32 t) {
          switch(SMPC_REG_COMREG) {
             case 0x0:
                //SMPCLOG("smpc\t: MSHON not implemented\n");
+				SMPC_REG_OREG(31) = 0x0;
                break;
             case 0x2: //SSHON
                YabauseStartSlave();
@@ -395,7 +395,9 @@ void SmpcExec(s32 t) {
             case 0xA:
             case 0xB:
             case 0xC:
-            case 0xD:
+				break;
+            case 0xD: //SYSRES
+				SMPC_REG_OREG(31) = 0xD;
 				break;
             case 0xE: //CKCHG352
                SmpcCKCHG(CLKTYPE_28MHZ);
@@ -483,34 +485,24 @@ static void SmpcSetTiming(void) {
       case 0xD:
       case 0xE:
       case 0xF:
-#ifndef GEKKO
-         SmpcInternalVars->timing = 1; // this has to be tested on a real saturn
-#else
-         SmpcInternalVars->timing = smpcothertiming;
-#endif
+		SmpcInternalVars->timing = 400; // this has to be tested on a real saturn
          return;
       case 0x10:
-         if (SmpcInternalVars->intback)
+         if (SmpcInternalVars->intback) {
             SmpcInternalVars->timing = 20; // this will need to be verified
-         else {
+		 } else {
             // Calculate timing based on what data is being retrieved
-
-            SmpcInternalVars->timing = 1;
-
-            // If retrieving non-peripheral data, add 0.2 milliseconds
-            if (SMPC_REG_IREG(0) == 0x01)
-               SmpcInternalVars->timing += 2;
-
-            // If retrieving peripheral data, add 15 milliseconds
-            if (SMPC_REG_IREG(1) & 0x8)
-#ifndef GEKKO
-               SmpcInternalVars->timing += 16000; // Strangely enough, this works better
-                                               // too long for wii
-#else
-               SmpcInternalVars->timing += smpcperipheraltiming;
-#endif
-//               SmpcInternalVars->timing += 150;
+            if (SMPC_REG_IREG(0) == 0x01) {
+				//Read status only or status followed by peripheral
+				SmpcInternalVars->timing = 18;
+			} else if ((!SMPC_REG_IREG(0)) && (SMPC_REG_IREG(1) & 0x8)) {
+				//Read peripheral only
+				SmpcInternalVars->timing = 272;
+			} else {
+				SmpcInternalVars->timing = 10;
+			}
          }
+         SMPC_REG_OREG(31) = 0x10;
          return;
       case 0x17:
          SmpcInternalVars->timing = 1;
