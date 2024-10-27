@@ -18,6 +18,12 @@ extern u8 menu_tex_4bpp_data[];
 #define CURSOR_COLOR_B	0x4c0b
 
 
+#define GUI_HBAR_X		216
+#define GUI_HBAR_Y		0
+#define GUI_HBAR_W		320
+#define GUI_HBAR_H		16
+
+
 static u32 cursor_longname;
 static s32 cursor_idle = 128;
 static f32 cursor_time = 128.0f;
@@ -75,11 +81,11 @@ void gui_Init(void)
 static void gui_DrawControllers()
 {
 	u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
-	u32 x = 252, y = 120;
+	u32 x = 240, y = 126;
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 8*4*2);
 	for (u32 i = 0; i < 8; ++i) {
-		u32 dx = x + ((i & 1) * 34);
-		u32 dy = y + ((i & ~1) * 13);
+		u32 dx = x + ((i & 1) * 30);
+		u32 dy = y + ((i & ~1) * 11);
 		u32 num = i << 1;
 		u32 pad_tex = pad[i] << 3;
 		u32 color = (pad[i] ? 0xFFFF : 0xbdd7);
@@ -109,6 +115,7 @@ static void gui_DrawControllers()
 		GX_Color1u16(color);
 		GX_TexCoord2u8(num+32, 8);
 	}
+	GX_End();
 }
 
 static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
@@ -238,39 +245,93 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 
 	gui_DrawControllers();
 
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4*4);
+		GX_Position2u16(32, 216);					// Top Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 4);
+		GX_Position2u16(48, 216);			// Top Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(4, 4);
+		GX_Position2u16(48, 216+ 16);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(4, 6);
+		GX_Position2u16(32, 216+ 16);			// Bottom Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 6);
+
+		GX_Position2u16(50, 216 + 4); 					// Top Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 7);
+		GX_Position2u16(86, 216 + 4);			// Top Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(9, 7);
+		GX_Position2u16(86, 216+ 8 + 4);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(9, 8);
+		GX_Position2u16(50, 216+ 8 + 4);			// Bottom Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 8);
+
+		GX_Position2u16(32 + 60, 216);					// Top Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 4);
+		GX_Position2u16(48 + 60, 216);			// Top Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(4, 4);
+		GX_Position2u16(48 + 60, 216+ 16);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(4, 6);
+		GX_Position2u16(32 + 60, 216+ 16);			// Bottom Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(0, 6);
+
+		GX_Position2u16(50 + 60, 216 + 4); 					// Top Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(10, 7);
+		GX_Position2u16(82 + 60, 216 + 4);			// Top Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(17, 7);
+		GX_Position2u16(82 + 60, 216+ 8 + 4);	// Bottom Right
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(17, 8);
+		GX_Position2u16(50 + 60, 216+ 8 + 4);			// Bottom Left
+		GX_Color1u16(0xFFFF);
+		GX_TexCoord2u8(10, 8);
+	GX_End();
+
+
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 8);
-		GX_Position2u16(0, 20);					// Top Left
-		GX_Color1u16(0x07ab);
-		GX_TexCoord2u8(0, 4);
-		GX_Position2u16(16, 20);			// Top Right
-		GX_Color1u16(0x07ab);
-		GX_TexCoord2u8(4, 4);
-		GX_Position2u16(16, 20+ 16);	// Bottom Right
-		GX_Color1u16(0x07ab);
-		GX_TexCoord2u8(4, 6);
-		GX_Position2u16(0, 20+ 16);			// Bottom Left
-		GX_Color1u16(0x07ab);
-		GX_TexCoord2u8(0, 6);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4*2);
+	GX_Position2u16(32+2, 216+2);					// Top Left
+	GX_Color1u16(0x5e4f);
+	GX_TexCoord2u8(12, 5);
+	GX_Position2u16(44+2, 216+2);			// Top Right
+	GX_Color1u16(0x5e4f);
+	GX_TexCoord2u8(15, 5);
+	GX_Position2u16(44+2, 216+ 16+2);	// Bottom Right
+	GX_Color1u16(0x5e4f);
+	GX_TexCoord2u8(15, 7);
+	GX_Position2u16(32+2, 216+ 16+2);			// Bottom Left
+	GX_Color1u16(0x5e4f);
+	GX_TexCoord2u8(12, 7);
 
-		GX_Position2u16(16, 20);					// Top Left
-		GX_Color1u16(0xfa65);
-		GX_TexCoord2u8(0, 4);
-		GX_Position2u16(32, 20);			// Top Right
-		GX_Color1u16(0xfa65);
-		GX_TexCoord2u8(4, 4);
-		GX_Position2u16(32, 20+ 16);	// Bottom Right
-		GX_Color1u16(0xfa65);
-		GX_TexCoord2u8(4, 6);
-		GX_Position2u16(16, 20+ 16);			// Bottom Left
-		GX_Color1u16(0xfa65);
-		GX_TexCoord2u8(0, 6);
+	GX_Position2u16(92+2, 216+2);					// Top Left
+	GX_Color1u16(0xf42d);
+	GX_TexCoord2u8(15, 5);
+	GX_Position2u16(104+2, 216+2);			// Top Right
+	GX_Color1u16(0xf42d);
+	GX_TexCoord2u8(18, 5);
+	GX_Position2u16(104+2, 216+ 16+2);	// Bottom Right
+	GX_Color1u16(0xf42d);
+	GX_TexCoord2u8(18, 7);
+	GX_Position2u16(92+2, 216+ 16+2);			// Bottom Left
+	GX_Color1u16(0xf42d);
+	GX_TexCoord2u8(15, 7);
 	GX_End();
-
 
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
@@ -318,33 +379,42 @@ void gui_Draw(GuiItems *items)
 	GX_SetTevDirect(GX_TEVSTAGE0);
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 3 << 2);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4 << 2);
 		GX_Position2u16(20 , 0);			// Top Left
 		GX_Color1u16(0x3274);
-		GX_Position2u16(250, 0);		// Top Right
+		GX_Position2u16(240, 0);		// Top Right
 		GX_Color1u16(0x3274);
-		GX_Position2u16(250, 240);	// Bottom Right
+		GX_Position2u16(240, 223);	// Bottom Right
+		GX_Color1u16(0x3274);
+		GX_Position2u16(20 , 223);		// Bottom Left
+		GX_Color1u16(0x3274);
+
+		GX_Position2u16(20 , 233);			// Top Left
+		GX_Color1u16(0x3274);
+		GX_Position2u16(240, 233);		// Top Right
+		GX_Color1u16(0x3274);
+		GX_Position2u16(240, 240);	// Bottom Right
 		GX_Color1u16(0x3274);
 		GX_Position2u16(20 , 240);		// Bottom Left
 		GX_Color1u16(0x3274);
 
-		GX_Position2u16(250, 0);			// Top Left
-		GX_Color1u16(0x31cf);
+		GX_Position2u16(241, 0);			// Top Left
+		GX_Color1u16(0x296d);
 		GX_Position2u16(320, 0);		// Top Right
-		GX_Color1u16(0x31cf);
+		GX_Color1u16(0x296d);
 		GX_Position2u16(320, 240);	// Bottom Right
-		GX_Color1u16(0x31cf);
-		GX_Position2u16(250, 240);		// Bottom Left
-		GX_Color1u16(0x31cf);
+		GX_Color1u16(0x296d);
+		GX_Position2u16(241, 240);		// Bottom Left
+		GX_Color1u16(0x296d);
 
-		GX_Position2u16(0, 216);
-		GX_Color1u16(0x31cf);
-		GX_Position2u16(320, 216);
-		GX_Color1u16(0x31cf);
-		GX_Position2u16(320, 232);	// Bottom Right
-		GX_Color1u16(0x31cf);
-		GX_Position2u16(0, 232);		// Bottom Left
-		GX_Color1u16(0x31cf);
+		GX_Position2u16(0, 218);
+		GX_Color1u16(0x296d);
+		GX_Position2u16(320, 218);
+		GX_Color1u16(0x296d);
+		GX_Position2u16(320, 230);	// Bottom Right
+		GX_Color1u16(0x296d);
+		GX_Position2u16(0, 230);		// Bottom Left
+		GX_Color1u16(0x296d);
 	GX_End();
 
 #if 0
@@ -366,7 +436,7 @@ void gui_Draw(GuiItems *items)
 	GX_Color1u16(0xFFFF);
 	GX_End();
 #endif
-	gui_DrawItems(items, 250, 216);
+	gui_DrawItems(items, 240, 216);
 
 	cursor_time += cursor_inc;
 	if (cursor_time <= 2.0f || cursor_time >= 254.0f) {
