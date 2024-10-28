@@ -1,6 +1,7 @@
 
 
 #include "gui.h"
+#include "../peripheral.h"
 
 
 GXTexObj gui_tobj;
@@ -80,15 +81,15 @@ void gui_Init(void)
 
 static void gui_DrawControllers()
 {
-	u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
+	//u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
 	u32 x = 240, y = 126;
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 8*4*2);
 	for (u32 i = 0; i < 8; ++i) {
 		u32 dx = x + ((i & 1) * 30);
 		u32 dy = y + ((i & ~1) * 11);
 		u32 num = i << 1;
-		u32 pad_tex = pad[i] << 3;
-		u32 color = (pad[i] ? 0xFFFF : 0xbdd7);
+		u32 pad_tex = perpad[i].type << 3;
+		u32 color = (perpad[i].type ? 0xFFFF : 0xbdd7);
 		GX_Position2u16(dx, dy);		// Top Left
 		GX_Color1u16(color);
 		GX_TexCoord2u8(pad_tex+24, 4);

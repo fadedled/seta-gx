@@ -549,8 +549,7 @@ int main(int argc, char **argv)
 {
 	char *device_path = NULL;
 	L2Enhance();
-	WPAD_Init();
-	PAD_Init();
+	per_Init();
 	SYS_SetResetCallback(reset);
 	SYS_SetPowerCallback(powerdown);
 

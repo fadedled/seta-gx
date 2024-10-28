@@ -23,6 +23,8 @@
 #include <ogcsys.h>
 #include <wiiuse/wpad.h>
 
+PerPad perpad[PER_PADMAX];
+
 PerData per_data;
 
 //XXX: this is for gamepad configuration
@@ -31,8 +33,10 @@ PerData per_data;
 //static u8 wpad_bitoffsets[16];
 
 
-void per_initPads()
+void per_Init(void)
 {
+	PAD_Init();
+	//WPAD_Init();
 	per_data.ids[0] = PER_ID_DIGITAL;
 }
 
@@ -73,19 +77,77 @@ static u32 per_updateDigitalGC(u32 indx, PADStatus *status)
 
 u32 per_updatePads()
 {
+	PADStatus padstatus[PAD_CHANMAX];
 	//Do port stuff here
 	u32 request_quit = 0;
 	per_data.data_sent = 0;
 	per_data.data_size = 1;
 	per_data.data[0] = 0xF0;
 	per_data.port2_offset = 1;
-
 	//Fill the Pads with connected
 	//XXX: this is only for 4 GC controllers... do same with Wii
 	//XXX: handle multitap (only 6 more controllers)
-	PADStatus padstatus[PAD_CHANMAX];
-
+	WPAD_ScanPads();
 	PAD_Read(padstatus);
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		if (padstatus[i].err == PAD_ERR_NONE) {
+			perpad[i].type = PAD_TYPE_GCPAD;
+			perpad[i].x = padstatus[i].stickX;
+			perpad[i].y = padstatus[i].stickY;
+			perpad[i].btn = padstatus[i].button;
+		} else {
+			perpad[i].type = PAD_TYPE_NONE;
+			perpad[i].x = 0;
+			perpad[i].y = 0;
+			perpad[i].btn = 0;
+		}
+	}
+	u32 per_num = 0;
+#if 0
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		while (perpad[per_num].type != PAD_TYPE_NONE) {
+			per_num++;
+		}
+		//WPADData *wpad = WPAD_Data(i);
+		if (wpad->err == WPAD_ERR_NONE) {
+			if (wpad->exp.type == WPAD_EXP_NONE) {
+				perpad[per_num].type = PAD_TYPE_WIIMOTE;
+				//TODO: fix the pointer coords
+				perpad[per_num].x = (s16) wpad->ir.x;
+				perpad[per_num].y = (s16) wpad->ir.y;
+				perpad[per_num].btn = wpad->btns_h;
+			} else if (wpad->exp.type == WPAD_EXP_CLASSIC) {
+				struct classic_ctrl_t *classic = &wpad->exp.classic;
+				perpad[per_num].type = PAD_TYPE_CLASSIC;
+
+				perpad[per_num].x = (s16) ((s8)classic->ljs.pos.x);
+				perpad[per_num].y = (s16) ((s8)classic->ljs.pos.y);
+				perpad[per_num].btn = wpad->btns_h;
+			} else {
+				perpad[per_num].type = PAD_TYPE_NONE;
+				perpad[per_num].x = 0;
+				perpad[per_num].y = 0;
+				perpad[per_num].btn = 0;
+			}
+			per_num++;
+		}
+	}
+#endif
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		if (padstatus[i].err == PAD_ERR_NONE) {
+			perpad[i].type = PAD_TYPE_GCPAD;
+			perpad[i].x = padstatus[i].stickX;
+			perpad[i].y = padstatus[i].stickY;
+			perpad[i].btn = padstatus[i].button;
+		} else {
+			perpad[i].type = PAD_TYPE_NONE;
+			perpad[i].x = 0;
+			perpad[i].y = 0;
+			perpad[i].btn = 0;
+		}
+	}
+
+
 	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
 		if (padstatus[i].err == PAD_ERR_NONE) {
 			//XXX: Check what type of pad it is
@@ -103,5 +165,6 @@ u32 per_updatePads()
 
 	return request_quit;
 }
+
 
 

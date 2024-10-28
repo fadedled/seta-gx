@@ -222,12 +222,6 @@ void PerMouseMove(PerMouse_struct * mouse, s32 dispx, s32 dispy);
 
 
 //NEW
-typedef struct PerPad_t {
-	u32 v0;
-	u32 v1;
-	u32 v2;
-	u32 v3;
-} PerPad;
 
 #define PER_PADMAX					8
 #define PER_DATASIZE				64
@@ -242,6 +236,21 @@ typedef struct PerData_t {
 
 extern PerData per_data;
 
+
+#define PAD_TYPE_NONE		0
+#define PAD_TYPE_GCPAD		1
+#define PAD_TYPE_WIIMOTE	2
+#define PAD_TYPE_CLASSIC	3
+
+typedef struct PerPad_t {
+	u32 type;
+	u32 port;
+	u32 btn;
+	s16 x;
+	s16 y;
+} PerPad;
+
+extern PerPad perpad[PER_PADMAX];
 
   /* Port Status:
   0x04 - Sega-tap is connected
@@ -301,7 +310,9 @@ extern PerData per_data;
 #define GC_BIT_Y				11
 #define GC_BIT_STR				12
 
-void per_initPad(u32 indx, u32 id);
+//TODO: Make generic wrapper for controller
+
+void per_Init(void);
 u32 per_updatePads(void);
 void per_closePad(u32 indx);
 
