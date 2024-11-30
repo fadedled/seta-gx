@@ -725,7 +725,7 @@ typedef struct {
     int colorcalc;
 } spritepixelinfo_struct;
 
-static INLINE void Vdp1GetSpritePixelInfo(int type, u16 * pixel, spritepixelinfo_struct *spi)
+static INLINE void Vdp1GetSpritePixelInfo(int type, u32 * pixel, spritepixelinfo_struct *spi)
 {
 	static const uint8_t priority_shift[16] =
 		{ 14, 13, 14, 13,  13, 12, 12, 12,  7, 7, 6, 0,  7, 7, 6, 0 };
@@ -748,7 +748,7 @@ static INLINE void Vdp1GetSpritePixelInfo(int type, u16 * pixel, spritepixelinfo
 
 //////////////////////////////////////////////////////////////////////////////
 
-static INLINE void Vdp1ProcessSpritePixel(int type, u16 *pixel, int *shadow, int *priority, int *colorcalc)
+static INLINE void Vdp1ProcessSpritePixel(int type, u32 *pixel, int *shadow, int *priority, int *colorcalc)
 {
    spritepixelinfo_struct spi;
 

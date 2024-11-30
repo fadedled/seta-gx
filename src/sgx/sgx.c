@@ -374,7 +374,7 @@ void SGX_BeginVdp1(void)
 void SGX_InitTex(u32 mapid, u32 use_rgb)
 {
 	u32 cache_regions[4] = {
-		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0xD8000 | (0x30000 >> 5)
+		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0x120000
 	};
 	//Texture regions
 	u32 reg = cache_regions[mapid];

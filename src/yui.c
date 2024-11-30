@@ -556,7 +556,7 @@ int main(int argc, char **argv)
 	usleep(500000);
 
 	//XXX: change the mount code... just check once...
-	fatInitDefault();
+	//fatInitDefault();
 	if(fatMountSimple("sd", &__io_wiisd)) {
 		device_path = "sd:/";
 	} else if (fatMountSimple("usb", &__io_usbstorage)){
@@ -634,6 +634,8 @@ int main(int argc, char **argv)
 	osd_ProfAddCounter(PROF_VDP2, "VDP2");
 	osd_ProfAddCounter(PROF_CDB, "CDB");
 
+	CON_EnableBarnacle(EXI_CHANNEL_0, EXI_DEVICE_1);
+	printf("what is this number? %d\n", 32);
 	//block_of_shit[0] = 32;
 	//VM_BATSet(0, block_of_shit, 0x0d000000, 0x20000);
 	//MappedMemoryInit();

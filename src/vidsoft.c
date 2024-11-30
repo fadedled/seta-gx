@@ -35,6 +35,7 @@
 #include "yui.h"
 
 #include <stdlib.h>
+#include <malloc.h>
 #include <stdarg.h>
 #include <limits.h>
 #include <math.h>
@@ -2194,7 +2195,7 @@ static void Vdp2DrawRBG0(void)
    info.isverticalscroll = 0;
    info.wctl = Vdp2Regs->WCTLC;
 
-   info.LoadLineParams = (void (*)(void *, int)) LoadLineParamsRBG0;
+   //info.LoadLineParams = (void (*)(void *, int)) LoadLineParamsRBG0;
 
    Vdp2DrawRotationFP(&info, parameter);
 }
