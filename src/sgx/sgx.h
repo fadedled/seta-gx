@@ -30,6 +30,7 @@
 #define TEXREG_SIZE_128K		0x120000
 #define TEXREG_SIZE_32K			0xD8000
 
+#define SPRITE_NONE			0
 #define SPRITE_4BPP			0
 #define SPRITE_8BPP			1
 #define SPRITE_16BPP		2
@@ -44,6 +45,7 @@
 
 #define	USE_NEW_VDP1		1
 
+#include "texconv.h"
 
 void SGX_Init(void);
 
@@ -64,7 +66,6 @@ void SGX_DrawBitmap(void);
 
 void SGX_Vdp2ColorRamLoad(void);
 void SGX_InvalidateVRAM(void);
-void SGX_SpriteConverterSet(u32 wsize, u32 bpp_id, u32 align);
 void SGX_TlutLoadCRAMImm(u32 pos, u32 trn_code, u32 size);
 void SGX_TlutCRAMUpdate(void);
 void SGX_ColorRamDirty(u32 pos);

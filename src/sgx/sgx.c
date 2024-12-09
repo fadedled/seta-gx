@@ -241,30 +241,6 @@ void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
 }
 
 
-//Uses the sprite size (from 0 to 62) to make use of indirect textrue conversion
-void SGX_SpriteConverterSet(u32 wsize, u32 bpp_id, u32 align)
-{
-	//XXX: Do something with the bpp_id
-	if (bpp_id == SPRITE_16BPP) {
-		GX_LoadTexObjPreloaded(&ind_texs[wsize][bpp_id][align], &ind_regions[wsize][bpp_id][align], GX_TEXMAP1);
-		GX_SetNumIndStages(1);
-		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP1);
-		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_1, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
-		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_4, GX_ITS_1);
-	} else {
-		if (wsize > 1) {
-			GX_LoadTexObjPreloaded(&ind_texs[wsize][bpp_id][align], &ind_regions[wsize][bpp_id][align], GX_TEXMAP1);
-			GX_SetNumIndStages(1);
-			GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP1);
-			GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_0, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
-			GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_8, GX_ITS_1);
-		} else {
-			GX_SetNumIndStages(0);
-			GX_SetTevDirect(GX_TEVSTAGE0);
-		}
-	}
-}
-
 
 //XXX: CHANGE THIS BACK TO THE WAY IT WAS BEFORE USING 4096 ENTRY TLUT
 //XXX: We can skip all this computation and do this while changing vdp2s color ram
