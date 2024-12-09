@@ -25,6 +25,11 @@
 #define TLUT_TYPE_8BPP			0x100
 
 
+#define TEXREG(addr, size)		((addr >> 5) | size)
+#define TEXREG_SIZE_NONE		0x0
+#define TEXREG_SIZE_128K		0x120000
+#define TEXREG_SIZE_32K			0xD8000
+
 #define SPRITE_4BPP			0
 #define SPRITE_8BPP			1
 #define SPRITE_16BPP		2
@@ -43,7 +48,7 @@
 void SGX_Init(void);
 
 void SGX_BeginVdp1(void);
-void SGX_InitTex(u32 mapid, u32 use_rgb);
+void SGX_InitTex(u32 mapid, u32 even, u32 odd);
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_EndVdp1(void);
@@ -69,6 +74,7 @@ void SGX_Vdp1Init(void);
 void SGX_Vdp1Deinit(void);
 void SGX_Vdp1Begin(void);
 void SGX_Vdp1End(void);
+void SGX_Vdp1DrawFramebuffer(void);
 void SGX_Vdp1ProcessFramebuffer(void);
 void SGX_Vdp1DrawNormalSpr(void);
 void SGX_Vdp1DrawScaledSpr(void);

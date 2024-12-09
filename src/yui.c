@@ -393,6 +393,7 @@ void InitGX(void )
 	GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
 	GX_SetCopyFilter(GX_FALSE, rmode->sample_pattern, GX_FALSE, rmode->vfilter);
 	GX_SetFieldMode(GX_DISABLE,((rmode->viHeight == 2*rmode->xfbHeight)? GX_ENABLE : GX_DISABLE));
+	GX_SetDither(GX_DISABLE);
 
 	//XXX: do this in another place
     GX_InvVtxCache();

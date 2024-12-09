@@ -216,14 +216,14 @@ void SGX_Init(void)
 
 	//Set the color bank.
 	tlut_data = (u32*) memalign(32, 0x200);
-	u32 val = 0x80008001;
+	u32 val = 0x70007001;
 	u32 *dst = tlut_data;
 	for (int i = 0; i < 128; ++i) {
 		*dst = val;
 		++dst;
 		val += 0x00020002;
 	}
-	*tlut_data = 0x00008001;
+	*tlut_data = 0x00007001;
 	DCFlushRange(tlut_data, 0x200);
 	SGX_Vdp1Init();
 }
@@ -371,24 +371,44 @@ void SGX_BeginVdp1(void)
 	GX_LOAD_BP_REG(tex_maddr);
 }
 
-void SGX_InitTex(u32 mapid, u32 use_rgb)
+void SGX_InitTex(u32 mapid, u32 even, u32 odd)
 {
-	u32 cache_regions[4] = {
-		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0x120000
-	};
 	//Texture regions
-	u32 reg = cache_regions[mapid];
 	mapid <<= 24;
-	u32 tmem_even = 0x8C000000 | mapid | reg;	// 128k cache
+	u32 tmem_even = 0x8C000000 | mapid | even;	// 128k cache
 	u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
 	//Texture filter
-	u32 tex_filt = 0x80000000 | mapid;
+	u32 tex_filt = 0x80000000 | mapid | odd;
 	u32 tex_lod = 0x84000000 | mapid;
 
 	GX_LOAD_BP_REG(tex_filt);
 	GX_LOAD_BP_REG(tex_lod);
 	GX_LOAD_BP_REG(tmem_even);
 	GX_LOAD_BP_REG(tmem_odd);
+}
+
+void SGX_InitTexSet(u32 tex_count, u32 map0_even, u32 map1_even)
+{
+#if 0
+	u32 cache_regions[4] = {
+		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0x120000
+	};
+	//Texture regions
+	u32 reg = cache_regions[mapid];
+	i <<= 24;
+	for (u32 i = 0; i < tex_count; ++i) {
+		u32 tmem_even = 0x8C000000 | mapid | reg;	// 128k cache
+		u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
+		//Texture filter
+		u32 tex_filt = 0x80000000 | mapid;
+		u32 tex_lod = 0x84000000 | mapid;
+
+		GX_LOAD_BP_REG(tex_filt);
+		GX_LOAD_BP_REG(tex_lod);
+		GX_LOAD_BP_REG(tmem_even);
+		GX_LOAD_BP_REG(tmem_odd);
+	}
+#endif
 }
 
 void SGX_LoadTlut(void *data_addr, u32 tlut)
