@@ -60,7 +60,8 @@ u16 *output_tex ATTRIBUTE_ALIGN(32);
 u8  *win_tex ATTRIBUTE_ALIGN(32);
 u8  *prcc_tex ATTRIBUTE_ALIGN(32);
 
-
+u32 sys_clipx = 320;
+u32 sys_clipy = 240;
 
 u32 is_processed = 0;
 
@@ -154,7 +155,9 @@ void SGX_Vdp1Begin(void)
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_ENABLE);
 
+	//GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	GX_SetCurrentMtx(GXMTX_VDP1);
+	GX_SetScissor(0, 0, sys_clipx, sys_clipy);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 
 	is_processed = 0;
@@ -407,9 +410,7 @@ return;
 //and then proceses it depending on the sprite type
 void SGX_Vdp1End(void)
 {
-	GX_SetNumIndStages(0);
-	GX_SetTevDirect(GX_TEVSTAGE0);
-	GX_SetTevDirect(GX_TEVSTAGE1);
+	SGX_SpriteConverterSet(0, SPRITE_NONE, 0);
 	//Copy colors
 
 	//TODO: copy resolutions
@@ -894,12 +895,14 @@ void SGX_Vdp1UserClip(void)
 void SGX_Vdp1SysClip(void)
 {
 	//TODO: should clamp value.
-	GX_SetScissor(0, 0, vdp1cmd->XC + 1, vdp1cmd->YC + 1);
+	sys_clipx = vdp1cmd->XC + 1;
+	sys_clipy = vdp1cmd->YC + 1;
+	GX_SetScissor(0, 0, sys_clipx, sys_clipy);
 }
 
 void SGX_Vdp1LocalCoord(void)
 {
-	vdp1mtx[0][3] = (f32) (vdp1cmd->XA);
-	vdp1mtx[1][3] = (f32) (vdp1cmd->YA);
+	vdp1mtx[0][3] = (f32) ((s16)vdp1cmd->XA);
+	vdp1mtx[1][3] = (f32) ((s16)vdp1cmd->YA);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 }

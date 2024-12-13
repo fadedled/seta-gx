@@ -2318,7 +2318,7 @@ void VIDSoftVdp1DrawStart(void)
 
 	//GX_LoadPosMtxIdx(0, GX_PNMTX0);
 	//Load vdp1 matrix... should we clear the values?
-	GX_LoadPosMtxImm(mat[GXMTX_VDP1], GXMTX_VDP1);
+	//GX_LoadPosMtxImm(mat[GXMTX_VDP1], GXMTX_VDP1);
 	GX_SetCurrentMtx(GXMTX_VDP1);
 
 	GX_ClearVtxDesc();
@@ -3008,7 +3008,7 @@ void VIDSoftVdp1LocalCoordinate(void)
 	//DCStoreRange(mat, 0x20);
 	//GX_LoadPosMtxIdx(0, GX_PNMTX0);
 	//mat[GXMTX_VDP1][2][3] = (f32) (pritority);
-	GX_LoadPosMtxImm(mat[GXMTX_VDP1], GXMTX_VDP1);
+	//GX_LoadPosMtxImm(mat[GXMTX_VDP1], GXMTX_VDP1);
 	//Vdp1Regs->localX = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 0xC);
 	//Vdp1Regs->localY = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 0xE);
 }

@@ -53,7 +53,6 @@ do {								\
 
 #define __FLUSH_TEX_STATE		GX_LOAD_BP_REG(0x0F << 24)
 
-extern Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //XXX: divide?
 static u16 tlut_14bpp_ram[0x800] ATTRIBUTE_ALIGN(32);
@@ -67,9 +66,6 @@ static GXTexRegion tex_region[3];
 //static GXTexObj    indtex_objects[192];
 
 //Tex Swizzler are stored by size, format and aligment
-static GXTexRegion ind_regions[64][3][4];
-static GXTexObj    ind_texs[64][3][4];
-
 static GXTexRegion ind_cellreg8;
 static GXTexObj    ind_celltex8;
 
