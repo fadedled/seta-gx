@@ -24,7 +24,8 @@
 #define TLUT_TYPE_4BPP			0x80
 #define TLUT_TYPE_8BPP			0x100
 
-
+#define TEX_FMT(fmt, w, h)			((fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu))
+#define TEX_ATTR(wrap_s, wrap_t)	((((wrap_t) & 0x3u) << 2) | ((wrap_s) & 0x3u))
 #define TEXREG(addr, size)		((addr >> 5) | size)
 #define TEXREG_SIZE_NONE		0x0
 #define TEXREG_SIZE_128K		0x120000
@@ -34,6 +35,12 @@
 #define SPRITE_4BPP			0
 #define SPRITE_8BPP			1
 #define SPRITE_16BPP		2
+
+#define TEXPRE_TYPE_4BPP	(1<<15)
+#define TEXPRE_TYPE_8BPP	(2<<15)
+#define TEXPRE_TYPE_16BPP	(2<<15)
+#define TEXPRE_TYPE_32BPP	(3<<15)
+
 
 
 #define PRI_SPR(x)					(((f32)(x)) - (8.0f - (0.125f * 5.0f)))
@@ -45,15 +52,26 @@
 
 #define	USE_NEW_VDP1		1
 
-#include "texconv.h"
+typedef struct SGXTexPre_t {
+	u32 addr; 	//Address region in TMEM
+	u32 fmt;	//Format for loading texture to TEXMAP
+	u32 attr;
+} SGXTexPre;
+
 
 void SGX_Init(void);
+
+
 
 void SGX_BeginVdp1(void);
 void SGX_InitTex(u32 mapid, u32 even, u32 odd);
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
+void SGX_PreloadTex(void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt);
+void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex);
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
+void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align);
 void SGX_EndVdp1(void);
+
 
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
@@ -88,5 +106,6 @@ void SGX_Vdp1SysClip(void);
 void SGX_Vdp1LocalCoord(void);
 
 void SGX_Vdp2Draw(void);
+
 
 #endif //__VID_GX_H__

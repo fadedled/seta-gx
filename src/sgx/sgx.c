@@ -5,7 +5,6 @@
 #include "../vdp2.h"
 #include "../osd/gui.h"
 #include <malloc.h>
-#include "../../res/tex_swizzler.inc"
 
 #define TREG_VDPTEX			0
 #define TREG_RGBTEX			0
@@ -146,52 +145,8 @@ void SGX_Init(void)
 
 
 	//Set the texcache regions
-	GX_InitTexCacheRegion(&tex_region[0], GX_FALSE, 0, GX_TEXCACHE_128K, 0, GX_TEXCACHE_NONE);
-	GX_InitTexCacheRegion(&tex_region[1], GX_FALSE, 0, GX_TEXCACHE_32K,  0x80000, GX_TEXCACHE_32K);
 	GX_SetTexRegionCallback(__SGX_CalcTexRegion);
 	GX_SetTlutRegionCallback(__SGX_CalcTlutRegion);
-
-	//337920 bytes of indirect textures
-	u32 tex_ofs = 0;
-	for (u32 i = 1; i < 64; ++i) {
-		u32 size = ((i >> 2) + ((i & 0x3) > 0)) * 64;
-		for (u32 align = 0; align < 4; ++align) {
-			GX_InitTexObj(&ind_texs[i][SPRITE_4BPP][align], (void*) &tex_swizzler_bin[tex_ofs], i, 8, GX_TF_IA8, GX_CLAMP, GX_REPEAT, GX_FALSE);
-			GX_InitTexObjLOD(&ind_texs[i][SPRITE_4BPP][align], GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-			GX_InitTexPreloadRegion(&ind_regions[i][SPRITE_4BPP][align], 0x20000 + tex_ofs, size, 0, GX_TEXCACHE_NONE);
-			GX_PreloadEntireTexture(&ind_texs[i][SPRITE_4BPP][align], &ind_regions[i][SPRITE_4BPP][align]);
-			tex_ofs += size;
-		}
-	}
-
-	for (u32 i = 1; i < 64; ++i) {
-		u32 size = ((i >> 2) + ((i & 0x3) > 0)) * 32;
-		for (u32 align = 0; align < 4; ++align) {
-			GX_InitTexObj(&ind_texs[i][SPRITE_8BPP][align], (void*) &tex_swizzler_bin[tex_ofs], i, 4, GX_TF_IA8, GX_CLAMP, GX_REPEAT, GX_FALSE);
-			GX_InitTexObjLOD(&ind_texs[i][SPRITE_8BPP][align], GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-			GX_InitTexPreloadRegion(&ind_regions[i][SPRITE_8BPP][align], 0x20000 + tex_ofs, size, 0, GX_TEXCACHE_NONE);
-			GX_PreloadEntireTexture(&ind_texs[i][SPRITE_8BPP][align], &ind_regions[i][SPRITE_8BPP][align]);
-			tex_ofs += size;
-		}
-	}
-
-	for (u32 i = 1; i < 64; ++i) {
-		u32 ii = i * 2;
-		u32 size = ((ii >> 2) + ((ii & 0x3) > 0)) * 32;
-		for (u32 align = 0; align < 4; ++align) {
-			GX_InitTexObj(&ind_texs[i][SPRITE_16BPP][align], (void*) &tex_swizzler_bin[tex_ofs], i<<1, 4, GX_TF_IA8, GX_CLAMP, GX_REPEAT, GX_FALSE);
-			GX_InitTexObjLOD(&ind_texs[i][SPRITE_16BPP][align], GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-			GX_InitTexPreloadRegion(&ind_regions[i][SPRITE_16BPP][align], 0x20000 + tex_ofs, size, 0, GX_TEXCACHE_NONE);
-			GX_PreloadEntireTexture(&ind_texs[i][SPRITE_16BPP][align], &ind_regions[i][SPRITE_16BPP][align]);
-			tex_ofs += size;
-		}
-	}
-
-	GX_InitTexObj(&ind_celltex8, (void*) &cell8_tex, 2, 2, GX_TF_IA8, GX_REPEAT, GX_REPEAT, GX_FALSE);
-	GX_InitTexObjLOD(&ind_celltex8, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-	GX_InitTexPreloadRegion(&ind_cellreg8, 0x20000 + tex_ofs, 32, 0, GX_TEXCACHE_NONE);
-	GX_PreloadEntireTexture(&ind_celltex8, &ind_cellreg8);
-	tex_ofs += 32;
 
 	f32 indmat8[2][3] = {
 		{1.0f/4.0f, 0, 0},
@@ -397,6 +352,41 @@ void SGX_LoadTlut(void *data_addr, u32 tlut)
 	__FLUSH_TEX_STATE;
 }
 
+
+void SGX_PreloadTex(void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt)
+{
+	u32 tex_maddr = 0x60000000 | (MEM_VIRTUAL_TO_PHYSICAL(tex_addr) >> 5);
+	u32 tmem_even = 0x61000000 | (tmem_addr & 0x7fff);
+	u32 tex_size = 0x63000000 | (tile_cnt_fmt & 0x1ffff);
+
+	__FLUSH_TEX_STATE;
+	GX_LOAD_BP_REG(tex_maddr);
+	GX_LOAD_BP_REG(tmem_even);
+	GX_LOAD_BP_REG(0x62000000);
+	GX_LOAD_BP_REG(tex_size);
+	__FLUSH_TEX_STATE;
+}
+
+
+void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex)
+{
+	mapid = (((mapid & 0x4) << 3) |(mapid & 0x3)) << 24;
+	u32 tex_filt = 0x80000000 | mapid | tex->attr;
+	u32 tex_lod = 0x84000000 | mapid;
+	u32 tex_size = 0x88000000 | mapid | tex->fmt;
+
+	u32 tmem_even = 0x8C000000 | mapid | tex->addr;
+	u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
+
+	__FLUSH_TEX_STATE;
+	GX_LOAD_BP_REG(tex_filt);
+	GX_LOAD_BP_REG(tex_lod);
+	GX_LOAD_BP_REG(tex_size);
+
+	GX_LOAD_BP_REG(tmem_even);
+	GX_LOAD_BP_REG(tmem_odd);
+	__FLUSH_TEX_STATE;
+}
 
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 {

@@ -210,13 +210,13 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
 
 		SGX_SetTex(color_tex, GX_TF_CI14, 352, 240, TLUT_INDX(0, 0));
-		SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
-		SGX_SetOtherTex(GX_TEXMAP1, win_tex, GX_TF_I8, 352, 240, 0);
+		SGX_InitTex(GX_TEXMAP2, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
+		SGX_SetOtherTex(GX_TEXMAP2, win_tex, GX_TF_I8, 352, 240, 0);
 		SGX_InitTex(GX_TEXMAP3, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
 		SGX_SetOtherTex(GX_TEXMAP3, color_tex, GX_TF_RGB5A3, 352, 240, 0);
 
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 		GX_SetTevOrder(GX_TEVSTAGE2, GX_TEXCOORD0, GX_TEXMAP3, GX_COLORNULL);
 
 		//Get CRAM colors using CI14 and RGB565
@@ -283,6 +283,41 @@ static void __Vdp1Convert16bpp(void)
 	//Saturns 16bpp format. This means we must modify the framebuffer before
 	//a copy. We copy using the
 	//We shift EFB's bits to make one copy
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
+
+	//Get in RGB565 colors, Reds MSB is cleared
+	GXColor ext_kolor = {0x00, 0x00, 0x00, 0xFF};
+	GX_SetTevKColor(GX_KCOLOR0, ext_kolor);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_SUB, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+
+	//TODO: This blending does not work always
+	GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTALPHA, GX_BL_ONE, GX_LO_OR);
+	GX_SetDstAlpha(GX_FALSE, 0x00);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
+
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Position2s16(0, 0);
+	GX_Position2s16(352, 0);
+	GX_Position2s16(352, 240);
+	GX_Position2s16(0, 240);
+	GX_End();
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
+return;
 	GXColor cc = {0x00, 0x00, 0x00, 0xFF};
 	GX_SetCopyClear(cc, 0);
 
@@ -297,7 +332,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_CopyTex(win_tex, GX_TRUE);
 
 	GX_SetColorUpdate(GX_TRUE);
-	GX_SetTexCopyDst(352, 240, GX_TF_RGB5A3, GX_FALSE);
+	GX_SetTexCopyDst(352, 240, GX_TF_RGB565, GX_FALSE);
 	GX_CopyTex(color_tex, GX_TRUE);
 	GX_PixModeSync();
 
@@ -310,12 +345,12 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 
 	//TODO: Load TLUT
 	SGX_SetTex(color_tex, GX_TF_RGB565, 352, 240, 0);
-	SGX_InitTex(GX_TEXMAP1, TEXREG(0x28000, TEXREG_SIZE_32K), 0);
-	SGX_SetOtherTex(GX_TEXMAP1, win_tex, GX_TF_I8, 352, 240, 0);
+	SGX_InitTex(GX_TEXMAP2, TEXREG(0x28000, TEXREG_SIZE_32K), 0);
+	SGX_SetOtherTex(GX_TEXMAP2, win_tex, GX_TF_I8, 352, 240, 0);
 
 	//Get in RGB565 colors, Reds MSB is cleared
 	GXColor convk = {0x80, 0x00, 0x00, 0x10};

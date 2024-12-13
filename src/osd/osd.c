@@ -161,7 +161,7 @@ void osd_ProfAddTime(u32 indx, u32 ticks)
 		prof_counters[indx].value += ticks;
 	}
 }
-
+extern u32 preloadtex_addr;
 
 void osd_ProfDraw(void)
 {
@@ -220,7 +220,7 @@ void osd_ProfDraw(void)
 
 
 	x = 8;
-	u32 numc = sprintf(tstr, "%5s:%6d", "TOTAL", total);
+	u32 numc = sprintf(tstr, "%5s:%6d", "TOTAL", preloadtex_addr);
 	GX_Begin(GX_QUADS, GX_VTXFMT1, 4 * numc);
 	for (u32 j = 0; j < numc; ++j) {
 		u32 chr_x = ((tstr[j]) & 0x1F);
