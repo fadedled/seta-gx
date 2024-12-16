@@ -128,6 +128,7 @@ static GXTexRegion* __SGX_CalcTexRegion(const GXTexObj *obj, u8 mapid)
 
 void SGX_Init(void)
 {
+	GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
 	gui_Init();
 	GX_SetArray(GX_VA_TEX0, tex_array, sizeof(*tex_array) * 2);
 

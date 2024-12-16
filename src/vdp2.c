@@ -36,7 +36,7 @@
 u8 * Vdp2Ram;
 u8 * Vdp2ColorRam;
 
-u8 vdp2_cram[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
+u8 vdp2_cram[PAGE_SIZE*2] ATTRIBUTE_ALIGN(PAGE_SIZE);
 u8 vdp2_regs[PAGE_SIZE] ATTRIBUTE_ALIGN(PAGE_SIZE);
 Vdp2 * Vdp2Regs;
 Vdp2Internal_struct Vdp2Internal;
@@ -140,7 +140,7 @@ void FASTCALL Vdp2ColorRamWriteByte(u32 addr, u8 val) {
 //DONE
 void FASTCALL Vdp2ColorRamWriteWord(u32 addr, u16 val) {
 	addr &= 0xFFF;
-	//val |= 0x8000;
+	val |= 0x8000;
 	//XXX: set first address to RGB4A3
 	//if (!addr) {
 	//	val = TO_RGB4A3(val);
@@ -157,7 +157,7 @@ void FASTCALL Vdp2ColorRamWriteWord(u32 addr, u16 val) {
 void FASTCALL Vdp2ColorRamWriteLong(u32 addr, u32 val) {
 	addr &= 0xFFF;
 	//XXX: this hack should not be done in mode 2...
-	//val |= 0x80008000;
+	val |= 0x80008000;
 	SGX_ColorRamDirty(addr >> 5);
 	T2WriteLong(Vdp2ColorRam, addr, val);
    	if (Vdp2Internal.ColorMode == 0 ) {
@@ -350,8 +350,8 @@ void Vdp2VBlankOUT(void)
 	GX_InvalidateTexAll();
 	//SGX_TlutCRAMUpdate();
 
-	GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
-	GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
+	//GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
+	//GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
 #if USE_NEW_VDP1
 	if (Vdp2Regs->TVMD & 0x8000) {
@@ -363,7 +363,7 @@ void Vdp2VBlankOUT(void)
 
 		cycles_start = gettime();
 		Vdp1Draw();	//Create DL for GX
-		//SGX_Vdp1DrawFramebuffer();
+		SGX_Vdp1DrawFramebuffer();
 		//SGX_Vdp1ProcessFramebuffer();
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 	} else {
