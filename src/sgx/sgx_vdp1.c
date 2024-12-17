@@ -49,7 +49,15 @@ do {								\
 
 #define SGX_TORGBA32(col) ((((col) & 0x1F) | (((col) & 0x3E0) << 3) | (((col) & 0x7C00) << 6)) << 11)
 #define SGX_TORGB565(col) (((col) & 0x1F) | ((col << 1) & 0xFFC0))
+#define SGX_RGB4TO565(col) ((((col) & 0x700) << 4) | (((col) & 0xF0) << 3))
 #define SGX_FROMRGB565(col) (((col) & 0x1F) | ((col >> 1) & 0x7FE0))
+
+struct Vdp1Pix {
+	u32 type;
+	u32 color_mask;
+	u32 prcc_shft;
+	u32 win_shft;
+} vdp1pix;
 
 Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
@@ -100,6 +108,20 @@ void SGX_Vdp1Deinit(void)
 	free(win_tex);
 	free(output_tex);
 }
+
+
+static const uint8_t priority_shift[16] =
+{ 14, 13, 14, 13,  13, 12, 12, 12,  7, 7, 6, 0,  7, 7, 6, 0 };
+static const uint8_t priority_mask[16] =
+{  3,  7,  1,  3,   3,  7,  7,  7,  1, 1, 3, 0,  1, 1, 3, 0 };
+static const uint8_t alpha_shift[16] =
+{ 11, 11, 11, 11,  10, 11, 10,  9,  0, 6, 0, 6,  0, 6, 0, 6 };
+static const uint8_t alpha_mask[16] =
+{  7,  3,  7,  3,   7,  1,  3,  7,  0, 1, 0, 3,  0, 1, 0, 3 };
+static const uint16_t color_mask[16] =
+{  0x7FF, 0x7FF, 0x7FF, 0x7FF,  0x3FF, 0x7FF, 0x3FF, 0x1FF,
+	0x7F,  0x3F,  0x3F,  0x3F,   0xFF,  0xFF,  0xFF,  0xFF };
+
 
 
 //Begins the Vdp1 Drawing Process
@@ -160,6 +182,10 @@ void SGX_Vdp1Begin(void)
 	GX_SetScissor(0, 0, sys_clipx, sys_clipy);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 
+	//Store format
+	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
+	vdp1pix.color_mask = color_mask[vdp1pix.type];
+
 	is_processed = 0;
 }
 
@@ -167,19 +193,6 @@ void SGX_Vdp1Begin(void)
 static u16 clut_4bpp[16] = {
 
 };
-
-static const uint8_t priority_shift[16] =
-	{ 14, 13, 14, 13,  13, 12, 12, 12,  7, 7, 6, 0,  7, 7, 6, 0 };
-static const uint8_t priority_mask[16] =
-	{  3,  7,  1,  3,   3,  7,  7,  7,  1, 1, 3, 0,  1, 1, 3, 0 };
-static const uint8_t alpha_shift[16] =
-	{ 11, 11, 11, 11,  10, 11, 10,  9,  0, 6, 0, 6,  0, 6, 0, 6 };
-static const uint8_t alpha_mask[16] =
-	{  7,  3,  7,  3,   7,  1,  3,  7,  0, 1, 0, 3,  0, 1, 0, 3 };
-static const uint16_t color_mask[16] =
-	{  0x7FF, 0x7FF, 0x7FF, 0x7FF,  0x3FF, 0x7FF, 0x3FF, 0x1FF,
-		0x7F,  0x3F,  0x3F,  0x3F,   0xFF,  0xFF,  0xFF,  0xFF };
-
 
 
 //Vdp1SetFramebufferTEV
@@ -227,7 +240,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
-		GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_BGR24_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 
 		//Get Window for stencil and to check if MSB is set
@@ -238,8 +251,8 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//Get ARGB1555 colors, use window MSB to mix with CRAM colors.
 		//TODO: skip if MSB is not for RGB format
 		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
-		SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
-		SGX_SetOtherTex(GX_TEXMAP1, color_tex+704*256, GX_TF_RGB5A3, 352, 240, 0);
+		SGX_InitTex(GX_TEXMAP1, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
+		SGX_SetOtherTex(GX_TEXMAP1, color_tex, GX_TF_RGB5A3, 352, 240, 0);
 		GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
 		GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -331,8 +344,6 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetAlphaUpdate(GX_TRUE);
 	GX_SetTexCopySrc(0, 0, 352, 240);
 	GX_SetTexCopyDst(352, 240, GX_TF_RGB5A3, GX_FALSE);
-	GX_CopyTex(color_tex + 704*256, GX_FALSE);
-	GX_SetTexCopyDst(352, 240, GX_TF_RGB565, GX_FALSE);
 	GX_CopyTex(color_tex, GX_TRUE);
 
 	//TODO: Copy
@@ -480,7 +491,7 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 			__SGX_Vdp1SetConstantPart(0);
 			SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_CLRBANK);
 			SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
-			return colr & 0xFFF0;
+			return SGX_RGB4TO565(colr & 0xFFF0 & vdp1pix.color_mask);
 		case 1: // LUT 4-bit
 			u32 colorlut = (colr << 3) & 0x7FFFF;
 			//Check for colorbanking...
@@ -496,7 +507,7 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 				__SGX_Vdp1SetConstantPart(0);
 				SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_CLRBANK);
 				SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
-				return cb & 0xFFF0;
+				return SGX_RGB4TO565(cb & 0xFFF0 & vdp1pix.color_mask);
 			}
 			//Its RGB code.
 			if (trn_code) {
@@ -514,7 +525,7 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 			__SGX_Vdp1SetConstantPart(0);
 			SGX_SetTex(chr_addr, GX_TF_CI8, spr_w, spr_h, TLUT_INDX_CLRBANK);
 			SGX_SpriteConverterSet(w, SPRITE_8BPP, vdp1cmd->SRCA & 3);
-			return colr & 0xFFC0;	 //TODO: This is wrong
+			return SGX_RGB4TO565(colr & 0xFFC0 & vdp1pix.color_mask);	 //TODO: This is wrong
 		case 5: // RGB
 			__SGX_Vdp1SetConstantPart(is_rgb | 1);
 			SGX_SetTex(chr_addr, GX_TF_RGB5A3, spr_w, spr_h, 0);

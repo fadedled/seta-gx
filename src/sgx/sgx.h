@@ -11,7 +11,7 @@
 #define TLUT_INDX(type, pos)	((GX_TLUT_2K << 10) | (((pos) + (type) + 0x200) & 0x3ff))
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))
 #define TLUT_INDX_IMM4			(((GX_TLUT_16) << 10) | (0x380 & 0x3ff))
-#define TLUT_INDX_IMM8			(((GX_TLUT_256) << 10) | (0x381 & 0x3ff))
+#define TLUT_INDX_IMM8			(((GX_TLUT_256) << 10) | (0x3E0 & 0x3ff))
 #define TLUT_INDX_CLRBANK		(((GX_TLUT_256) << 10) | 0x3F0)
 
 #define GXMTX_IDENTITY			GX_PNMTX0
