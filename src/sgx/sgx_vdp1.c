@@ -46,9 +46,10 @@ do {								\
 	asm volatile ("" ::: "memory" ); \
 } while(0)
 
-
 #define SGX_TORGBA32(col) ((((col) & 0x1F) | (((col) & 0x3E0) << 3) | (((col) & 0x7C00) << 6)) << 11)
+#define SGX_TORGBA6(col) ((((col) & 0x1F) | (((col) & 0x3E0) << 1) | (((col) & 0x7C00) << 2)) << 7)
 #define SGX_TORGB565(col) (((col) & 0x1F) | ((col << 1) & 0xFFC0))
+#define SGX_CONST_TO_RGBA6(col) 	(((col & 0xFC00) << 8) | ((col & 0x7FF) << 7))
 #define SGX_RGB4TO565(col) ((((col) & 0x700) << 4) | (((col) & 0xF0) << 3))
 #define SGX_FROMRGB565(col) (((col) & 0x1F) | ((col >> 1) & 0x7FE0))
 
@@ -63,6 +64,7 @@ Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
 u8 *color_tex ATTRIBUTE_ALIGN(32);
+u8 *color_rgb_tex ATTRIBUTE_ALIGN(32);
 u8 *output_tex ATTRIBUTE_ALIGN(32);
 
 u8  *win_tex ATTRIBUTE_ALIGN(32);
@@ -96,6 +98,7 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP3, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	color_tex = (u8*) memalign(32, 704*512);
+	color_rgb_tex = color_tex + (704*256);
 	output_tex = (u8*) memalign(32, 704*512);
 	win_tex  = (u8*) memalign(32, 704*256);
 	prcc_tex = win_tex + (704*128);
@@ -149,38 +152,35 @@ void SGX_Vdp1Begin(void)
 	//XXX: this is for paletted sprites, Konst is for transparency, gouraud is always active and half
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_BGR24_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_ZERO, GX_CA_KONST, GX_CA_ZERO);
 
 	//TODO: This blending does not work always
 	GX_SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
-	GX_SetAlphaUpdate(GX_TRUE);
 	GX_SetDstAlpha(GX_TRUE, 0x00);
 
 	//ONLY FOR CONSTATNS
-	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1_2);
 	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 
 	//Set how the textures are set up
 	//TODO: do this in another function
 	SGX_InitTex(GX_TEXMAP0, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
-	SGX_LoadTlut(tlut_data, TLUT_INDX_CLRBANK);
 
 	//Draw the mesh z-texture
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 
-	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 	GX_SetColorUpdate(GX_TRUE);
+	GX_SetAlphaUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_ENABLE);
-
-	//GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
+	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	GX_SetCurrentMtx(GXMTX_VDP1);
-	GX_SetScissor(0, 0, sys_clipx, sys_clipy);
+	GX_SetScissor(0, 0, 320, 240);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
+	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
@@ -200,7 +200,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 {
 	GX_InvalidateTexAll();
 	u32 col_offset = (Vdp2Regs->CRAOFB << 4) & 0x700;
-	SGX_LoadTlut(Vdp2ColorRam + (col_offset << 1), TLUT_INDX(0, 0));
+	SGX_LoadTlut(Vdp2ColorRam + (col_offset << 1), TLUT_SIZE_2K | TLUT_INDX_CRAM);
 	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -236,7 +236,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
 		//GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_A8_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		//GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_KONST, GX_CA_KONST, GX_CA_ZERO);
-		SGX_SetTex(color_tex, GX_TF_CI14, 352, 240, TLUT_INDX(0, 0));
+		SGX_SetTex(color_tex, GX_TF_CI14, 352, 240, TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM);
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
@@ -251,8 +251,8 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//Get ARGB1555 colors, use window MSB to mix with CRAM colors.
 		//TODO: skip if MSB is not for RGB format
 		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
-		SGX_InitTex(GX_TEXMAP1, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
-		SGX_SetOtherTex(GX_TEXMAP1, color_tex, GX_TF_RGB5A3, 352, 240, 0);
+		SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
+		SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, 352, 240, 0);
 		GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
 		GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -299,6 +299,8 @@ static void __Vdp1Convert16bpp(void)
 	//The RGB5A3 in the Wii looses information that needs to be stored by
 	//Saturns 16bpp format. This means we must modify the framebuffer before
 	//a copy. We copy using the
+
+	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	//We shift EFB's bits to make one copy
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -311,8 +313,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
 
 	//Get in RGB565 colors, Reds MSB is cleared
-	GXColor ext_kolor = {0x00, 0x00, 0x00, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, ext_kolor);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_SUB, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
@@ -326,28 +327,54 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
+	//Check if there is mixed RGB and palette format
+	if (Vdp2Regs->SPCTL & 0x20) {
+		//Extend Alpha for correct RGBA5551 copying
+		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+			GX_Position2s16(0, 0);
+			GX_Position2s16(352, 0);
+			GX_Position2s16(352, 240);
+			GX_Position2s16(0, 240);
+		GX_End();
+		//Copy RGB colors
+		GX_SetColorUpdate(GX_TRUE);
+		GX_SetAlphaUpdate(GX_TRUE);
+		GX_SetTexCopySrc(0, 0, 352, 240);
+		GX_SetTexCopyDst(352, 240, GX_TF_RGB5A3, GX_FALSE);
+		GX_CopyTex(color_rgb_tex, GX_FALSE);
+	}
+
+	//Copy PRCC data
+	if (vdp1pix.type == 7) {
+		//Change the pixel format for R8 copying only if sprite type is 7
+		//because that type uses 7 bits for priority and color calculation
+		GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
+		GX_SetTexCopyDst(352, 240, GX_CTF_R8, GX_FALSE);
+		GX_CopyTex(prcc_tex, GX_FALSE);
+		GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
+	} else {
+		GX_SetTexCopyDst(352, 240, GX_CTF_R8, GX_FALSE);
+		GX_CopyTex(prcc_tex, GX_FALSE);
+	}
+
+	//Mask dot color data bits
+	GXColor ext_kolor = {0x00, (vdp1pix.color_mask & ~0x1F) >> 3, (vdp1pix.color_mask & 0x1F) << 3, 0xFF};
+	GX_SetTevKColor(GX_KCOLOR0, ext_kolor);
+	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_ONE, GX_BL_ONE, GX_LO_AND);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 	GX_Position2s16(0, 0);
 	GX_Position2s16(352, 0);
 	GX_Position2s16(352, 240);
 	GX_Position2s16(0, 240);
 	GX_End();
+
+	//Copy Dot color data
+	GX_SetTexCopyDst(352, 240, GX_TF_RGB565, GX_FALSE);
+	GX_CopyTex(color_tex, GX_FALSE);
+
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
-
-	//VDP1 Framebuffer copy works in the following way:
-	//1. if
-	GXColor cc = {0x00, 0x00, 0x00, 0x00};
-	GX_SetCopyClear(cc, 0);
-
-	GX_SetColorUpdate(GX_TRUE);
-	GX_SetAlphaUpdate(GX_TRUE);
-	GX_SetTexCopySrc(0, 0, 352, 240);
-	GX_SetTexCopyDst(352, 240, GX_TF_RGB5A3, GX_FALSE);
-	GX_CopyTex(color_tex, GX_TRUE);
-
-	//TODO: Copy
-
 	GX_PixModeSync(); //Not necesary?
 }
 
@@ -399,10 +426,10 @@ static void __SGX_GetGouraud(u32 *c)
 	u32 c2 = *addr++;
 	u32 c3 = *addr++;
 
-	c[0] |= SGX_TORGB565(c0);
-	c[1] |= SGX_TORGB565(c1);
-	c[2] |= SGX_TORGB565(c2);
-	c[3] |= SGX_TORGB565(c3);
+	c[0] |= SGX_TORGBA6(c0);
+	c[1] |= SGX_TORGBA6(c1);
+	c[2] |= SGX_TORGBA6(c2);
+	c[3] |= SGX_TORGBA6(c3);
 }
 
 
@@ -443,7 +470,7 @@ static void __SGX_Vdp1SetConstantPart(u32 is_rgb)
 		GX_SetAlphaUpdate(GX_TRUE);
 		GX_SetDstAlpha(GX_TRUE, 0x00); //Only when RGB or window
 	}
-	//TODO: CHECK if it is not 8bpp
+	//TODO: MSB is to set the highest R bit
 	//if MSB on then only set alpha
 	if (vdp1cmd->PMOD & 0x8000) {
 		GX_SetBlendMode(GX_BM_BLEND, GX_BL_ZERO, GX_BL_ONE, GX_LO_CLEAR);
@@ -478,20 +505,19 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 
 	//Check transparent code
 	u32 trn_code = ((vdp1cmd->PMOD & 0x40) ^ 0x40) << 1;
-
-	if(vdp1cmd->PMOD & 0x40) {
-		//TODO: use alpha compare function?
-		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	if(vdp1cmd->PMOD & 0x40) {	//Draw all bits
+		GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	} else {
-		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+		GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	}
 
 	switch (tex_mode) {
 		case 0: // Colorbank 4-bit
 			__SGX_Vdp1SetConstantPart(0);
-			SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_CLRBANK);
+			GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_BGR24_GT, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
+			SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_FMT_RGB565 | TLUT_INDX_CLRBANK);
 			SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
-			return SGX_RGB4TO565(colr & 0xFFF0 & vdp1pix.color_mask);
+			return SGX_CONST_TO_RGBA6(colr & 0xFFF0);
 		case 1: // LUT 4-bit
 			u32 colorlut = (colr << 3) & 0x7FFFF;
 			//Check for colorbanking...
@@ -505,29 +531,33 @@ static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
 			}
 			if (!msb) {	//It uses colorbank code
 				__SGX_Vdp1SetConstantPart(0);
-				SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_CLRBANK);
+				GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_BGR24_GT, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
+				SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_FMT_RGB565 | TLUT_INDX_CLRBANK);
 				SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
-				return SGX_RGB4TO565(cb & 0xFFF0 & vdp1pix.color_mask);
+				return SGX_CONST_TO_RGBA6(cb & 0xFFF0);
 			}
 			//Its RGB code.
 			if (trn_code) {
 				pal = MEM_K0_TO_K1(Vdp1Ram + colorlut);
 				*pal &= 0xFFFFu;
 			}
-			SGX_LoadTlut(Vdp1Ram + colorlut, TLUT_INDX_IMM4);
+			SGX_LoadTlut(Vdp1Ram + colorlut, TLUT_SIZE_16 | TLUT_INDX_IMM4);
 			__SGX_Vdp1SetConstantPart(1);
-			SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_INDX_IMM4);
+			GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_A8_GT, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
+			SGX_SetTex(chr_addr, GX_TF_CI4, spr_w, spr_h, TLUT_FMT_RGB5A3 | TLUT_INDX_IMM4);
 			SGX_SpriteConverterSet(w, SPRITE_4BPP, vdp1cmd->SRCA & 3);
 			return 0;
 		case 2: // Colorbank 6-bit
 		case 3: // Colorbank 7-bit
 		case 4: // Colorbank 8-bit
 			__SGX_Vdp1SetConstantPart(0);
-			SGX_SetTex(chr_addr, GX_TF_CI8, spr_w, spr_h, TLUT_INDX_CLRBANK);
+			GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_BGR24_GT, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
+			SGX_SetTex(chr_addr, GX_TF_CI8, spr_w, spr_h, TLUT_FMT_RGB565 | TLUT_INDX_CLRBANK);
 			SGX_SpriteConverterSet(w, SPRITE_8BPP, vdp1cmd->SRCA & 3);
-			return SGX_RGB4TO565(colr & 0xFFC0 & vdp1pix.color_mask);	 //TODO: This is wrong
+			return SGX_CONST_TO_RGBA6(colr & 0xFFC0);	 //TODO: This is wrong
 		case 5: // RGB
 			__SGX_Vdp1SetConstantPart(is_rgb | 1);
+			GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_A8_GT, GX_TB_ZERO, GX_CS_DIVIDE_2, GX_TRUE, GX_TEVPREV);
 			SGX_SetTex(chr_addr, GX_TF_RGB5A3, spr_w, spr_h, 0);
 			SGX_SpriteConverterSet(w, SPRITE_16BPP, vdp1cmd->SRCA & 3);
 			return 0;
@@ -568,18 +598,18 @@ void SGX_Vdp1DrawNormalSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
 		GX_Position2s16(x1, y0);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
 		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[2]);
+		GX_Color1u24(colors[2]);
 		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 		GX_Position2s16(x0, y1);
-		GX_Color1u16(colors[3]);
+		GX_Color1u24(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
 	GX_End();
 }
@@ -630,18 +660,18 @@ void SGX_Vdp1DrawScaledSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
 		GX_Position2s16(x1, y0);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
 		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[2]);
+		GX_Color1u24(colors[2]);
 		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 		GX_Position2s16(x0, y1);
-		GX_Color1u16(colors[3]);
+		GX_Color1u24(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
 	GX_End();
 }
@@ -693,18 +723,18 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
 		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
 		GX_Position2s16(x2, y2);
-		GX_Color1u16(colors[2]);
+		GX_Color1u24(colors[2]);
 		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 		GX_Position2s16(x3, y3);
-		GX_Color1u16(colors[3]);
+		GX_Color1u24(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
 	GX_End();
 }
@@ -739,7 +769,7 @@ void SGX_Vdp1DrawPolygon(void)
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
 	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
@@ -749,18 +779,18 @@ void SGX_Vdp1DrawPolygon(void)
 		__SGX_GetGouraud(colors);
 	}
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(x2, y2);
-		GX_Color1u16(colors[2]);
+		GX_Color1u24(colors[2]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(x3, y3);
-		GX_Color1u16(colors[3]);
+		GX_Color1u24(colors[3]);
 		GX_TexCoord1u16(0);
 	GX_End();
 }
@@ -770,7 +800,7 @@ void SGX_Vdp1DrawPolyline(void)
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
 	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
@@ -781,21 +811,21 @@ void SGX_Vdp1DrawPolyline(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_LINESTRIP, GX_VTXFMT4, 5);
+	GX_Begin(GX_LINESTRIP, GX_VTXFMT2, 5);
 		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(vdp1cmd->XB, vdp1cmd->YB);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(vdp1cmd->XC, vdp1cmd->YC);
-		GX_Color1u16(colors[2]);
+		GX_Color1u24(colors[2]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(vdp1cmd->XD, vdp1cmd->YD);
-		GX_Color1u16(colors[3]);
+		GX_Color1u24(colors[3]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(0);
 	GX_End();
 }
@@ -807,7 +837,7 @@ void SGX_Vdp1DrawLine(void)
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
 	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
@@ -818,12 +848,12 @@ void SGX_Vdp1DrawLine(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_LINES, GX_VTXFMT4, 2);
+	GX_Begin(GX_LINES, GX_VTXFMT2, 2);
 		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
-		GX_Color1u16(colors[0]);
+		GX_Color1u24(colors[0]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(vdp1cmd->XB, vdp1cmd->YB);
-		GX_Color1u16(colors[1]);
+		GX_Color1u24(colors[1]);
 		GX_TexCoord1u16(0);
 	GX_End();
 }

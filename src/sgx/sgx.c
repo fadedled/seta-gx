@@ -164,19 +164,17 @@ void SGX_Init(void)
 	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
 	wgPipe->F32 = 16777215.0f;
 
-	memset(tlut_dirty, 1, sizeof(tlut_dirty));
-
 	//Set the color bank.
 	tlut_data = (u32*) memalign(32, 0x200);
-	u32 val = 0x70007001;
+	u32 val = 0x00000001;
 	u32 *dst = tlut_data;
 	for (int i = 0; i < 128; ++i) {
 		*dst = val;
 		++dst;
 		val += 0x00020002;
 	}
-	*tlut_data = 0x00007001;
 	DCFlushRange(tlut_data, 0x200);
+	SGX_LoadTlut(tlut_data, TLUT_SIZE_256 | TLUT_INDX_CLRBANK);
 	SGX_Vdp1Init();
 }
 
@@ -210,65 +208,9 @@ void SGX_InvalidateVRAM(void)
 
 void SGX_TlutLoadCRAMImm(u32 pos, u32 trn_code, u32 size)
 {
-	GXTlutObj tlut;
-	u16 *tlut_data = tlut_14bpp_ram + pos;
-	if (trn_code) {
-		if (size == GX_TLUT_16) {
-			tlut_data = tlut_4bpp_ram + pos;
-		} else {
-			tlut_data = tlut_8bpp_ram + pos;
-		}
-	}
-	GX_InitTlutObj(&tlut, tlut_data, GX_TL_RGB5A3, size << 4);
-	if (size == GX_TLUT_16) {
-		GX_LoadTlut(&tlut, TLUT_INDX_IMM4);
-	} else {
-		GX_LoadTlut(&tlut, TLUT_INDX_IMM8);
-	}
+
 }
 
-void SGX_TlutCRAMUpdate(void)
-{
-	GXTlutObj tlut;
-
-	//14bpp tlut
-	volatile u32 *dst = (u32*) GX_RedirectWriteGatherPipe(tlut_14bpp_ram);
-	u32 *src = (u32*) Vdp2ColorRam;
-	for (u32 i = 0; i < 0x400; ++i) {
-		*dst = (*(src++)) | 0x80008000;
-	}
-	GX_RestoreWriteGatherPipe();
-	GX_InitTlutObj(&tlut, tlut_14bpp_ram, GX_TL_RGB5A3, 2048);
-	GX_LoadTlut(&tlut , TLUT_INDX(TLUT_TYPE_FULL, 0));
-
-	//8bpp tlut
-	dst = (u32*) GX_RedirectWriteGatherPipe(tlut_8bpp_ram);
-	src = (u32*) Vdp2ColorRam;
-	for (u32 i = 0; i < 0x400; ++i) {
-		if (i & 0x7F) {
-			*dst = (*(src++)) | 0x80008000;
-		} else {
-			*dst = ((*(src++)) | 0x8000) & 0xFFFF;
-		}
-	}
-	GX_RestoreWriteGatherPipe();
-	GX_InitTlutObj(&tlut, tlut_8bpp_ram, GX_TL_RGB5A3, 2048);
-	GX_LoadTlut(&tlut, TLUT_INDX(TLUT_TYPE_8BPP, 0));
-
-	//4bpp tlut
-	dst = (u32*) GX_RedirectWriteGatherPipe(tlut_4bpp_ram);
-	src = (u32*) Vdp2ColorRam;
-	for (u32 i = 0; i < 0x400; ++i) {
-		if (i & 0x7) {
-			*dst = (*(src++)) | 0x80008000;
-		} else {
-			*dst = ((*(src++)) | 0x8000) & 0xFFFF;
-		}
-	}
-	GX_RestoreWriteGatherPipe();
-	GX_InitTlutObj(&tlut, tlut_4bpp_ram, GX_TL_RGB5A3, 2048);
-	GX_LoadTlut(&tlut, TLUT_INDX(TLUT_TYPE_4BPP, 0));
-}
 
 
 
@@ -396,7 +338,7 @@ void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	GX_LOAD_BP_REG(tex_size);
 	//If tlut is used set its address
 	if (fmt > 7) {
-		u32 tlut_addr = 0x98000000 | (GX_TL_RGB5A3 << 10) | (tlut & 0x3ff);
+		u32 tlut_addr = 0x98000000 | (tlut & 0xfff);
 		GX_LOAD_BP_REG(tlut_addr);
 	}
 	//Flush Texture State
@@ -415,7 +357,7 @@ void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	GX_LOAD_BP_REG(tex_size);
 	//If tlut is used set its address
 	if (fmt > 7) {
-		u32 tlut_addr = 0x98000000 | mapid | (GX_TL_RGB5A3 << 10) | (tlut & 0x3ff);
+		u32 tlut_addr = 0x98000000 | mapid | (tlut & 0xfff);
 		GX_LOAD_BP_REG(tlut_addr);
 	}
 	//Flush Texture State
