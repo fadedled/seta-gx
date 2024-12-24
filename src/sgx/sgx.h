@@ -20,6 +20,7 @@
 #define TLUT_FMT_RGB565			(GX_TL_RGB565 << 10)
 
 #define TLUT_INDX_CRAM			(0x200)
+#define TLUT_INDX_PPCC			(0x3E0)
 #define TLUT_INDX_CLRBANK		(0x3F0)
 #define TLUT_INDX_IMM4			(0x380)
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))
@@ -48,17 +49,21 @@
 #define SPRITE_8BPP			1
 #define SPRITE_16BPP		2
 
+
 #define TEXPRE_TYPE_4BPP	(1<<15)
 #define TEXPRE_TYPE_8BPP	(2<<15)
 #define TEXPRE_TYPE_16BPP	(2<<15)
 #define TEXPRE_TYPE_32BPP	(3<<15)
 
-#define PRI_SPR(x)					(((f32)(x)) - (8.0f - (0.125f * 5.0f)))
-#define PRI_RBG0(x)					(((f32)(x)) - (8.0f - (0.125f * 4.0f)))
-#define PRI_NBG0(x)					(((f32)(x)) - (8.0f - (0.125f * 3.0f)))
-#define PRI_NBG1(x)					(((f32)(x)) - (8.0f - (0.125f * 2.0f)))
-#define PRI_NBG2(x)					(((f32)(x)) - (8.0f - (0.125f * 1.0f)))
-#define PRI_NBG3(x)					(((f32)(x)) - (8.0f - (0.125f * 0.0f)))
+
+#define PRI_SPR			7
+#define PRI_RGB0		6
+#define PRI_NGB0		5
+#define PRI_NGB1		4
+#define PRI_NGB2		3
+#define PRI_NGB3		2
+#define PRI_LINECOLOR	1
+#define PRI_BACKCOLOR	0
 
 #define	USE_NEW_VDP1		1
 

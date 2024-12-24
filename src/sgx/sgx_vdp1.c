@@ -190,8 +190,57 @@ void SGX_Vdp1Begin(void)
 }
 
 
-static u16 clut_4bpp[16] = {
+static void __Vdp1LoadPrCcTlut(void)
+{
+	u32 tlut_data[128];
+	u16 pri_arr[8] = {PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR};
+	u16 cc_arr[8];
+	pri_arr[0] |= (Vdp2Regs->PRISA & 0x7) << 4;
+	pri_arr[1] |= ((Vdp2Regs->PRISA >> 8) & 0x7) << 4;
+	pri_arr[2] |= (Vdp2Regs->PRISB & 0x7) << 4;
+	pri_arr[3] |= ((Vdp2Regs->PRISB >> 8) & 0x7) << 4;
+	pri_arr[4] |= (Vdp2Regs->PRISC & 0x7) << 4;
+	pri_arr[5] |= ((Vdp2Regs->PRISC >> 8) & 0x7) << 4;
+	pri_arr[6] |= (Vdp2Regs->PRISD & 0x7) << 4;
+	pri_arr[7] |= ((Vdp2Regs->PRISD >> 8) & 0x7) << 4;
+	cc_arr[0] = (Vdp2Regs->CCRSA & 0x1F) << 11;
+	cc_arr[1] = ((Vdp2Regs->CCRSA >> 8) & 0x1F) << 11;
+	cc_arr[2] = (Vdp2Regs->CCRSB & 0x1F) << 11;
+	cc_arr[3] = ((Vdp2Regs->CCRSB >> 8) & 0x1F) << 11;
+	cc_arr[4] = (Vdp2Regs->CCRSC & 0x1F) << 11;
+	cc_arr[5] = ((Vdp2Regs->CCRSC >> 8) & 0x1F) << 11;
+	cc_arr[6] = (Vdp2Regs->CCRSD & 0x1F) << 11;
+	cc_arr[7] = ((Vdp2Regs->CCRSD >> 8) & 0x1F) << 11;
+	cc_arr[0] |= (cc_arr[0] >> 5) 0xFF00;
+	cc_arr[1] |= (cc_arr[1] >> 5) 0xFF00;
+	cc_arr[2] |= (cc_arr[2] >> 5) 0xFF00;
+	cc_arr[3] |= (cc_arr[3] >> 5) 0xFF00;
+	cc_arr[4] |= (cc_arr[4] >> 5) 0xFF00;
+	cc_arr[5] |= (cc_arr[5] >> 5) 0xFF00;
+	cc_arr[6] |= (cc_arr[6] >> 5) 0xFF00;
+	cc_arr[7] |= (cc_arr[7] >> 5) 0xFF00;
 
+	u32 val = 0x00000001;
+	u32 mask = 0xFF;
+	u16 *dst = (u16*)tlut_data;
+	if (Vdp2Regs->SPCTL & 0x20) {
+		mask = 0x7F;
+		for (int i = 0; i < 128; ++i) {
+			*dst = val;
+			++dst;
+			val += 0x00020002;
+		}
+	} else {
+		mask = 0x7F;
+		for (int i = 0; i < 256; ++i) {
+			*dst = val;
+			++dst;
+			val += 0x00020002;
+		}
+	}
+
+	DCFlushRange(tlut_data, 0x200);
+	SGX_LoadTlut(tlut_data, TLUT_SIZE_256 | TLUT_INDX_PPCC);
 };
 
 
@@ -208,7 +257,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 	//Set up TEV depending on sprite bitdepth
 	if (1) { 	//16bpp framebuffer
 		//TODO: Add texture
-		GX_SetNumTevStages(2);
+		u32 tev = 0;
 		GX_SetNumTexGens(1);
 		GX_SetNumChans(0);
 		GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
@@ -223,45 +272,52 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevSwapMode(GX_TEVSTAGE2, GX_TEV_SWAP0, GX_TEV_SWAP0);
 		GX_SetTevSwapMode(GX_TEVSTAGE3, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
-
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
 
 
-		//SGX_InitTex(GX_TEXMAP3, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
-		//SGX_SetOtherTex(GX_TEXMAP3, color_tex, GX_TF_RGB5A3, 352, 240, 0);
-		//GX_SetTevOrder(GX_TEVSTAGE2, GX_TEXCOORD0, GX_TEXMAP3 | GX_COLORNULL, GX_COLORNULL);
+		//If MSB is for RGB format then
+		if (Vdp2Regs->SPCTL & 0x20) {
+			GX_SetTevOrder(tev, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+			SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
+			SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, 352, 240, 0);
+			GX_SetTevColorOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+			GX_SetTevColorIn(tev, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+			GX_SetTevAlphaOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+			GX_SetTevAlphaIn(tev, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+			++tev;
+		}
 
 		//Get CRAM colors using CI14 and RGB565
-		//GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_2, GX_FALSE, GX_TEVPREV);
-		//GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
-		//GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_A8_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		//GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_KONST, GX_CA_KONST, GX_CA_ZERO);
-		SGX_SetTex(color_tex, GX_TF_CI14, 352, 240, TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM);
-		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
-		GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
-
+		SGX_SetTex(color_tex, GX_TF_IA8, 352, 240, TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM);
+		GX_SetTevOrder(tev, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+		GX_SetTevColorOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevColorIn(tev, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+		GX_SetTevAlphaOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevAlphaIn(tev, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+		//TODO: Set up Indirect stage
+		GX_SetNumIndStages(1);
+		//SGX_SetTexPreloaded(GX_TEXMAP6, tex); Set texmap
+		GX_SetTevIndirect(tev, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_NONE, GX_ITM_2, GX_ITW_0, GX_ITW_0, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
+		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP6);
+		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_1, GX_ITS_1);
+		++tev;
 		//Get Window for stencil and to check if MSB is set
 		//GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_COMP_R8_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVREG0);
 		//GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_TEXA, GX_CC_ZERO, GX_CC_ONE, GX_CC_ZERO);
 		//GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_2, GX_FALSE, GX_TEVPREV);
 		//GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 		//Get ARGB1555 colors, use window MSB to mix with CRAM colors.
-		//TODO: skip if MSB is not for RGB format
-		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
-		SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
-		SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, 352, 240, 0);
-		GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
-		GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_APREV);
-		//Get Priority and Color calculation from texture
-		GX_SetTevColorOp(GX_TEVSTAGE3, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevColorIn(GX_TEVSTAGE3, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
-		GX_SetTevAlphaOp(GX_TEVSTAGE3, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-		GX_SetTevAlphaIn(GX_TEVSTAGE3, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA, GX_CA_APREV);
+
+		//Last stage, get the priority and color calc from CI8 using IA8
+		GX_SetTevOrder(tev, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
+		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex, GX_TF_CI8, 352, 240, 0);
+		GX_SetTevColorOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevColorIn(tev, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
+		GX_SetTevAlphaOp(tev, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevAlphaIn(tev, GX_CA_ZERO, GX_CA_TEXA, GX_CA_APREV, GX_CA_ZERO);
+		GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
+		GX_SetNumTevStages(tev);
+
 	} else {	//8bpp framebuffer
 
 	}
@@ -288,6 +344,9 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	GX_SetTevDirect(GX_TEVSTAGE1);
 	GX_SetScissor(0, 0, 640, 480);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1 | GX_TEXMAP_DISABLE, GX_COLORNULL);
@@ -303,32 +362,33 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	//We shift EFB's bits to make one copy
 	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-
-	GX_SetNumTevStages(1);
-	GX_SetNumTexGens(1);
-	GX_SetNumChans(0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
-
-	//Get in RGB565 colors, Reds MSB is cleared
-	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
-	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_SUB, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
-
-	//TODO: This blending does not work always
-	GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTALPHA, GX_BL_ONE, GX_LO_OR);
-	GX_SetDstAlpha(GX_FALSE, 0x00);
-	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-	GX_SetCurrentMtx(GXMTX_IDENTITY);
 
 	//Check if there is mixed RGB and palette format
 	if (Vdp2Regs->SPCTL & 0x20) {
+		GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+
+		GX_SetNumTevStages(1);
+		GX_SetNumTexGens(1);
+		GX_SetNumChans(0);
+		GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
+
+		//Get in RGB565 colors, Reds MSB is cleared
+		GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+		GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
+		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_SUB, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
+		GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+
+		//TODO: This blending does not work always
+		GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTALPHA, GX_BL_ONE, GX_LO_OR);
+		GX_SetDstAlpha(GX_FALSE, 0x00);
+		GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
+		GX_SetCurrentMtx(GXMTX_IDENTITY);
+
 		//Extend Alpha for correct RGBA5551 copying
 		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 			GX_Position2s16(0, 0);
@@ -343,35 +403,9 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetTexCopyDst(352, 240, GX_TF_RGB5A3, GX_FALSE);
 		GX_CopyTex(color_rgb_tex, GX_FALSE);
 	}
-
-	//Copy PRCC data
-	if (vdp1pix.type == 7) {
-		//Change the pixel format for R8 copying only if sprite type is 7
-		//because that type uses 7 bits for priority and color calculation
-		GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
-		GX_SetTexCopyDst(352, 240, GX_CTF_R8, GX_FALSE);
-		GX_CopyTex(prcc_tex, GX_FALSE);
-		GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
-	} else {
-		GX_SetTexCopyDst(352, 240, GX_CTF_R8, GX_FALSE);
-		GX_CopyTex(prcc_tex, GX_FALSE);
-	}
-
-	//Mask dot color data bits
-	GXColor ext_kolor = {0x00, (vdp1pix.color_mask & ~0x1F) >> 3, (vdp1pix.color_mask & 0x1F) << 3, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, ext_kolor);
-	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_ONE, GX_BL_ONE, GX_LO_AND);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-	GX_Position2s16(0, 0);
-	GX_Position2s16(352, 0);
-	GX_Position2s16(352, 240);
-	GX_Position2s16(0, 240);
-	GX_End();
-
-	//Copy Dot color data
+	//Copy dot color data as is
 	GX_SetTexCopyDst(352, 240, GX_TF_RGB565, GX_FALSE);
-	GX_CopyTex(color_tex, GX_FALSE);
+	GX_CopyTex(color_tex, GX_TRUE);
 
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
@@ -384,8 +418,6 @@ void SGX_Vdp1End(void)
 {
 	SGX_SpriteConverterSet(0, SPRITE_NONE, 0);
 	//Copy colors
-
-	//TODO: copy resolutions
 	if (1) { //16bpp framebuffer
 		__Vdp1Convert16bpp();
 	} else {
@@ -393,28 +425,6 @@ void SGX_Vdp1End(void)
 		//GX_CopyTex(color_tex, GX_TRUE);
 	}
 
-
-	//TODO: This blending does not work always
-
-
-	//Copy alpha
-#if 0
-	GX_SetCopyClear(cc, 0);
-	GX_SetAlphaUpdate(GX_TRUE);
-	GX_SetColorUpdate(GX_FALSE);
-	GX_SetTexCopySrc(0, 0, 352, 240);
-	GX_SetTexCopyDst(352, 240, GX_TF_IA8, GX_FALSE);
-	GX_CopyTex(alpha_tex, GX_TRUE);
-#endif
-	//Copy colors
-	//GX_DrawDone();
-
-	//Copy z
-	//GX_SetTexCopySrc(0, 0, 640, 480);
-	//GX_SetTexCopyDst(640, 480, GX_TF_RGB565, GX_FALSE);
-	//GX_CopyTex(win_tex, GX_TRUE);
-
-	//frame must be processed now
 }
 
 
