@@ -415,7 +415,7 @@ void InitGX(void )
 	//VDP1 vertex format for 16bpp
 	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA6, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 	//VDP1 vertex format for 8bpp
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS,  GX_POS_XY,   GX_S16, 1);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
