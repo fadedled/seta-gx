@@ -87,6 +87,8 @@ static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 	0x0F, 0x0F, 0x0F, 0x0F
 };
 
+static u32 prcc_tlut[128] ATTRIBUTE_ALIGN(32);
+
 extern u32 *tlut_data;
 void SGX_Vdp1Init(void)
 {
@@ -114,12 +116,12 @@ void SGX_Vdp1Deinit(void)
 
 
 static const uint8_t priority_shift[16] =
-{ 14, 13, 14, 13,  13, 12, 12, 12,  7, 7, 6, 0,  7, 7, 6, 0 };
+{ 14-8, 13-8, 14-8, 13-8,  13-8, 12-8, 12-8, 12-8,  7, 7, 6, 0,  7, 7, 6, 0 };
 static const uint8_t priority_mask[16] =
 {  3,  7,  1,  3,   3,  7,  7,  7,  1, 1, 3, 0,  1, 1, 3, 0 };
-static const uint8_t alpha_shift[16] =
-{ 11, 11, 11, 11,  10, 11, 10,  9,  0, 6, 0, 6,  0, 6, 0, 6 };
-static const uint8_t alpha_mask[16] =
+static const uint8_t colorcalc_shift[16] =
+{ 11-8, 11-8, 11-8, 11-8,  10-8, 11-8, 10-8,  9-8,  0, 6, 0, 6,  0, 6, 0, 6 };
+static const uint8_t colorcalc_mask[16] =
 {  7,  3,  7,  3,   7,  1,  3,  7,  0, 1, 0, 3,  0, 1, 0, 3 };
 static const uint16_t color_mask[16] =
 {  0x7FF, 0x7FF, 0x7FF, 0x7FF,  0x3FF, 0x7FF, 0x3FF, 0x1FF,
@@ -196,7 +198,6 @@ void SGX_Vdp1Begin(void)
 
 static void __Vdp1LoadPrCcTlut(void)
 {
-	u32 tlut_data[128];
 	u16 pri_arr[8] = {PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR};
 	u16 cc_arr[8];
 	pri_arr[0] |= (Vdp2Regs->PRISA & 0x7) << 4;
@@ -224,27 +225,34 @@ static void __Vdp1LoadPrCcTlut(void)
 	cc_arr[6] |= (cc_arr[6] >> 5) & 0xFF00;
 	cc_arr[7] |= (cc_arr[7] >> 5) & 0xFF00;
 
-	u32 val = 0x00000001;
-	u32 mask = 0xFF;
-	u16 *dst = (u16*)tlut_data;
-	if (Vdp2Regs->SPCTL & 0x20) {
-		mask = 0x7F;
-		for (int i = 0; i < 128; ++i) {
-			*dst = val;
-			++dst;
-			val += 0x00020002;
-		}
-	} else {
-		mask = 0x7F;
-		for (int i = 0; i < 256; ++i) {
-			*dst = val;
-			++dst;
-			val += 0x00020002;
-		}
-	}
 
-	DCFlushRange(tlut_data, 0x200);
-	SGX_LoadTlut(tlut_data, TLUT_SIZE_256 | TLUT_INDX_PPCC);
+	u32 *dst = prcc_tlut;
+	//TODO: Check if pri bits must be modifiedd if using RGB or windows
+	u32 pri_mask = priority_mask[vdp1pix.type];
+	u32 pri_shf = priority_shift[vdp1pix.type];
+	u32 cc_mask = colorcalc_mask[vdp1pix.type];
+	u32 cc_shf = colorcalc_shift[vdp1pix.type];
+
+	//Most significant 16 bits are 0 since in prcc_tex if LSB is 0 then the pixel is transparent
+	for (u32 i = 0; i < 256; i += 2) {
+		u32 pri = (i >> pri_shf) & pri_mask;
+		u32 pix = pri_arr[pri];
+		if (pix) {	//If priority is 0 then set as transparent
+			//TODO: test color calc depending on priority
+			const u32 does_color_calc = 0;
+			if (does_color_calc) {
+				pix |= cc_arr[(i >> cc_shf) & cc_mask];
+			} else {
+				pix |= 0xFF00;
+			}
+		}
+		*dst = pix | (pix << 16);
+		++dst;
+	}
+	*prcc_tlut &= 0xFFFF;
+
+	DCFlushRange(prcc_tlut, 0x200);
+	SGX_LoadTlut(prcc_tlut, TLUT_SIZE_256 | TLUT_INDX_PPCC);
 };
 
 
@@ -263,9 +271,11 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetCurrentMtx(GXMTX_IDENTITY);
 	//TODO: This is only for the meantime, should use GX_GREATER
-	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-
+	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
+	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
+	//Load the Priority and Colorcalculation TLUT
+	__Vdp1LoadPrCcTlut();
 
 	//Set up TEV depending on sprite bitdepth
 	if (1) { 	//16bpp framebuffer
@@ -279,7 +289,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevKColor(GX_KCOLOR0, convk);
 		GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
 		GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_R);
-		GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_BLUE, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN);
+
 		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
 		GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
 		GX_SetTevSwapMode(GX_TEVSTAGE2, GX_TEV_SWAP0, GX_TEV_SWAP0);
@@ -296,6 +306,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 
 		//If MSB is for RGB format then mix with RGB color
+		u32 tev_stage = GX_TEXMAP1;
 		if (Vdp2Regs->SPCTL & 0x20) {
 			GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
 			SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
@@ -304,30 +315,24 @@ void SGX_Vdp1DrawFramebuffer(void)
 			GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
 			GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 			GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-
-			GX_SetNumTevStages(2);
+			tev_stage++;
+			//GX_SetNumTevStages(2);
+			GX_SetNumTevStages(3);
 
 		} else {
+			//GX_SetNumTevStages(1);
 
-			GX_SetNumTevStages(1);
+			GX_SetNumTevStages(2);
 		}
-		/*
-		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-			GX_Position2s16(0, 0);
-			GX_TexCoord1u16(0x0000);
-			GX_Position2s16(352, 0);
-			GX_TexCoord1u16(0x0100);
-			GX_Position2s16(352, 240);
-			GX_TexCoord1u16(0x0101);
-			GX_Position2s16(0, 240);
-			GX_TexCoord1u16(0x0001);
-		GX_End();
-		GX_SetTexCopySrc(0, 0, 352, 240);
-		GX_SetTexCopyDst(352, 240, GX_CTF_RG8, GX_FALSE);
-		GX_CopyTex(color_rgb_tex, GX_FALSE);
-		GX_PixModeSync(); //Not necesary?
-		*/
+		//Get priority (as z-texture) and color calculation (as alpha)
+		GX_SetTevOrder(tev_stage, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
+		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex, GX_TF_CI8, 352, 240, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
+		GX_SetTevColorOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevColorIn(tev_stage, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
+		GX_SetTevAlphaOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+		GX_SetTevAlphaIn(tev_stage, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
+		GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
 	} else {	//8bpp framebuffer
 
 	}
@@ -347,7 +352,8 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_End();
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
 	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
-	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z16, 0);
+	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
@@ -424,9 +430,40 @@ static void __Vdp1Convert16bpp(void)
 	//Copy dot color data as is
 	GX_SetTexCopyDst(352, 240, GX_TF_RGB565, GX_FALSE);
 	GX_CopyTex(color_tex, GX_TRUE);
+	GX_PixModeSync(); //Not necesary?
 
-	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+	//Generate Priority and ColorCalc texture...
+	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
+	GX_SetVtxDesc(GX_VA_TEX0,  GX_DIRECT);
+	GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x01, 0x01, 0x01, 0x01});
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	//Set swap mode to get A->R and I->G
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP2);
+	SGX_SetTex(color_tex, GX_TF_IA8, 352, 240, 0);
+	//Check if IA is zero to test transparent pixels (LSB is on if it is not transparent)
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_COMP_RGB8_EQ, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_COMP_GR16_GT, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_ZERO, GX_CA_KONST, GX_CA_ZERO);
+
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Position2s16(0, 0);
+	GX_TexCoord1u16(0x0000);
+	GX_Position2s16(352, 0);
+	GX_TexCoord1u16(0x0100);
+	GX_Position2s16(352, 240);
+	GX_TexCoord1u16(0x0101);
+	GX_Position2s16(0, 240);
+	GX_TexCoord1u16(0x0001);
+	GX_End();
+
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetTexCopyDst(352, 240, GX_CTF_R8, GX_FALSE);
+	GX_CopyTex(prcc_tex, GX_TRUE);
 	GX_PixModeSync(); //Not necesary?
 }
 

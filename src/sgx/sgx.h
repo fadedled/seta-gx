@@ -20,7 +20,7 @@
 #define TLUT_FMT_RGB565			(GX_TL_RGB565 << 10)
 
 #define TLUT_INDX_CRAM			(0x200)
-#define TLUT_INDX_PPCC			(0x3E0)
+#define TLUT_INDX_PPCC			(0x210)
 #define TLUT_INDX_CLRBANK		(0x370)
 #define TLUT_INDX_IMM4			(0x310)
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))

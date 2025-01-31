@@ -439,6 +439,7 @@ void InitGX(void )
 
 	GX_SetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
 	GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_BLUE, GX_CH_GREEN, GX_CH_RED, GX_CH_ALPHA);
+	GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE);
 
 
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
@@ -464,7 +465,7 @@ void InitGX(void )
 
     GX_SetCurrentMtx(GX_PNMTX0);
 
-    guOrtho(perspective, 0, rmode->efbHeight, 0, rmode->fbWidth, 0, 32768.0f);
+    guOrtho(perspective, 0, rmode->efbHeight, 0, rmode->fbWidth, 0, (f32) GX_MAX_Z24);
     GX_LoadProjectionMtx(perspective, GX_ORTHOGRAPHIC);
 
 	GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0.0f, 1.0f);
