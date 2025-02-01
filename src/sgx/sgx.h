@@ -56,14 +56,14 @@
 #define TEXPRE_TYPE_32BPP	(3<<15)
 
 
-#define PRI_SPR			7
-#define PRI_RGB0		6
-#define PRI_NGB0		5
-#define PRI_NGB1		4
-#define PRI_NGB2		3
-#define PRI_NGB3		2
-#define PRI_LINECOLOR	1
-#define PRI_BACKCOLOR	0
+#define PRI_SPR			0x07
+#define PRI_RGB0		0x06
+#define PRI_NGB0		0x05
+#define PRI_NGB1		0x04
+#define PRI_NGB2		0x03
+#define PRI_NGB3		0x02
+#define PRI_LINECOLOR	0x01
+#define PRI_BACKCOLOR	0x10	//This Z value should be the lowest possible
 
 #define	USE_NEW_VDP1		1
 

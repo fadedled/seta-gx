@@ -465,7 +465,7 @@ void InitGX(void )
 
     GX_SetCurrentMtx(GX_PNMTX0);
 
-    guOrtho(perspective, 0, rmode->efbHeight, 0, rmode->fbWidth, 0, (f32) GX_MAX_Z24);
+    guOrtho(perspective, 0, rmode->efbHeight, 0, rmode->fbWidth, 0, 256.0);
     GX_LoadProjectionMtx(perspective, GX_ORTHOGRAPHIC);
 
 	GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0.0f, 1.0f);

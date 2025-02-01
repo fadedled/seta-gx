@@ -263,7 +263,6 @@ static void SGX_Vdp2DrawCellSimple(void)
 	u32 x_max = x_tile + ((352 / cell.char_size) + 1);
 	u32 y_max = y_tile + ((240 / cell.char_size) + 1);
 
-
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
 	switch (cell.color_fmt) {
 		case 0:{
@@ -346,6 +345,7 @@ void SGX_Vdp2Draw(void)
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
 	//GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 
 	//SGX_SetTex(output_tex, GX_TF_RGB5A3, 352, 240, 0);
@@ -367,8 +367,9 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
 		__Vdp2ReadNBG(3);	//Draw NBG3
-		GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
-		GX_SetScissor(352, 240, 352, 240);
+		SGX_SetZOffset(scr_pri << 4 | PRI_NGB3);
+		//GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
+		//GX_SetScissor(352, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -378,8 +379,9 @@ void SGX_Vdp2Draw(void)
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
 		__Vdp2ReadNBG(2);	//Draw NBG2
-		GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
-		GX_SetScissor(0, 240, 352, 240);
+		SGX_SetZOffset(scr_pri << 4 | PRI_NGB2);
+		//GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
+		//GX_SetScissor(0, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -391,11 +393,12 @@ void SGX_Vdp2Draw(void)
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4))) {
 		__Vdp2ReadNBG(1);	//Draw NBG1
+		SGX_SetZOffset(scr_pri << 4 | PRI_NGB1);
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			GX_SetViewport(352, 0, 640, 480, 0.0f, 1.0f);
-			GX_SetScissor(352, 0, 352, 240);
+			//GX_SetViewport(352, 0, 640, 480, 0.0f, 1.0f);
+			//GX_SetScissor(352, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
@@ -404,11 +407,12 @@ void SGX_Vdp2Draw(void)
 	scr_enable = Vdp2Regs->BGON & 0x1;
 	if (!(!(scr_pri) || !(scr_enable))) {
 		__Vdp2ReadNBG(0);	//Draw NBG0
+		SGX_SetZOffset(scr_pri << 4 | PRI_NGB0);
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
-			GX_SetScissor(0, 0, 352, 240);
+			//GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
+			//GX_SetScissor(0, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
@@ -416,6 +420,8 @@ void SGX_Vdp2Draw(void)
 	//Copy the screens to texture...
 	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
 	GX_SetScissor(0, 0, 640, 480);
+	SGX_SetZOffset(0);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 }
 
 

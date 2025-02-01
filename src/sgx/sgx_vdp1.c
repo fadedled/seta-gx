@@ -198,32 +198,32 @@ void SGX_Vdp1Begin(void)
 
 static void __Vdp1LoadPrCcTlut(void)
 {
-	u16 pri_arr[8] = {PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR, PRI_SPR};
+	u16 pri_arr[8];
 	u16 cc_arr[8];
-	pri_arr[0] |= (Vdp2Regs->PRISA & 0x7) << 4;
-	pri_arr[1] |= ((Vdp2Regs->PRISA >> 8) & 0x7) << 4;
-	pri_arr[2] |= (Vdp2Regs->PRISB & 0x7) << 4;
-	pri_arr[3] |= ((Vdp2Regs->PRISB >> 8) & 0x7) << 4;
-	pri_arr[4] |= (Vdp2Regs->PRISC & 0x7) << 4;
-	pri_arr[5] |= ((Vdp2Regs->PRISC >> 8) & 0x7) << 4;
-	pri_arr[6] |= (Vdp2Regs->PRISD & 0x7) << 4;
-	pri_arr[7] |= ((Vdp2Regs->PRISD >> 8) & 0x7) << 4;
-	cc_arr[0] = (Vdp2Regs->CCRSA & 0x1F) << 11;
-	cc_arr[1] = ((Vdp2Regs->CCRSA >> 8) & 0x1F) << 11;
-	cc_arr[2] = (Vdp2Regs->CCRSB & 0x1F) << 11;
-	cc_arr[3] = ((Vdp2Regs->CCRSB >> 8) & 0x1F) << 11;
-	cc_arr[4] = (Vdp2Regs->CCRSC & 0x1F) << 11;
-	cc_arr[5] = ((Vdp2Regs->CCRSC >> 8) & 0x1F) << 11;
-	cc_arr[6] = (Vdp2Regs->CCRSD & 0x1F) << 11;
-	cc_arr[7] = ((Vdp2Regs->CCRSD >> 8) & 0x1F) << 11;
-	cc_arr[0] |= (cc_arr[0] >> 5) & 0xFF00;
-	cc_arr[1] |= (cc_arr[1] >> 5) & 0xFF00;
-	cc_arr[2] |= (cc_arr[2] >> 5) & 0xFF00;
-	cc_arr[3] |= (cc_arr[3] >> 5) & 0xFF00;
-	cc_arr[4] |= (cc_arr[4] >> 5) & 0xFF00;
-	cc_arr[5] |= (cc_arr[5] >> 5) & 0xFF00;
-	cc_arr[6] |= (cc_arr[6] >> 5) & 0xFF00;
-	cc_arr[7] |= (cc_arr[7] >> 5) & 0xFF00;
+	pri_arr[0] = (Vdp2Regs->PRISA & 0x7) << 4;
+	pri_arr[1] = ((Vdp2Regs->PRISA >> 8) & 0x7) << 4;
+	pri_arr[2] = (Vdp2Regs->PRISB & 0x7) << 4;
+	pri_arr[3] = ((Vdp2Regs->PRISB >> 8) & 0x7) << 4;
+	pri_arr[4] = (Vdp2Regs->PRISC & 0x7) << 4;
+	pri_arr[5] = ((Vdp2Regs->PRISC >> 8) & 0x7) << 4;
+	pri_arr[6] = (Vdp2Regs->PRISD & 0x7) << 4;
+	pri_arr[7] = ((Vdp2Regs->PRISD >> 8) & 0x7) << 4;
+	cc_arr[0] = (Vdp2Regs->CCRSA & 0x1F) << 3;
+	cc_arr[1] = ((Vdp2Regs->CCRSA >> 8) & 0x1F) << 3;
+	cc_arr[2] = (Vdp2Regs->CCRSB & 0x1F) << 3;
+	cc_arr[3] = ((Vdp2Regs->CCRSB >> 8) & 0x1F) << 3;
+	cc_arr[4] = (Vdp2Regs->CCRSC & 0x1F) << 3;
+	cc_arr[5] = ((Vdp2Regs->CCRSC >> 8) & 0x1F) << 3;
+	cc_arr[6] = (Vdp2Regs->CCRSD & 0x1F) << 3;
+	cc_arr[7] = ((Vdp2Regs->CCRSD >> 8) & 0x1F) << 3;
+	cc_arr[0] |= cc_arr[0] >> 5;
+	cc_arr[1] |= cc_arr[1] >> 5;
+	cc_arr[2] |= cc_arr[2] >> 5;
+	cc_arr[3] |= cc_arr[3] >> 5;
+	cc_arr[4] |= cc_arr[4] >> 5;
+	cc_arr[5] |= cc_arr[5] >> 5;
+	cc_arr[6] |= cc_arr[6] >> 5;
+	cc_arr[7] |= cc_arr[7] >> 5;
 
 
 	u32 *dst = prcc_tlut;
@@ -233,17 +233,23 @@ static void __Vdp1LoadPrCcTlut(void)
 	u32 cc_mask = colorcalc_mask[vdp1pix.type];
 	u32 cc_shf = colorcalc_shift[vdp1pix.type];
 
-	//Most significant 16 bits are 0 since in prcc_tex if LSB is 0 then the pixel is transparent
+	//When using RGB with types 0 and 1 the MSB of priority is set to zero
+	if (Vdp2Regs->SPCTL & 0x20 && vdp1pix.type < 2) {
+		pri_mask >>= 1;
+	}
+	//Fill the tlut
 	for (u32 i = 0; i < 256; i += 2) {
-		u32 pri = (i >> pri_shf) & pri_mask;
-		u32 pix = pri_arr[pri];
-		if (pix) {	//If priority is 0 then set as transparent
+		u32 pri_indx = (i >> pri_shf) & pri_mask;
+		u32 pri = pri_arr[pri_indx];
+		u32 pix = 0;
+		if (pri) {	//If priority is 0 then set as transparent
+			pix = (pri | PRI_SPR) << 8;
 			//TODO: test color calc depending on priority
 			const u32 does_color_calc = 0;
 			if (does_color_calc) {
 				pix |= cc_arr[(i >> cc_shf) & cc_mask];
 			} else {
-				pix |= 0xFF00;
+				pix |= 0xFF;
 			}
 		}
 		*dst = pix | (pix << 16);
@@ -291,12 +297,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_R);
 
 		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
-		GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
-		GX_SetTevSwapMode(GX_TEVSTAGE2, GX_TEV_SWAP0, GX_TEV_SWAP0);
-		GX_SetTevSwapMode(GX_TEVSTAGE3, GX_TEV_SWAP0, GX_TEV_SWAP0);
-
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 352, 240);
-
 		//Get CRAM colors using CI14 and RGB565
 		SGX_SetTex(color_tex, GX_TF_CI14, 352, 240, TLUT_FMT_RGB5A3 | tlut_indx);
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
@@ -308,6 +309,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//If MSB is for RGB format then mix with RGB color
 		u32 tev_stage = GX_TEXMAP1;
 		if (Vdp2Regs->SPCTL & 0x20) {
+			GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
 			GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
 			SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
 			SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, 352, 240, 0);
@@ -325,6 +327,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 			GX_SetNumTevStages(2);
 		}
 		//Get priority (as z-texture) and color calculation (as alpha)
+		GX_SetTevSwapMode(tev_stage, GX_TEV_SWAP0, GX_TEV_SWAP2);
 		GX_SetTevOrder(tev_stage, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
 		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex, GX_TF_CI8, 352, 240, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
 		GX_SetTevColorOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -343,11 +346,11 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 		GX_Position2s16(0, 0);
 		GX_TexCoord1u16(0x0000);
-		GX_Position2s16(352*2, 0);
+		GX_Position2s16(352, 0);
 		GX_TexCoord1u16(0x0100);
-		GX_Position2s16(352*2, 240*2);
+		GX_Position2s16(352, 240);
 		GX_TexCoord1u16(0x0101);
-		GX_Position2s16(0, 240*2);
+		GX_Position2s16(0, 240);
 		GX_TexCoord1u16(0x0001);
 	GX_End();
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
