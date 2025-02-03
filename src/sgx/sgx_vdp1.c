@@ -281,6 +281,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
 	//Load the Priority and Colorcalculation TLUT
+	//TODO: only construct when PRCC regs or sprite type is changed
 	__Vdp1LoadPrCcTlut();
 
 	//Set up TEV depending on sprite bitdepth
@@ -407,7 +408,13 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetCurrentMtx(GXMTX_IDENTITY);
 
 		//Extend Alpha for correct RGBA5551 copying
-		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+		//NOTE: This is done twice to make Alpha = 255,
+		//A better approach would be to use the z buffer..
+		GX_Begin(GX_QUADS, GX_VTXFMT4, 8);
+			GX_Position2s16(0, 0);
+			GX_Position2s16(352, 0);
+			GX_Position2s16(352, 240);
+			GX_Position2s16(0, 240);
 			GX_Position2s16(0, 0);
 			GX_Position2s16(352, 0);
 			GX_Position2s16(352, 240);

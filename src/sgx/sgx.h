@@ -21,7 +21,9 @@
 
 #define TLUT_INDX_CRAM			(0x200)
 #define TLUT_INDX_PPCC			(0x210)
-#define TLUT_INDX_CLRBANK		(0x370)
+#define TLUT_INDX_CLRBANK		(0x2F0)
+#define TLUT_INDX_CRAM0			(0x300)
+#define TLUT_INDX_CRAM1			(0x380)
 #define TLUT_INDX_IMM4			(0x310)
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))
 #define TLUT_INDX_IMM8			(((GX_TLUT_256) << 10) | (0x3E0 & 0x3ff))
