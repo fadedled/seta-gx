@@ -75,6 +75,8 @@ u32 sys_clipy = 240;
 
 u32 is_processed = 0;
 
+extern u8 cram_11bpp[PAGE_SIZE];
+
 //Texture for mesh creating
 static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 	0xF0, 0xF0, 0xF0, 0xF0,
@@ -243,7 +245,7 @@ static void __Vdp1LoadPrCcTlut(void)
 		u32 pri = pri_arr[pri_indx];
 		u32 pix = 0;
 		if (pri) {	//If priority is 0 then set as transparent
-			pix = (pri | PRI_SPR) << 8;
+			pix = pri << 8;
 			//TODO: test color calc depending on priority
 			const u32 does_color_calc = 0;
 			if (does_color_calc) {
@@ -268,7 +270,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_InvalidateTexAll();
 	u32 col_offset = (Vdp2Regs->CRAOFB << 4) & 0x700;
 	u32 tlut_indx = clut_addr[vdp1pix.type];
-	SGX_LoadTlut(Vdp2ColorRam + (col_offset << 1), TLUT_SIZE_2K | tlut_indx);
+	SGX_LoadTlut(cram_11bpp + (col_offset << 1), TLUT_SIZE_2K | tlut_indx);
 	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -280,6 +282,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
+	SGX_SetZOffset(0);
 	//Load the Priority and Colorcalculation TLUT
 	//TODO: only construct when PRCC regs or sprite type is changed
 	__Vdp1LoadPrCcTlut();
@@ -336,7 +339,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevAlphaOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevAlphaIn(tev_stage, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
-		GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
+		GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, PRI_SPR);
 	} else {	//8bpp framebuffer
 
 	}
@@ -410,11 +413,7 @@ static void __Vdp1Convert16bpp(void)
 		//Extend Alpha for correct RGBA5551 copying
 		//NOTE: This is done twice to make Alpha = 255,
 		//A better approach would be to use the z buffer..
-		GX_Begin(GX_QUADS, GX_VTXFMT4, 8);
-			GX_Position2s16(0, 0);
-			GX_Position2s16(352, 0);
-			GX_Position2s16(352, 240);
-			GX_Position2s16(0, 240);
+		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 			GX_Position2s16(0, 0);
 			GX_Position2s16(352, 0);
 			GX_Position2s16(352, 240);
@@ -428,7 +427,7 @@ static void __Vdp1Convert16bpp(void)
 		GX_CopyTex(color_rgb_tex, GX_FALSE);
 
 		//Mask RGB colors for dot color copy
-		GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x80, 0x00, 0x00, 0x00});
+		GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x00, 0x21, 0x00, 0x00});
 		GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTALPHA, GX_BL_INVDSTALPHA, GX_LO_OR);
 		GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
 			GX_Position2s16(0, 0);

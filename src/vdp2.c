@@ -140,12 +140,12 @@ void FASTCALL Vdp2ColorRamWriteByte(u32 addr, u8 val) {
 //DONE
 void FASTCALL Vdp2ColorRamWriteWord(u32 addr, u16 val) {
 	addr &= 0xFFF;
-	val |= 0x8000;
+	//val |= 0x8000;
 	//XXX: set first address to RGB4A3
 	//if (!addr) {
 	//	val = TO_RGB4A3(val);
 	//}
-	SGX_ColorRamDirty(addr >> 5);
+	//SGX_ColorRamDirty(addr >> 5);
 	if (Vdp2Internal.ColorMode == 0 ) {
 		T2WriteWord(Vdp2ColorRam, addr | 0x800, val);
 	}
@@ -157,8 +157,8 @@ void FASTCALL Vdp2ColorRamWriteWord(u32 addr, u16 val) {
 void FASTCALL Vdp2ColorRamWriteLong(u32 addr, u32 val) {
 	addr &= 0xFFF;
 	//XXX: this hack should not be done in mode 2...
-	val |= 0x80008000;
-	SGX_ColorRamDirty(addr >> 5);
+	//val |= 0x80008000;
+	//SGX_ColorRamDirty(addr >> 5);
 	T2WriteLong(Vdp2ColorRam, addr, val);
    	if (Vdp2Internal.ColorMode == 0 ) {
 		T2WriteLong(Vdp2ColorRam, addr | 0x800, val);
@@ -361,6 +361,7 @@ void Vdp2VBlankOUT(void)
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 
 		cycles_start = gettime();
+		SGX_Vdp2GenCRAM();
 		SGX_Vdp1DrawFramebuffer();
 		//SGX_Vdp1ProcessFramebuffer();
 		SGX_Vdp2Draw();

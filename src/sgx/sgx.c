@@ -55,9 +55,6 @@ do {								\
 
 
 //XXX: divide?
-static u16 tlut_14bpp_ram[0x800] ATTRIBUTE_ALIGN(32);
-static u16 tlut_8bpp_ram[0x800] ATTRIBUTE_ALIGN(32);
-static u16 tlut_4bpp_ram[0x800] ATTRIBUTE_ALIGN(32);
 static u8 tlut_dirty[0x80] ATTRIBUTE_ALIGN(32);
 static GXTlutRegion tlut_region;	//XXX:tlut region for callback (can skip?)
 
@@ -99,12 +96,6 @@ static const f32 tex_array[] = {
 	8.0f, 8.0f
 };
 
-static const u16 cell8_tex[] ATTRIBUTE_ALIGN(32) = {
-	0x8080, 0x7F81, 0x0000, 0x0000,
-	0x817F, 0x8080, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000,
-	0x0000, 0x0000, 0x0000, 0x0000
-};
 
 static GXTlutRegion* __SGX_CalcTlutRegion(u32 idx)
 {
@@ -176,18 +167,7 @@ void SGX_Init(void)
 	DCFlushRange(tlut_data, 0x200);
 	SGX_LoadTlut(tlut_data, TLUT_SIZE_256 | TLUT_INDX_CLRBANK);
 	SGX_Vdp1Init();
-}
-
-void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
-{
-	if (cellsize & (bpp_id == SPRITE_8BPP)) {
-		GX_LoadTexObjPreloaded(&ind_celltex8, &ind_cellreg8, GX_TEXMAP1);
-		GX_SetNumIndStages(1);
-		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP1);
-		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_2, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
-		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_8, GX_ITS_4);
-	}
-	//TODO: Handle Cell 16BPP (1x1 and 2x2)
+	SGX_CellConverterInit();
 }
 
 
@@ -292,7 +272,7 @@ void SGX_LoadTlut(void *data_addr, u32 tlut)
 }
 
 
-void SGX_PreloadTex(void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt)
+void SGX_PreloadTex(const void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt)
 {
 	u32 tex_maddr = 0x60000000 | (MEM_VIRTUAL_TO_PHYSICAL(tex_addr) >> 5);
 	u32 tmem_even = 0x61000000 | (tmem_addr & 0x7fff);

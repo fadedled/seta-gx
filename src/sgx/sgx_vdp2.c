@@ -55,11 +55,12 @@ Mtx vdp2mtx ATTRIBUTE_ALIGN(32);
 u8 *bg_tex ATTRIBUTE_ALIGN(32);
 u8 *prop_tex ATTRIBUTE_ALIGN(32);
 
-u8 cram_4bpp[PAGE_SIZE*2] ATTRIBUTE_ALIGN(32);
-u8 cram_8bpp[PAGE_SIZE*2] ATTRIBUTE_ALIGN(32);
-u8 cram_11bpp[PAGE_SIZE*2] ATTRIBUTE_ALIGN(32);
+u8 cram_4bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
+u8 cram_8bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
+u8 cram_11bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 
 struct CellFormatData {
+	u32 disp_ctl;	/*Screen display Control*/
 	u32 char_ctl;	/*Character control settings*/
 	u32 color_fmt;	/*Color format*/
 	u32 char_size; 	/*Size of char data (8 or 16 pixel)*/
@@ -130,11 +131,8 @@ static void __Vdp2SetPatternData(void)
 			cell.ptrn_pal_shft = 8;
 			cell.ptrn_mask |= 0x700000;
 		} else {	//16 color count
-			//TODO: add color ram offset (should TEST)
 			supp_data |= (cell.ptrn_supp & 0xE0) << 15;
-			u32 pal_ofs = (supp_data + (cell.cram_offset << 12)) & 0x700000;
-			supp_data = (supp_data & ~0x700000) | pal_ofs;
-			cell.ptrn_pal_shft = 12;
+			cell.ptrn_pal_shft = 4;
 			cell.ptrn_mask |= 0x7F0000;
 		}
 	} else {
@@ -146,12 +144,13 @@ static void __Vdp2SetPatternData(void)
 		if (cell.color_fmt) {	//non 16 color count
 			cell.ptrn_mask |= 0x700000;
 		} else {	//16 color count
-			//TODO: add color ram offset (should TEST)
-			u32 pal_ofs = (supp_data + (cell.cram_offset << 12)) & 0x700000;
-			supp_data = (supp_data & ~0x700000) | pal_ofs;
 			cell.ptrn_mask |= 0x7F0000;
 		}
 	}
+
+	//TODO: add color ram offset (should TEST)
+	u32 pal_ofs = (supp_data + (cell.cram_offset << 16)) & 0x700000;
+	supp_data = (supp_data & ~0x700000) | pal_ofs;
 	cell.ptrn_supp = supp_data;
 
 	cell.page_mask = (0x20 << (cell.char_size == 8)) - 1;
@@ -165,12 +164,13 @@ static void __Vdp2ReadNBG(u32 bg_id)
 {
 	switch(bg_id) {
 		case 0: {	//Normal BG 0
+			cell.disp_ctl = Vdp2Regs->BGON;
 			cell.char_ctl = Vdp2Regs->CHCTLA & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCN0;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 0) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
-			cell.cram_offset = (Vdp2Regs->CRAOFA << 8) & 0x700;
+			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -180,12 +180,13 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			//TODO: add RBG1
 		} break;
 		case 1: {	//Normal BG 1
+			cell.disp_ctl = Vdp2Regs->BGON >> 1;
 			cell.char_ctl = (Vdp2Regs->CHCTLA >> 8) & 0x3F;
 			cell.ptrn_supp = Vdp2Regs->PNCN1;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 2) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
-			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x700;
+			cell.cram_offset = (Vdp2Regs->CRAOFA) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 4) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -194,12 +195,13 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 2: {	//Normal BG 2
+			cell.disp_ctl = Vdp2Regs->BGON >> 2;
 			cell.char_ctl = (Vdp2Regs->CHCTLB & 0x1) | ((Vdp2Regs->CHCTLB << 3) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN2;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 4) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
-			cell.cram_offset = (Vdp2Regs->CRAOFA) & 0x700;
+			cell.cram_offset = (Vdp2Regs->CRAOFA >> 4) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 8) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -208,12 +210,13 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 3: {	//Normal BG 3
+			cell.disp_ctl = Vdp2Regs->BGON >> 3;
 			cell.char_ctl = ((Vdp2Regs->CHCTLB >> 4) & 0x1) | ((Vdp2Regs->CHCTLB >> 1) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN3;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
-			cell.cram_offset = (Vdp2Regs->CRAOFA >> 4) & 0x700;
+			cell.cram_offset = (Vdp2Regs->CRAOFA >> 8) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 12) & 0x7) << 6;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -222,6 +225,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 		} break;
 		case 4: {	//Rotation BG
+			cell.disp_ctl = Vdp2Regs->BGON >> 4;
 			cell.char_ctl = (Vdp2Regs->CHCTLB >> 8) & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCR;
 			//TODO: RBG are not drawn yet
@@ -260,54 +264,60 @@ static void SGX_Vdp2DrawCellSimple(void)
 {
 	guMtxIdentity(vdp2mtx);
 	guMtxScale(vdp2mtx, cell.char_size, cell.char_size, 0.0f);
-	vdp2mtx[0][3] = -(((f32)(cell.xscroll)) / 256.0f);
-	vdp2mtx[1][3] = -(((f32)(cell.yscroll)) / 256.0f);
+	u32 char_ofs_mask = (cell.char_size << 8) - 1;
+	//TODO: When scaling we must leave only integer values if we dont
+	//want to worry with artifacts
+	vdp2mtx[0][3] = -(((f32)((cell.xscroll & char_ofs_mask) >> 8)));
+	vdp2mtx[1][3] = -(((f32)((cell.yscroll & char_ofs_mask) >> 8)));
 	GX_LoadPosMtxImm(vdp2mtx, GXMTX_VDP2);
 	GX_SetCurrentMtx(GXMTX_VDP2);
-	GX_SetNumIndStages(0);
-	GX_SetTevDirect(GX_TEVSTAGE0);
 
 	//TODO: add scaling and screen dims to the format
 
 	u32 x_tile = ((cell.xscroll >> 8) / cell.char_size);
 	u32 y_tile = ((cell.yscroll >> 8) / cell.char_size);
-	u32 x_max = x_tile + ((352 / cell.char_size) + 1);
-	u32 y_max = y_tile + ((240 / cell.char_size) + 1);
+	u32 x_max = (352 / cell.char_size) + 1;
+	u32 y_max = (240 / cell.char_size) + 1;
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
 	switch (cell.color_fmt) {
-		case 0:{
+		case 0:{ // 4bpp
 			SGX_BeginVdp2Scroll(GX_TF_CI4, cell.char_size);
 			GX_SetNumIndStages(0);
 			GX_SetTevDirect(GX_TEVSTAGE0);
-			SGX_LoadTlut(cram_4bpp, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_4bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
 		} break;
-		case 1: {
+		case 1: { // 8bpp
 			SGX_BeginVdp2Scroll(GX_TF_CI8, cell.char_size);
 			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_8BPP);
-			SGX_LoadTlut(cram_8bpp, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_8bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
 		} break;
 		case 2: { // 16bpp (11 bits used)
 			SGX_BeginVdp2Scroll(GX_TF_CI14, cell.char_size);
-			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_8BPP);
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_16BPP);
 			SGX_LoadTlut(cram_11bpp, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
 		} break;
-		case 3: {
+		case 3: { // 16bpp (RGBA)
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_16BPP);
 			SGX_BeginVdp2Scroll(GX_TF_RGB5A3, cell.char_size);
 		} break;
-		case 4: {
+		case 4: { // 32bpp (RGBA)
 			SGX_BeginVdp2Scroll(GX_TF_RGBA8, cell.char_size);
 		} break;
 	}
 
-	for (u32 y = y_tile; y < y_max; ++y) {
+	for (u32 j = 0; j < y_max; ++j) {
+		u32 y = j + y_tile;
 		u32 yaddr = ((y & cell.page_mask) | ((y & (cell.page_mask+1)) << 1)) << cell.page_shft;
-		u32 map = ((y >> cell.ymap_shft) & 2);
-		for (u32 x = x_tile; x < x_max; ++x) {
+		u32 ymap = ((y >> cell.ymap_shft) & 2);
+		for (u32 i = 0; i < x_max; ++i) {
+			u32 x = i + x_tile;
 			//Get pattern data
 			u32 xaddr = ((x & cell.page_mask) | ((x & (cell.page_mask+1)) << cell.page_shft));
 			u32 addr = (yaddr | xaddr) & cell.plane_mask;
-			map = (map & 2) | ((x >> cell.xmap_shft) & 1);
+			u32 map = ymap | ((x >> cell.xmap_shft) & 1);
 
 			u32 ptrn;
 			if (cell.ptrn_supp & 0x8000) {
@@ -316,33 +326,31 @@ static void SGX_Vdp2DrawCellSimple(void)
 				ptrn = *((u32*) (cell.map_addr[map] + (addr << 2)));
 			}
 			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
+			flip = ((flip << 8) & 0x100) | (flip >> 1);
 			u32 prcc = ptrn + cell.ptrn_supp;
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
 			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
 
 			//Set texture address and size
 			u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(Vdp2Ram + chr) >> 5);
-			GX_LOAD_BP_REG(tex_maddr);
 			//If tlut is used set its address
 			u32 tlut_addr = 0x98000000 | TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM0 | pal;
+			GX_LOAD_BP_REG(tex_maddr);
 			GX_LOAD_BP_REG(tlut_addr);
-			//TODO: Change tex matrix to do flipping
-			//GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, flip);
 
-			//TODO: Set VtxFrmt5
-			u32 vert = (((x & 0xFF) << 24) | ((y & 0xFF) << 16));
+			u32 vert = (((i & 0xFF) << 24) | ((j & 0xFF) << 16));
 			GX_Begin(GX_QUADS, GX_VTXFMT5, 4);
-				wgPipe->U32 = vert;
-				wgPipe->U32 = vert + 0x01000100;
-				wgPipe->U32 = vert + 0x01010101;
-				wgPipe->U32 = vert + 0x00010001;
+				wgPipe->U32 = vert ^ flip;
+				wgPipe->U32 = vert + (0x01000100 ^ flip);
+				wgPipe->U32 = vert + (0x01010101 ^ flip);
+				wgPipe->U32 = vert + (0x00010001 ^ flip);
 			GX_End();
 		}
 	}
 }
 
 
-void __Vdp2GenCRAM(void) {
+void SGX_Vdp2GenCRAM(void) {
 	u32 *src = (u32*) Vdp2ColorRam;
 	u32 *dst_4bpp = (u32*) cram_4bpp;
 	u32 *dst_8bpp = (u32*) cram_8bpp;
@@ -353,7 +361,7 @@ void __Vdp2GenCRAM(void) {
 		//Mask first color when multiple of 16 or 256
 		*dst_4bpp = color & (0xFFFFFFFF >> (!(i & 0xF) << 4));
 		*dst_8bpp = color & (0xFFFFFFFF >> (!(i & 0xFF) << 4));
-		//dst_11bpp = color & (0xFFFFFFFF >> (!(i & 0x7FF) << 4));
+		//*dst_11bpp = color & (0xFFFFFFFF >> (!(i & 0x7FF) << 4));
 		*dst_11bpp = color;
 		//dst_msb = color & 0xf0
 		src++;
@@ -395,8 +403,6 @@ void SGX_Vdp2Draw(void)
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-
-	__Vdp2GenCRAM();
 
 	//Setup GX things (vertex format, )
 	u32 scr_pri = 0;

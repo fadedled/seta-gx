@@ -233,3 +233,67 @@ void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align)
 		GX_SetTevDirect(GX_TEVSTAGE0);
 	}
 }
+
+
+static const u16 indtex_8x2cell[] ATTRIBUTE_ALIGN(32) = {
+	0x8080, 0x7F81, 0x0000, 0x0000,
+	0x817F, 0x8080, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000,
+	0x0000, 0x0000, 0x0000, 0x0000
+};
+
+static const u16 indtex_16x1cell[] ATTRIBUTE_ALIGN(32) = {
+	0x8080, 0x7f81, 0x0000, 0x0000,
+	0x8081, 0x7f82, 0x0000, 0x0000,
+	0x817e, 0x807f, 0x0000, 0x0000,
+	0x817f, 0x8080, 0x0000, 0x0000
+};
+
+static const u16 indtex_16x2cell[] ATTRIBUTE_ALIGN(32) = {
+	0x8080, 0x7f81, 0x7e84, 0x7d85,
+	0x8081, 0x7f82, 0x7e85, 0x7d86,
+	0x817e, 0x807f, 0x7f82, 0x7e83,
+	0x817f, 0x8080, 0x7f83, 0x7e84,
+
+	0x827c, 0x817d, 0x8080, 0x7f81,
+	0x827d, 0x817e, 0x8081, 0x7f82,
+	0x837a, 0x827b, 0x817e, 0x807f,
+	0x837b, 0x827c, 0x817f, 0x8080
+};
+
+enum IndCell {
+	INDTEX_CELL_8x2,
+	INDTEX_CELL_16x1,
+	INDTEX_CELL_16x2
+};
+
+SGXTexPre indtex_cell[8] = {
+	{.addr = (0x7FF00 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 2), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	{.addr = (0x7FF20 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 4), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	{.addr = (0x7FF40 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 4, 8), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+};
+
+void SGX_CellConverterInit(void)
+{
+	SGX_PreloadTex(indtex_8x2cell , indtex_cell[INDTEX_CELL_8x2].addr, TEXPRE_TYPE_16BPP | 1);
+	SGX_PreloadTex(indtex_16x1cell, indtex_cell[INDTEX_CELL_16x1].addr, TEXPRE_TYPE_16BPP | 1);
+	SGX_PreloadTex(indtex_16x2cell, indtex_cell[INDTEX_CELL_16x2].addr, TEXPRE_TYPE_16BPP | 2);
+}
+
+void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
+{
+	if (cellsize && (bpp_id == SPRITE_8BPP)) {
+		GX_SetNumIndStages(1);
+		SGX_SetTexPreloaded(GX_TEXMAP7, &indtex_cell[INDTEX_CELL_8x2]);
+		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP7);
+		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_2, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
+		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_8, GX_ITS_4);
+	} else if (bpp_id == SPRITE_16BPP) {
+		GX_SetNumIndStages(1);
+		SGX_SetTexPreloaded(GX_TEXMAP7, &indtex_cell[INDTEX_CELL_16x1 + cellsize]);
+		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_1, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
+		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP7);
+		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_4, GX_ITS_1);
+	}
+	//TODO: Handle Cell 16BPP (1x1 and 2x2)
+}

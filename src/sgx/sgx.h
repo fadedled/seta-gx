@@ -86,7 +86,7 @@ void SGX_Init(void);
 void SGX_BeginVdp1(void);
 void SGX_InitTex(u32 mapid, u32 even, u32 odd);
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
-void SGX_PreloadTex(void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt);
+void SGX_PreloadTex(const void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt);
 void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex);
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align);
@@ -97,10 +97,15 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
 void SGX_LoadTlut(void *data_addr, u32 tlut);
 void SGX_SetZOffset(u32 offset);
+
+void SGX_CellConverterInit(void);
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id);
+
 
 void SGX_DrawScroll(void);
 void SGX_DrawBitmap(void);
+
+void SGX_Vdp2GenCRAM(void);
 
 void SGX_Vdp2ColorRamLoad(void);
 void SGX_InvalidateVRAM(void);
