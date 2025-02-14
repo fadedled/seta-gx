@@ -70,9 +70,11 @@ struct CellFormatData {
 	u32 ptrn_pal_shft;	/*Shift of palette data in pattern name*/
 	u32 ptrn_mask;		/*Mask of character & palette data in pattern name */
 	u32 cram_offset; 	/*Color ram offset*/
+	u32 pri; 			/*Background priority*/
+	u32 spec_pri; 		/*Special priority mode*/
 
-	u32 xscroll;			/*X increment*/
-	u32 yscroll; 			/*Y increment*/
+	u32 xscroll;		/*X increment*/
+	u32 yscroll; 		/*Y increment*/
 	u32 page_mask;		/*page mask*/
 	u32 page_shft;		/*page shift*/
 	u32 plane_mask;		/*plane mask*/
@@ -136,7 +138,7 @@ static void __Vdp2SetPatternData(void)
 			cell.ptrn_mask |= 0x7F0000;
 		}
 	} else {
-		cell.ptrn_mask = 0x00003FFF;
+		cell.ptrn_mask = 0x00003FFF; 	//14th bit is not used because of 512K of VRAM
 		cell.ptrn_flip_shft = 30;
 		cell.ptrn_pal_shft = 0;
 		cell.ptrn_chr_shft = 0;
@@ -147,7 +149,11 @@ static void __Vdp2SetPatternData(void)
 			cell.ptrn_mask |= 0x7F0000;
 		}
 	}
-
+	//If special priority mode 0 then mask off pri flag in pattern
+	if (cell.spec_pri) {
+		cell.ptrn_mask |= 0x20000000;
+		cell.pri &= ~0x10;	//LSB is turned off
+	}
 	//TODO: add color ram offset (should TEST)
 	u32 pal_ofs = (supp_data + (cell.cram_offset << 16)) & 0x700000;
 	supp_data = (supp_data & ~0x700000) | pal_ofs;
@@ -168,6 +174,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.char_ctl = Vdp2Regs->CHCTLA & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCN0;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 0) & 0x3;
+			cell.spec_pri = (Vdp2Regs->SFPRMD >> 0) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x70;
@@ -184,6 +191,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.char_ctl = (Vdp2Regs->CHCTLA >> 8) & 0x3F;
 			cell.ptrn_supp = Vdp2Regs->PNCN1;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 2) & 0x3;
+			cell.spec_pri = (Vdp2Regs->SFPRMD >> 2) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA) & 0x70;
@@ -199,6 +207,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.char_ctl = (Vdp2Regs->CHCTLB & 0x1) | ((Vdp2Regs->CHCTLB << 3) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN2;
 			cell.plane_mask = (Vdp2Regs->PLSZ >> 4) & 0x3;
+			cell.spec_pri = (Vdp2Regs->SFPRMD >> 4) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 4) & 0x70;
@@ -213,7 +222,8 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.disp_ctl = Vdp2Regs->BGON >> 3;
 			cell.char_ctl = ((Vdp2Regs->CHCTLB >> 4) & 0x1) | ((Vdp2Regs->CHCTLB >> 1) & 0x10);
 			cell.ptrn_supp = Vdp2Regs->PNCN3;
-			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 6) & 0x3;
+			cell.spec_pri = (Vdp2Regs->SFPRMD >> 6) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 8) & 0x70;
@@ -327,19 +337,22 @@ static void SGX_Vdp2DrawCellSimple(void)
 			}
 			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
 			flip = ((flip << 8) & 0x100) | (flip >> 1);
-			u32 prcc = ptrn + cell.ptrn_supp;
+			u32 prcc = (ptrn + cell.ptrn_supp) & cell.ptrn_mask;
 			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
 			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
-
-			//Set texture address and size
 			u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(Vdp2Ram + chr) >> 5);
-			//If tlut is used set its address
 			u32 tlut_addr = 0x98000000 | TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM0 | pal;
+			u32 vert = (((i & 0xFF) << 24) | ((j & 0xFF) << 16));
+
+			//Set texture addr, tlut and Z offset from priority value
 			GX_LOAD_BP_REG(tex_maddr);
 			GX_LOAD_BP_REG(tlut_addr);
+			GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
+			wgPipe->F32 = (f32) (16777215 - (cell.pri | ((prcc >> 25) & 0x10)));
 
-			u32 vert = (((i & 0xFF) << 24) | ((j & 0xFF) << 16));
 			GX_Begin(GX_QUADS, GX_VTXFMT5, 4);
+			//wgPipe->U8 = GX_QUADS | GX_VTXFMT5;
+			//wgPipe->U16 = 4;
 				wgPipe->U32 = vert ^ flip;
 				wgPipe->U32 = vert + (0x01000100 ^ flip);
 				wgPipe->U32 = vert + (0x01010101 ^ flip);
@@ -414,8 +427,8 @@ void SGX_Vdp2Draw(void)
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
+		cell.pri = (scr_pri << 4) | PRI_NGB3;
 		__Vdp2ReadNBG(3);	//Draw NBG3
-		SGX_SetZOffset(scr_pri << 4 | PRI_NGB3);
 		//GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
 		//GX_SetScissor(352, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
@@ -426,8 +439,9 @@ void SGX_Vdp2Draw(void)
 	scr_enable = Vdp2Regs->BGON & 0x4;
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
+		cell.pri = (scr_pri << 4) | PRI_NGB2;
 		__Vdp2ReadNBG(2);	//Draw NBG2
-		SGX_SetZOffset(scr_pri << 4 | PRI_NGB2);
+
 		//GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
 		//GX_SetScissor(0, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
@@ -440,8 +454,9 @@ void SGX_Vdp2Draw(void)
 	scr_enable = Vdp2Regs->BGON & 0x2;
 	if (!(!(scr_pri) || !(scr_enable) ||
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4))) {
+		cell.pri = (scr_pri << 4) | PRI_NGB1;
 		__Vdp2ReadNBG(1);	//Draw NBG1
-		SGX_SetZOffset(scr_pri << 4 | PRI_NGB1);
+
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
@@ -454,8 +469,9 @@ void SGX_Vdp2Draw(void)
 	scr_pri = Vdp2Regs->PRINA & 0x7;
 	scr_enable = Vdp2Regs->BGON & 0x1;
 	if (!(!(scr_pri) || !(scr_enable))) {
+		cell.pri = (scr_pri << 4) | PRI_NGB0;
 		__Vdp2ReadNBG(0);	//Draw NBG0
-		SGX_SetZOffset(scr_pri << 4 | PRI_NGB0);
+
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {

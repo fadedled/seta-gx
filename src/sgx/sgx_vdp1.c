@@ -950,7 +950,7 @@ void SGX_Vdp1SysClip(void)
 
 void SGX_Vdp1LocalCoord(void)
 {
-	vdp1mtx[0][3] = (f32) ((s16)vdp1cmd->XA);
-	vdp1mtx[1][3] = (f32) ((s16)vdp1cmd->YA);
+	vdp1mtx[0][3] = ((f32) ((s16)vdp1cmd->XA));
+	vdp1mtx[1][3] = ((f32) ((s16)vdp1cmd->YA));
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 }
