@@ -6,42 +6,6 @@
 #include "../vdp2.h"
 #include <malloc.h>
 
-#define GX_LOAD_BP_REG(x)				\
-do {								\
-	wgPipe->U8 = 0x61;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(x);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_CP_REG(x, y)			\
-do {								\
-	wgPipe->U8 = 0x08;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U8 = (u8)(x);			\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(y);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_XF_REG(x, y)			\
-do {								\
-	wgPipe->U8 = 0x10;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)((x)&0xffff);		\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(y);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_XF_REGS(x, n)			\
-do {								\
-	wgPipe->U8 = 0x10;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(((((n)&0xffff)-1)<<16)|((x)&0xffff));				\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
 
 #define SGX_TORGBA32(col) ((((col) & 0x1F) | (((col) & 0x3E0) << 3) | (((col) & 0x7C00) << 6)) << 11)
 #define SGX_TORGB565(col) (((col) & 0x1F) | ((col << 1) & 0xFFC0))

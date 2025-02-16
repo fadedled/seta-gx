@@ -13,47 +13,6 @@
 #define NUM_SPRITE_WIDTHS	64
 
 
-
-#define GX_LOAD_BP_REG(x)				\
-do {								\
-	wgPipe->U8 = 0x61;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(x);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_CP_REG(x, y)			\
-do {								\
-	wgPipe->U8 = 0x08;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U8 = (u8)(x);			\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(y);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_XF_REG(x, y)			\
-do {								\
-	wgPipe->U8 = 0x10;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)((x)&0xffff);		\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(y);		\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-#define GX_LOAD_XF_REGS(x, n)			\
-do {								\
-	wgPipe->U8 = 0x10;				\
-	asm volatile ("" ::: "memory" ); \
-	wgPipe->U32 = (u32)(((((n)&0xffff)-1)<<16)|((x)&0xffff));				\
-	asm volatile ("" ::: "memory" ); \
-} while(0)
-
-
-#define __FLUSH_TEX_STATE		GX_LOAD_BP_REG(0x0F << 24)
-
-
 //XXX: divide?
 static u8 tlut_dirty[0x80] ATTRIBUTE_ALIGN(32);
 static GXTlutRegion tlut_region;	//XXX:tlut region for callback (can skip?)
@@ -265,10 +224,10 @@ void SGX_LoadTlut(void *data_addr, u32 tlut)
 {
 	u32 tlut_addr = 0x64000000 | (MEM_VIRTUAL_TO_PHYSICAL(data_addr) >> 5);
 	u32 tlut_addr_conf = 0x65000000 | tlut;
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 		GX_LOAD_BP_REG(tlut_addr);
 		GX_LOAD_BP_REG(tlut_addr_conf);
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 }
 
 
@@ -278,12 +237,12 @@ void SGX_PreloadTex(const void *tex_addr, u32 tmem_addr, u32 tile_cnt_fmt)
 	u32 tmem_even = 0x61000000 | (tmem_addr & 0x7fff);
 	u32 tex_size = 0x63000000 | (tile_cnt_fmt & 0x1ffff);
 
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	GX_LOAD_BP_REG(tex_maddr);
 	GX_LOAD_BP_REG(tmem_even);
 	GX_LOAD_BP_REG(0x62000000);
 	GX_LOAD_BP_REG(tex_size);
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 }
 
 
@@ -297,20 +256,20 @@ void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex)
 	u32 tmem_even = 0x8C000000 | mapid | tex->addr;
 	u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
 
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	GX_LOAD_BP_REG(tex_filt);
 	GX_LOAD_BP_REG(tex_lod);
 	GX_LOAD_BP_REG(tex_size);
 
 	GX_LOAD_BP_REG(tmem_even);
 	GX_LOAD_BP_REG(tmem_odd);
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 }
 
 void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 {
 	//Flush Texture State
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	//Set texture address and size
 	u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
 	u32 tex_size = 0x88000000 | (fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu);
@@ -322,13 +281,13 @@ void SGX_SetTex(void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 		GX_LOAD_BP_REG(tlut_addr);
 	}
 	//Flush Texture State
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 }
 
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 {
 	//Flush Texture State
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	//Set texture address and size
 	mapid <<= 24;
 	u32 tex_maddr = 0x94000000 | mapid | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
@@ -341,7 +300,7 @@ void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 		GX_LOAD_BP_REG(tlut_addr);
 	}
 	//Flush Texture State
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 }
 
 
@@ -375,13 +334,79 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut)
 {
 	//Set texture address and size
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
 	GX_LOAD_BP_REG(tex_maddr);
-	__FLUSH_TEX_STATE;
+	__SGX_FLUSH_TEX_STATE;
 	//If tlut is used set its address
 	//u32 tlut_addr = 0x98000800 | (tlut & 0x3ff);
 	//GX_LOAD_BP_REG(tlut_addr);
 }
 
+
+// GX replacement functions (direct register access)
+void SGX_Begin(u8 primitive, u8 vtxfmt, u16 vtxcnt)
+{
+	wgPipe->U8 = primitive | (vtxfmt & 0x7);
+	wgPipe->U16 = vtxcnt;
+}
+
+void SGX_End() {/*Does nothing*/}
+
+void SGX_SetTevGens(u8 num_tevs, u8 num_texgens, u8 num_chans)
+{
+	//gen_mode register:
+	//[0x00][19 : coplanar_en][16-18 : num_indtevs][14-15 : cull_mode][10-13 : num_tevs][9 : multsamp_en][4-6 : num_chans][0-3 : num_texgens]
+	num_tevs = (num_tevs-1) & 0xF;
+	num_texgens &= 0xF;
+	num_chans &= 0x7;
+	u32 genmode = (0x00 << 24) | (num_texgens) | (num_chans << 4) | (num_tevs << 10);
+
+	SGX_MASK_BP(0x3C7Fu); //Only write set bits
+	GX_LOAD_BP_REG(genmode);
+	GX_LOAD_XF_REG(0x103F, num_texgens);
+	GX_LOAD_XF_REG(0x103F, num_chans);
+}
+
+void SGX_SetTevGensExt(u8 num_tevs, u8 num_texgens, u8 num_chans, u8 num_indtevs)
+{
+	num_tevs = (num_tevs-1) & 0xF;
+	num_texgens &= 0xF;
+	num_chans &= 0x7;
+	num_indtevs &= 0x7;
+	u32 genmode = (0x00 << 24) | (num_texgens) | (num_chans << 4) | (num_tevs << 10) | (num_indtevs << 16);
+
+	SGX_MASK_BP(0x73C7Fu); //Only write set bits
+	GX_LOAD_BP_REG(genmode);
+	GX_LOAD_XF_REG(0x103F, num_texgens);
+	GX_LOAD_XF_REG(0x103F, num_chans);
+}
+
+void SGX_SetNumIndStages(u8 num_indtevs)
+{
+	SGX_MASK_BP(0x70000u); //Only write to num_indtevs bits
+	GX_LOAD_BP_REG(((num_indtevs & 0x7) << 16));
+}
+
+void SGX_SetCullMode(u8 mode)
+{
+	mode = ((mode>>1) | (mode << 1)) & 0x3;
+	SGX_MASK_BP(0xC000);
+	GX_LOAD_BP_REG(mode);
+}
+
+
+void SGX_SetCurrentMtxLo(u32 posn, u32 t0, u32 t1, u32 t2, u32 t3)
+{
+	u32 mtx = (posn & 0x3F) | ((t0 & 0x3F) << 6) | ((t1 & 0x3F) << 12) | ((t2 & 0x3F) << 18) | ((t3 & 0x3F) << 24);
+	GX_LOAD_CP_REG(0x30, mtx);
+	GX_LOAD_XF_REG(0x1018, mtx);
+}
+
+void SGX_SetCurrentMtxHi(u32 t4, u32 t5, u32 t6, u32 t7)
+{
+	u32 mtx = (t4 & 0x3F) | ((t5 & 0x3F) << 6) | ((t6 & 0x3F) << 12) | ((t7 & 0x3F) << 18);
+	GX_LOAD_CP_REG(0x40, mtx);
+	GX_LOAD_XF_REG(0x1019, mtx);
+}
 

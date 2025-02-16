@@ -69,6 +69,50 @@
 
 #define	USE_NEW_VDP1		1
 
+//========================================
+// Macros for writing to gpu regs
+//========================================
+#define GX_LOAD_BP_REG(x)				\
+do {								\
+	wgPipe->U8 = 0x61;				\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U32 = (u32)(x);		\
+	asm volatile ("" ::: "memory" ); \
+} while(0)
+
+//Masks bits when writing once to BP regs (afterwards it is reset)
+#define SGX_MASK_BP(mask)			GX_LOAD_BP_REG((0xFE000000 | (mask & 0xFFFFFF)))
+#define __SGX_FLUSH_TEX_STATE		GX_LOAD_BP_REG((0x0F << 24))
+
+#define GX_LOAD_CP_REG(x, y)			\
+do {								\
+	wgPipe->U8 = 0x08;				\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U8 = (u8)(x);			\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U32 = (u32)(y);		\
+	asm volatile ("" ::: "memory" ); \
+} while(0)
+
+#define GX_LOAD_XF_REG(x, y)			\
+do {								\
+	wgPipe->U8 = 0x10;				\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U32 = (u32)((x)&0xffff);		\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U32 = (u32)(y);		\
+	asm volatile ("" ::: "memory" ); \
+} while(0)
+
+#define GX_LOAD_XF_REGS(x, n)			\
+do {								\
+	wgPipe->U8 = 0x10;				\
+	asm volatile ("" ::: "memory" ); \
+	wgPipe->U32 = (u32)(((((n)&0xffff)-1)<<16)|((x)&0xffff));				\
+	asm volatile ("" ::: "memory" ); \
+} while(0)
+
+
 typedef struct SGXTexPre_t {
 	u32 addr; 	//Address region in TMEM
 	u32 fmt;	//Format for loading texture to TEXMAP
@@ -91,7 +135,6 @@ void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex);
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align);
 void SGX_EndVdp1(void);
-
 
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
@@ -130,6 +173,38 @@ void SGX_Vdp1SysClip(void);
 void SGX_Vdp1LocalCoord(void);
 
 void SGX_Vdp2Draw(void);
+
+
+/*
+ * Here we have a serious attempt at replacing all GX functions that use shadow regs
+ */
+void SGX_Begin(u8 primitive, u8 vtxfmt, u16 vtxcnt);
+void SGX_End();
+
+//====================
+// TEV STAGES
+//====================
+void SGX_SetTevGens(u8 num_tevs, u8 num_texgens, u8 num_chans);
+void SGX_SetTevGensExt(u8 num_tevs, u8 num_texgens, u8 num_chans, u8 num_indtevs);
+void SGX_SetNumIndStages(u8 num_indtevs);
+void SGX_SetCullMode(u8 mode);
+
+
+
+//====================
+// MATRIX
+//====================
+void SGX_SetCurrentMtxLo(u32 posn, u32 t0, u32 t1, u32 t2, u32 t3);
+void SGX_SetCurrentMtxHi(u32 t4, u32 t5, u32 t6, u32 t7);
+
+//TODO: More functions are needed to replace GX
+// -SetVtxAttrFmt
+// -SetTexCoordScale (use manual)
+// -Update BP mask if using GC (indtev)
+// -SetPxlFmt must change ms_en in gen_rode reg
+// Set Vertex description (also XF is modified)
+// If chan color changes update corresponding XF regs (SetChanCntrl/SetChanColor)
+// If tex coordgen updates the update the mask (SetTexCoordGen)
 
 
 #endif //__VID_GX_H__
