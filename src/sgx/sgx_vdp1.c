@@ -805,15 +805,19 @@ void SGX_Vdp1DrawPolygon(void)
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	u32 colors[4] = {0};
-	if (vdp1cmd->PMOD & 0x4) {
-		__SGX_GetGouraud(colors);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	u32 colors[4] = {colr, colr, colr, colr};
+	if (colr & 0x8000) {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+		GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+		GX_SetTevKColor(GX_KCOLOR0, konst);
+		if (vdp1cmd->PMOD & 0x4) {
+			__SGX_GetGouraud(colors);
+		}
+	} else {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	}
 	//Draw the sprite
 	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
@@ -836,15 +840,19 @@ void SGX_Vdp1DrawPolyline(void)
 {
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	u32 colors[4] = {0};
-	if (vdp1cmd->PMOD & 0x4) {
-		__SGX_GetGouraud(colors);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	u32 colors[4] = {colr, colr, colr, colr};
+	if (colr & 0x8000) {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+		GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+		GX_SetTevKColor(GX_KCOLOR0, konst);
+		if (vdp1cmd->PMOD & 0x4) {
+			__SGX_GetGouraud(colors);
+		}
+	} else {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	}
 
 	//Draw the sprite
@@ -873,16 +881,21 @@ void SGX_Vdp1DrawLine(void)
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
-	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	u32 colr = vdp1cmd->COLR;
 	__SGX_Vdp1SetConstantPart(colr & 0x8000);
-	GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
-	GX_SetTevKColor(GX_KCOLOR0, konst);
-	u32 colors[4] = {0};
-	if (vdp1cmd->PMOD & 0x4) {
-		__SGX_GetGouraud(colors);
+	GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	u32 colors[4] = {colr, colr, colr, colr};
+	if (colr & 0x8000) {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+		GXColor konst = {(colr & 0x7C00) >> 7, (colr & 0x3E0) >> 2, (colr & 0x1F) << 3, 0xFF};
+		GX_SetTevKColor(GX_KCOLOR0, konst);
+		if (vdp1cmd->PMOD & 0x4) {
+			__SGX_GetGouraud(colors);
+		}
+	} else {
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
 	}
+
 
 	//Draw the sprite
 	GX_Begin(GX_LINES, GX_VTXFMT2, 2);
