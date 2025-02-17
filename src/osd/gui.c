@@ -82,9 +82,11 @@ void gui_Init(void)
 static void gui_DrawControllers()
 {
 	//u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
-	u32 x = 240, y = 126;
-	GX_Begin(GX_QUADS, GX_VTXFMT4, 8*4*2);
-	for (u32 i = 0; i < 8; ++i) {
+	const u32 num_pads = 2;
+	u32 x = 244, y = 186;
+	GX_Begin(GX_QUADS, GX_VTXFMT4, num_pads*4*2);
+	// Only display 2 controllers for now
+	for (u32 i = 0; i < num_pads; ++i) {
 		u32 dx = x + ((i & 1) * 30);
 		u32 dy = y + ((i & ~1) * 11);
 		u32 num = i << 1;

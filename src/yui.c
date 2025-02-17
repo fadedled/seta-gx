@@ -315,12 +315,13 @@ void menu_Handle(void)
 	u32 buttons;
 
 	//WPAD_ScanPads();
+	per_updatePads();
 	PAD_ScanPads();
-	gcX = PAD_StickX(0);
-	gcY = PAD_StickY(0);
+	gcX = perpad[0].x;
+	gcY = perpad[0].y;
 	axis_button_prev = axis_button;
 	axis_button = GC_AXIS_TO_DIGITAL(gcX, gcY);
-	buttons = PAD_ButtonsDown(0) | (axis_button & ~axis_button_prev);
+	buttons = perpad[0].btn | (axis_button & ~axis_button_prev);
 	//XXX: Check for other controllers
 	//WPAD_Expansion(0, &exp);
 	//claX = classic_analog_val(&exp, true, false);
