@@ -337,14 +337,13 @@ static void FPSDisplay(u32 p)
 //////////////////////////////////////////////////////////////////////////////
 
 static u64 current_ticks = 0;
+static u32 prev_tvmd = 0;
 
 void Vdp2VBlankOUT(void)
 {
 	Vdp2Regs->TVSTAT = (Vdp2Regs->TVSTAT & ~0x0008) | 0x0002;
 	u32 cycles_start;
 
-	DCFlushRange(Vdp2Ram, 0x80000);
-	DCFlushRange(Vdp2ColorRam, 0x1000);
 	//VIDSoftVdp2DrawStart();
 	//SGX_InvalidateVRAM();
 	GX_InvalidateTexAll();
@@ -354,8 +353,15 @@ void Vdp2VBlankOUT(void)
 	//GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
 #if USE_NEW_VDP1
-	if (Vdp2Regs->TVMD & 0x8000) {
+	//If there where changes in resolution then apply them
+	if (prev_tvmd ^ Vdp2Regs->TVMD) {
+		SVI_SetResolution(Vdp2Regs->TVMD);
+		prev_tvmd = Vdp2Regs->TVMD;
+	}
 
+	if (Vdp2Regs->TVMD & 0x8000) {
+		DCFlushRange(Vdp2Ram, 0x80000);
+		DCFlushRange(Vdp2ColorRam, 0x1000);
 		cycles_start = gettime();
 		Vdp1Draw();	//Create DL for GX
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
@@ -365,14 +371,17 @@ void Vdp2VBlankOUT(void)
 		SGX_Vdp1DrawFramebuffer();
 		//SGX_Vdp1ProcessFramebuffer();
 		SGX_Vdp2Draw();
+		//SGX_Vdp2Postprocess();
+		//SVI_CopyXFB();
 		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
-
 	} else {
+		//SVI_CopyXFB();
 		Vdp1NoDraw();	//Do nothing
 	}
-	VIDSoftVdp1SwapFrameBuffer();
+	//VIDSoftVdp1SwapFrameBuffer();
 	//osd_ProfDraw();
-	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
+	SVI_EndFrame(!(Vdp2Regs->TVMD & 0x8000));
+	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 #else
 	u32 tpi, tpo, bpi, bpo, cpi, cc;
 	if (Vdp2Regs->TVMD & 0x8000) {

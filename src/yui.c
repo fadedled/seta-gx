@@ -33,6 +33,7 @@
 //#include <di/di.h>
 #include "osd/osd.h"
 #include "osd/gui.h"
+
 #include "cart.h"
 #include "cs2.h"
 #include "snd.h"
@@ -67,16 +68,9 @@ void print_settinglist(void);
 /* Constants */
 
 static int IsPal = 0;
-static u32 *xfb[2] = { NULL, NULL };
-int fbsel = 0;
-static GXRModeObj *rmode = NULL;
 volatile int done=0;
 volatile int resetemu=0;
 int running=1;
-
-#define DEFAULT_FIFO_SIZE       (256*1024)
-Mtx GXmodelView2D;
-Mtx44 perspective;
 
 #ifdef AUTOLOADPLUGIN
 u8 autoload = 0;
@@ -185,7 +179,6 @@ extern int dividenumclock;
 
 static BOOL flag_mount = FALSE;
 
-u32 *display_fb;
 GXTexObj tex_lores_fb;
 
 extern int fpstoggle;
@@ -362,6 +355,7 @@ void menu_Handle(void)
 		strcat(isofilename, "/");
 		strcat(isofilename, filename_items.item[filename_items.cursor].data);
 		YuiExec();
+		SVI_SetResolution(0x80C2);
 		//iso_loaded = 1;
 	}
 	else if (buttons & PAD_BUTTON_B) {
@@ -372,128 +366,6 @@ void menu_Handle(void)
 	}
 	//gui_menu_boxes[MENU_BOX_SELECT].color_bg = (((gui_menu_boxes[MENU_BOX_SELECT].color_bg) + 0x040802) & 0x7F7F7F00) | 0xAA;
 }
-
-void InitGX(void )
-{
-	// Initialize wii output buffer
-	//if ((wiidispbuffer = (u32 *)memalign(32, 704 * 512)) == NULL)
-	//   exit(-1);
-	GX_AbortFrame();
-
-
-	// Setup the fifo
-	void *gp_fifo = NULL;
-	gp_fifo = memalign(32, DEFAULT_FIFO_SIZE);
-    GX_Init(gp_fifo, DEFAULT_FIFO_SIZE);
-
-    GX_SetCopyClear((GXColor){0, 0, 0, 0}, 0);
-    GX_SetDispCopyGamma(GX_GM_1_0);
-
-	GX_SetDispCopyYScale(1.0);
-	GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-	GX_SetCopyFilter(GX_FALSE, rmode->sample_pattern, GX_FALSE, rmode->vfilter);
-	GX_SetFieldMode(GX_DISABLE,((rmode->viHeight == 2*rmode->xfbHeight)? GX_ENABLE : GX_DISABLE));
-	GX_SetDither(GX_DISABLE);
-
-	//XXX: do this in another place
-    GX_InvVtxCache();
-    GX_InvalidateTexAll();
-
-	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
-
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_POS,  GX_POS_XY,  GX_S16, 0);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_TEX0, GX_TEX_ST,   GX_F32, 0);
-    GX_SetVtxAttrFmt(GX_VTXFMT0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
-
-	GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_POS,  GX_POS_XY,  GX_S16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_TEX0, GX_TEX_ST,  GX_U16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT1, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
-
-	//VDP1 vertex format for 16bpp
-	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT2, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
-	//VDP1 vertex format for 8bpp
-	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_POS,  GX_POS_XY,   GX_S16, 1);
-	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA6, 0);
-
-	//VDP2 vertex format
-	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-
-	//GUI vertex format
-	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
-
-	//PASSCLR
-	//d +- ((1-c)*a + c*b)
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO);
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-
-	GX_SetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
-	GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_BLUE, GX_CH_GREEN, GX_CH_RED, GX_CH_ALPHA);
-	GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE);
-
-
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-
-	GX_SetZCompLoc(GX_FALSE);
-    GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-
-    GX_SetNumChans(1);
-    GX_SetNumTexGens(1);
-    GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
-
-    GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX, GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
-
-    GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
-    guMtxIdentity(GXmodelView2D);
-    GX_LoadPosMtxImm(GXmodelView2D, GX_PNMTX0);
-
-	Mtx tex_mtx;
-	guMtxIdentity(tex_mtx);
-	//guMtxScale(tex_mtx, 0.999023438, 0.999023438, 1.0);
-	//guMtxTrans(tex_mtx, -1.25, -1.25, 1.0);
-	GX_LoadTexMtxImm(tex_mtx, GX_TEXMTX0, GX_MTX2x4);
-
-    GX_SetCurrentMtx(GX_PNMTX0);
-
-    guOrtho(perspective, 0, rmode->efbHeight, 0, rmode->fbWidth, 0, 256.0);
-    GX_LoadProjectionMtx(perspective, GX_ORTHOGRAPHIC);
-
-	GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0.0f, 1.0f);
-    GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
-
-	//Reset various parameters
-	GX_SetCoPlanar(GX_DISABLE);
-	GX_SetClipMode(GX_CLIP_ENABLE);
-    //set blend mode
-	///GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR); FOR NOW
-    GX_SetBlendMode(GX_BM_BLEND, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR); //Fix src alpha
-    GX_SetColorUpdate(GX_ENABLE);
-	GX_SetAlphaUpdate(GX_DISABLE);
-	//GX_SetDstAlpha(GX_DISABLE, 0xFF);
-	//set cull mode
-	GX_SetCullMode(GX_CULL_NONE);
-
-    GX_SetDispCopyGamma(GX_GM_1_0);
-
-	SGX_Init();
-
-	VIDEO_SetBlack(FALSE);
-	VIDEO_Flush();
-}
-
-
-
 
 int ResetSettings(void)
 {
@@ -590,43 +462,13 @@ int main(int argc, char **argv)
 	dividenumclock = 1; //dividenumclock
 	threadingscsp2on = 0; //threadingscsp2on	//No threading
 
-	VIDEO_Init();
-	rmode = VIDEO_GetPreferredMode(NULL);
-
-	xfb[0] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-	xfb[1] = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-
-	//28Htz vs 26Htz
-	rmode->viWidth = 640;
-	//rmode->viWidth = 672;
-	//rmode->viWidth = 704;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) >> 1;
-
-	VIDEO_SetBlack(TRUE);
-	VIDEO_Configure(rmode);
-	VIDEO_Flush();
-	VIDEO_WaitVSync();
-
-	VIDEO_ClearFrameBuffer(rmode, xfb[0], COLOR_BLACK);
-	VIDEO_ClearFrameBuffer(rmode, xfb[1], COLOR_BLACK);
-
-	VIDEO_SetNextFramebuffer(xfb[0]);
-	VIDEO_SetBlack(TRUE);
-	VIDEO_Flush();
-	VIDEO_WaitVSync();
+	SVI_Init();
 
 	mem_allocate();
-	InitGX();
 	snd_Init();
 	menu_Init();
 	games_LoadList();
 
-	GX_InitTexObj(&tex_lores_fb, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
-	GX_InitTexObjLOD(&tex_lores_fb, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
-
-	//u8* mapped_mem = (u8*) mmap(0x06000000, 4096, PROT_READ | PROT_READ, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-	//char str_mem[32];
-	//BAT bats[8];
 	osd_ProfAddCounter(PROF_SH2M, "SH2M");
 	osd_ProfAddCounter(PROF_SH2S, "SH2S");
 	osd_ProfAddCounter(PROF_M68K, "M68K");
@@ -638,56 +480,16 @@ int main(int argc, char **argv)
 	osd_ProfAddCounter(PROF_CDB, "CDB");
 
 	CON_EnableBarnacle(EXI_CHANNEL_0, EXI_DEVICE_1);
-	printf("what is this number? %d\n", 32);
-	//block_of_shit[0] = 32;
-	//VM_BATSet(0, block_of_shit, 0x0d000000, 0x20000);
-	//MappedMemoryInit();
-	//VM_BATGet(bats);
-	//sprintf(str_mem, "addr: %p", mapped_mem);
-	//*((u8*)0x0d000000) = 32;
+	printf("what is this number? %d\n", 42);
 
 	while(1) {
-		/*
-		for (u32 i = 0; i < 8; ++i) {
-			sprintf(str_mem, "BAT%d: %08x %08x", i, bats[i].data[0], bats[i].data[1]);
-			osd_MsgAdd(300, 300+(i*8), 0xFFFFFFFF, str_mem);
-		}
-		*/
-		//if (block_of_shit[0] == 32) {
-		//	osd_MsgAdd(300, 300-8, 0xFF0000FF, "LOGRADO!!");
-		//}
-
 		menu_Handle();
 		gui_Draw(&filename_items);
-
-		YuiSwapBuffers(1);
-		/*
-		GX_CopyDisp(xfb[fbsel], GX_TRUE);
-		GX_DrawDone();
-
-		VIDEO_SetNextFramebuffer(xfb[fbsel]);
-		VIDEO_Flush();
-		fbsel ^= 1;
-		*/
+		SVI_EndFrame(0);
+		SVI_SwapBuffers(1);
 	}
 
-	//SetMenuItem();
-	//DoMenu();
-
 	return 0;
-}
-
-
-
-void TexCopy_LoRes(u32 w, u32 h)
-{
-	GX_Flush();
-	GX_DrawDone();
-	GX_SetTexCopySrc(0, 0, disp.w, disp.h);
-	GX_SetTexCopyDst(disp.w, disp.h, GX_TF_RGBA8, GX_FALSE);
-
-	GX_CopyTex(display_fb, GX_FALSE);
-	GX_PixModeSync();
 }
 
 
@@ -794,128 +596,6 @@ void YuiErrorMsg(const char *string)
       running = 0;
       printf("%s\n", string);
    }
-}
-
-//XXX: change this to admit PAL
-u32 y_offset = 0;
-
-void changeVideo(u32 w, u32 h) {
-	if (w == DISP_W_B || w == DISP_W_HIGHRES_B){
-		rmode->viWidth = ((w == DISP_W_A || w == DISP_W_HIGHRES_A) ? 640 : 704);
-	}
-	rmode->fbWidth = w;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) >> 1;
-
-	GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-	//XXX: Test this
-	VIDEO_SetBlack(TRUE);
-	VIDEO_Configure(rmode);
-	VIDEO_Flush();
-	VIDEO_SetBlack(FALSE);
-}
-
-void gx_ChangeVideo(u32 y_ofs, u32 width, u32 screen_width)
-{
-	//XXX: check for highres and 320 mode...
-	/*
-	rmode->viWidth = 640;
-	//rmode->viWidth = 672;
-	//rmode->viWidth = 704;
-	rmode->fbWidth = width;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) >> 1;
-	y_offset = -(y_ofs);
-
-	GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-	VIDEO_Configure(rmode);
-	VIDEO_Flush();
-	*/
-	//XXX: MAYBE THIS IS DONE A LOT...
-	//704 or 640
-	//rmode->viXOrigin = (720 - screen_width) >> 1;
-	//rmode->viYOrigin = (MAX_SCREEN_HEIGHT - y_ofs) >> 1;
-	//rmode->viWidth = screen_width;
-	//rmode->fbWidth = width;
-	//VIDEO_Configure(rmode);
-
-	//GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	//GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-	/*
-	rmode->efbHeight = 240 << interlace;
-	rmode->fbWidth = width;
-
-	GX_DrawDone();
-	GX_Flush();
-	GX_SetScissorBoxOffset(0, -(y_ofs >> 1));
-	GX_SetDispCopyYScale((f32) (1 << !interlace));
-	GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-
-	VIDEO_Configure(rmode);
-	*/
-	//VIDEO_Flush();
-}
-
-
-void YuiSwapBuffers(u32 wait_vsync)
-{
-		//XXX: Limit FPS.. we can do better than this
-	//if (YabauseGetTicks() - current_ticks < yabsys.OneFrameTime - 128) {
-	//	VIDEO_WaitVSync();
-	//	current_ticks = YabauseGetTicks();
-	//}
-
-#if 0
-	TexCopy_LoRes(0, 0);
-	//GX_SetDispCopySrc(0,0, rmode->fbWidth, rmode->efbHeight);
-	//GX_SetDispCopyDst(rmode->fbWidth, rmode->xfbHeight);
-
-	GX_SetScissor(0, 0, 640, 480);
-	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetVtxAttrFmt(GX_VTXFMT7, GX_VA_POS, GX_POS_XY, GX_U16, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT7, GX_VA_TEX0, GX_TEX_ST, GX_F32, 0);
-
-	//SET UP GX TEV STAGES for textures
-	GX_SetNumTevStages(1);
-	GX_SetNumTexGens(1);
-	GX_SetNumChans(0);
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
-
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-	GX_LoadTexObj(&tex_lores_fb, GX_TEXMAP0);
-
-	GX_Begin(GX_QUADS, GX_VTXFMT7, 4);
-		GX_Position2s16(0, 0);
-		GX_TexCoord2f32(0.0, 0.0);
-		GX_Position2s16(640, 0);
-		GX_TexCoord2f32(1.0, 0.0);
-		GX_Position2s16(640, 480);
-		GX_TexCoord2f32(1.0, 1.0);
-		GX_Position2s16(0, 480);
-		GX_TexCoord2f32(0.0, 1.0);
-	GX_End();
-
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-#endif
-
-	GX_DrawDone();
-	GX_CopyDisp(xfb[fbsel], GX_TRUE);
-	GX_DrawDone();
-
-	VIDEO_SetNextFramebuffer(xfb[fbsel]);
-	VIDEO_Flush();
-	if (wait_vsync) {
-		VIDEO_WaitVSync();
-	}
-	fbsel ^= 1;
 }
 
 

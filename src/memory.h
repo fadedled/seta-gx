@@ -343,7 +343,6 @@ extern u8 *wii_vram;
 extern u8 *Vdp1Ram;
 extern u8 *Vdp1FrameBuffer;
 extern u8 *SoundRam;
-extern u32 *display_fb;
 
 int LoadBios(const char *filename);
 int LoadBackupRam(const char *filename);

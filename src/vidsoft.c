@@ -2256,8 +2256,8 @@ int VIDSoftInit(void)
 	GX_InitTexObj(&tobj_bitmap, Vdp1Ram, 8, 8, GX_TF_CI4, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tobj_bitmap, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 
-	GX_InitTexObj(&tex_obj_vdp1, display_fb, 8, 8, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
-	GX_InitTexObjLOD(&tex_obj_vdp1, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
+	//GX_InitTexObj(&tex_obj_vdp1, display_fb, 8, 8, GX_TF_RGB565, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	//GX_InitTexObjLOD(&tex_obj_vdp1, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 
 	if ((win_tex = (u8 *)memalign(32, 704 * 512 * sizeof(u16))) == NULL)
       return -1;
@@ -3070,7 +3070,7 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_DrawDone();
 	GX_SetTexCopySrc(0, 0, disp.w, disp.h);
 	GX_SetTexCopyDst(disp.w, disp.h, GX_TF_RGBA8, GX_FALSE);
-	GX_CopyTex(display_fb, GX_TRUE);
+	//GX_CopyTex(display_fb, GX_TRUE);
 
 	GX_PixModeSync();
 
@@ -3097,7 +3097,7 @@ void VIDSoftVdp2DrawEnd(void)
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_CLEAR);
 
-	GX_InitTexObj(&tex_obj_vdp1, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	//GX_InitTexObj(&tex_obj_vdp1, display_fb, disp.w, disp.h, GX_TF_RGBA8, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&tex_obj_vdp1, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 	GX_LoadTexObj(&tex_obj_vdp1, GX_TEXMAP0);
 
@@ -3218,7 +3218,6 @@ void VIDSoftVdp2DrawScreens(void)
 }
 
 //////////////////////////////////////////////////////////////////////////////
-extern void gx_ChangeVideo(u32 y_ofs, u32 width, u32 screen_width);
 //HALF-DONE
 void VIDSoftVdp2SetResolution(u16 TVMD)
 {
@@ -3248,7 +3247,7 @@ void VIDSoftVdp2SetResolution(u16 TVMD)
 	disp.h = (224 + (TVMD & 0x30)) << !disp.scale_y;
 
 	GX_SetScissor(0, 0, disp.w, disp.h);
-	gx_ChangeVideo(disp.y, 640, output_w);
+	//gx_ChangeVideo(disp.y, 640, output_w);
 }
 
 //////////////////////////////////////////////////////////////////////////////

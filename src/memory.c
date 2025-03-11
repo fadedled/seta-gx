@@ -406,7 +406,6 @@ void mem_allocate(void)
 	//Should be in MEM2
 	SoundRam = (u8*) memalign(32, 0x80000);
 	bios_rom = (u8*) memalign(32, 0x80000);
-	display_fb = (u32*) memalign(32, 0x58000);	//Should be done in another place
 	bup_ram = (u8*) memalign(32, 0x10000);
 }
 
@@ -420,7 +419,27 @@ void mem_Init(void)
 
 void mem_Deinit(void)
 {
-
+	if (wram) {
+		free(wram);
+	}
+	if (Vdp1FrameBuffer) {
+		free(Vdp1FrameBuffer);
+	}
+	if (Vdp1Ram) {
+		free(Vdp1Ram);
+	}
+	if (wii_vram) {
+		free(wii_vram);
+	}
+	if (SoundRam) {
+		free(SoundRam);
+	}
+	if (bios_rom) {
+		free(bios_rom);
+	}
+	if (bup_ram) {
+		free(bup_ram);
+	}
 }
 
 void MappedMemoryInit()

@@ -3,6 +3,7 @@
 
 #include <gccore.h>
 #include "../memory.h"
+#include "svi.h"
 
 #define	VTXFMT_FLAT_TEX			GX_VTXFMT2
 #define	VTXFMT_GOUR_TEX			GX_VTXFMT3
@@ -135,7 +136,6 @@ void SGX_SetTexPreloaded(u32 mapid, SGXTexPre *tex);
 void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut);
 void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align);
 void SGX_EndVdp1(void);
-
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
 void SGX_LoadTlut(void *data_addr, u32 tlut);
@@ -172,8 +172,9 @@ void SGX_Vdp1UserClip(void);
 void SGX_Vdp1SysClip(void);
 void SGX_Vdp1LocalCoord(void);
 
+void SGX_Vdp2Init(void);
 void SGX_Vdp2Draw(void);
-
+void SGX_Vdp2Postprocess(void);
 
 /*
  * Here we have a serious attempt at replacing all GX functions that use shadow regs

@@ -6,7 +6,6 @@
 #include "../vdp2.h"
 #include <malloc.h>
 
-
 #define SGX_TORGBA32(col) ((((col) & 0x1F) | (((col) & 0x3E0) << 3) | (((col) & 0x7C00) << 6)) << 11)
 #define SGX_TORGB565(col) (((col) & 0x1F) | ((col << 1) & 0xFFC0))
 #define SGX_FROMRGB565(col) (((col) & 0x1F) | ((col >> 1) & 0x7FE0))
@@ -23,7 +22,14 @@ u8 cram_4bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 u8 cram_8bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 u8 cram_11bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 
-struct CellFormatData {
+
+u32 vdp1_fb_w = SS_DISP_WIDTH;	/*framebuffer width visible in vdp2*/
+u32 vdp1_fb_h = SS_DISP_HEIGHT;	/*framebuffer heigth visible in vdp2*/
+
+u32 vdp2_disp_w = SS_DISP_WIDTH;	/*display width*/
+u32 vdp2_disp_h = SS_DISP_HEIGHT;	/*display height*/
+
+static struct CellFormatData {
 	u32 disp_ctl;	/*Screen display Control*/
 	u32 char_ctl;	/*Character control settings*/
 	u32 color_fmt;	/*Color format*/
@@ -47,7 +53,9 @@ struct CellFormatData {
 	u8 *map_addr[16]; 	/* addresses of maps*/
 } cell;
 
+
 extern u32 *tlut_data;
+
 void SGX_Vdp2Init(void)
 {
 	//Set initial matrix
@@ -250,8 +258,8 @@ static void SGX_Vdp2DrawCellSimple(void)
 
 	u32 x_tile = ((cell.xscroll >> 8) / cell.char_size);
 	u32 y_tile = ((cell.yscroll >> 8) / cell.char_size);
-	u32 x_max = (352 / cell.char_size) + 1;
-	u32 y_max = (240 / cell.char_size) + 1;
+	u32 x_max = (vdp2_disp_w / cell.char_size) + 1;
+	u32 y_max = (vdp2_disp_h / cell.char_size) + 1;
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
 	switch (cell.color_fmt) {
@@ -357,7 +365,7 @@ void SGX_Vdp2GenCRAM(void) {
 //Begins the Vdp1 Drawing Process
 void SGX_Vdp2Draw(void)
 {
-	GX_SetScissor(0, 0, 640, 480);
+	GX_SetScissor(0, 0, vdp2_disp_w, vdp2_disp_h);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -393,8 +401,6 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
 		cell.pri = (scr_pri << 4) | PRI_NGB3;
 		__Vdp2ReadNBG(3);	//Draw NBG3
-		//GX_SetViewport(352, 240, 640, 480, 0.0f, 1.0f);
-		//GX_SetScissor(352, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -405,9 +411,6 @@ void SGX_Vdp2Draw(void)
 		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
 		cell.pri = (scr_pri << 4) | PRI_NGB2;
 		__Vdp2ReadNBG(2);	//Draw NBG2
-
-		//GX_SetViewport(0, 240, 640, 480, 0.0f, 1.0f);
-		//GX_SetScissor(0, 240, 352, 240);
 		SGX_Vdp2DrawCellSimple();
 	}
 
@@ -424,8 +427,6 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			//GX_SetViewport(352, 0, 640, 480, 0.0f, 1.0f);
-			//GX_SetScissor(352, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
@@ -439,17 +440,107 @@ void SGX_Vdp2Draw(void)
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
-			//GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
-			//GX_SetScissor(0, 0, 352, 240);
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
 	//TODO: handle Rotation BGs
-	//Copy the screens to texture...
-	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
+	//TODO: handle Color calculation
 	GX_SetScissor(0, 0, 640, 480);
 	SGX_SetZOffset(0);
+	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
+	//Copy the screens to texture...
+	GX_SetTexCopySrc(0, 0, vdp1_fb_w, vdp1_fb_h);
+	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB565, GX_FALSE);
+
+	//GX_CopyTex(bg_tex, GX_TRUE);
 }
+
+
+extern void YuiPartialSwapBuffers(u32 offset);
+
+void SGX_Vdp2Postprocess(void)
+{
+	GX_SetCurrentMtx(GXMTX_IDENTITY);
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	//Set up general TEV
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
+	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
+	//GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	SGX_SetTex(bg_tex, GX_TF_RGB565, vdp2_disp_w, vdp2_disp_h, 0);
+
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
+	GX_PixModeSync(); //Not necesary?
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 32, vdp2_disp_h);
+	switch (vdp2_disp_w) {
+		case 320: { //Display must be zoomed 2x
+			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+				GX_Position2s16(0, 0);
+				GX_TexCoord1u16(0x0000);
+				GX_Position2s16(640, 0);
+				GX_TexCoord1u16(0x0A00);
+				GX_Position2s16(640, vdp2_disp_h);
+				GX_TexCoord1u16(0x0A01);
+				GX_Position2s16(0, vdp2_disp_h);
+				GX_TexCoord1u16(0x0001);
+			GX_End();
+			SVI_CopyXFB();
+		} break;
+		case 352: { //Display must be zoomed 2x and copied in parts
+			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+			GX_Position2s16(0, 0);
+			GX_TexCoord1u16(0x0000);
+			GX_Position2s16(640, 0);
+			GX_TexCoord1u16(0x0B00);
+			GX_Position2s16(640, vdp2_disp_h);
+			GX_TexCoord1u16(0x0B01);
+			GX_Position2s16(0, vdp2_disp_h);
+			GX_TexCoord1u16(0x0001);
+			GX_End();
+			SVI_CopyXFB();
+		} break;
+		case 640: { //Do not scale
+			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+				GX_Position2s16(0, 0);
+				GX_TexCoord1u16(0x0000);
+				GX_Position2s16(640, 0);
+				GX_TexCoord1u16(0x1400);
+				GX_Position2s16(640, vdp2_disp_h);
+				GX_TexCoord1u16(0x1401);
+				GX_Position2s16(0, vdp2_disp_h);
+				GX_TexCoord1u16(0x0001);
+			GX_End();
+			SVI_CopyXFB();
+		} break;
+		case 704: {
+			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+			GX_Position2s16(0, 0);
+			GX_TexCoord1u16(0x0000);
+			GX_Position2s16(640, 0);
+			GX_TexCoord1u16(0x1600);
+			GX_Position2s16(640, vdp2_disp_h);
+			GX_TexCoord1u16(0x1601);
+			GX_Position2s16(0, vdp2_disp_h);
+			GX_TexCoord1u16(0x0001);
+			GX_End();
+			SVI_CopyXFB();
+		} break;
+	}
+}
+
 
 

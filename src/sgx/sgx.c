@@ -126,6 +126,7 @@ void SGX_Init(void)
 	DCFlushRange(tlut_data, 0x200);
 	SGX_LoadTlut(tlut_data, TLUT_SIZE_256 | TLUT_INDX_CLRBANK);
 	SGX_Vdp1Init();
+	SGX_Vdp2Init();
 	SGX_CellConverterInit();
 }
 
