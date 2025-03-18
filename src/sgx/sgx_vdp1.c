@@ -38,6 +38,8 @@ u8  *prcc_tex ATTRIBUTE_ALIGN(32);
 
 u32 sys_clipx = 320;
 u32 sys_clipy = 240;
+f32 local_coordx = 0.0f;
+f32 local_coordy = 0.0f;
 
 u32 is_processed = 0;
 
@@ -61,6 +63,35 @@ static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 
 static u32 prcc_tlut[128] ATTRIBUTE_ALIGN(32);
 
+static Mtx vdp1mtx2d = {
+	{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f},
+};
+
+static Mtx vdp1mtxtex[4] = {
+	//Normal tex
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	 {0.0f, 1.0f, 0.0f, 0.0f},
+	 {0.0f, 0.0f, 0.0f, 0.0f}},
+	//X flipped tex
+	{{-1.0f, 0.0f, 0.0f, 1.0f},
+	 {0.0f, 1.0f, 0.0f, 0.0f},
+	 {0.0f, 0.0f, 0.0f, 0.0f}},
+	//Y flipped tex
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	 {0.0f, -1.0f, 0.0f, 1.0f},
+	 {0.0f, 0.0f, 0.0f, 0.0f}},
+	//XY flipped tex
+	{{-1.0f, 0.0f, 0.0f, 1.0f},
+	 {0.0f, -1.0f, 0.0f, 1.0f},
+	 {0.0f, 0.0f, 0.0f, 0.0f}},
+	 //GOURAUD tex
+	{{2.0f, 0.0f, 0.0f, 0.5f},
+	 {0.0f, 2.0f, 0.0f, 0.5f},
+	 {0.0f, 0.0f, 0.0f, 0.0f}},
+};
+
 extern u32 *tlut_data;
 void SGX_Vdp1Init(void)
 {
@@ -76,6 +107,14 @@ void SGX_Vdp1Init(void)
 	output_tex = (u8*) memalign(32, 704*512);
 	win_tex  = (u8*) memalign(32, 704*256);
 	prcc_tex = win_tex + (704*128);
+	GX_LoadPosMtxImm(vdp1mtx2d, GXMTX_VDP1_POS2D);
+	GX_LoadTexMtxImm(vdp1mtxtex[0], GXMTX_VDP1_TEX_N, GX_MTX2x4);
+	GX_LoadTexMtxImm(vdp1mtxtex[1], GXMTX_VDP1_TEX_X, GX_MTX2x4);
+	GX_LoadTexMtxImm(vdp1mtxtex[2], GXMTX_VDP1_TEX_Y, GX_MTX2x4);
+	GX_LoadTexMtxImm(vdp1mtxtex[3], GXMTX_VDP1_TEX_XY, GX_MTX2x4);
+	GX_LoadTexMtxImm(vdp1mtxtex[4], GXMTX_VDP1_TEX_GOUR, GX_MTX2x4);
+
+
 	GX_TexModeSync();
 }
 
@@ -157,14 +196,13 @@ void SGX_Vdp1Begin(void)
 	GX_SetTexCoordBias(GX_TEXCOORD0, GX_ENABLE, GX_ENABLE);
 	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
 	GX_SetCurrentMtx(GXMTX_VDP1);
-	GX_SetScissor(0, 0, vdp1_fb_w, vdp1_fb_h);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
 	vdp1pix.color_mask = color_mask[vdp1pix.type];
-
+	SGX_SetVtxOffset(-local_coordx, -local_coordy);
 	is_processed = 0;
 }
 
@@ -426,6 +464,8 @@ static void __Vdp1Convert16bpp(void)
 void SGX_Vdp1End(void)
 {
 	SGX_SpriteConverterSet(0, SPRITE_NONE, 0);
+	SGX_SetVtxOffset(0, 0);
+	GX_SetScissor(0, 0, vdp1_fb_w, vdp1_fb_h);
 	//Copy colors
 	if (1) { //16bpp framebuffer
 		__Vdp1Convert16bpp();
@@ -596,16 +636,19 @@ void SGX_Vdp1DrawNormalSpr(void)
 		return;
 	}
 
-	//Get/set the constant values
-	//Flip operation
-	u32 tex_flip = (-(vdp1cmd->CTRL & 0x10) << 4) & 0x3F00;
-	tex_flip 	|= (-(vdp1cmd->CTRL & 0x20) >> 5) & 0x00FF;
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_NONE);
+	u32 flip = ((vdp1cmd->CTRL & 0x30) >> 4)*3;
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, GXMTX_VDP1_TEX_N + flip);
 
-	//Get the vertex positions
-	s16 x0 = vdp1cmd->XA;
-	s16 y0 = vdp1cmd->YA;
-	s16 x1 = x0 + (w << 3);
-	s16 y1 = y0 + h;
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, w << 3, h);
+	vdp1mtx2d[0][0] = (f32) (w << 3);
+	vdp1mtx2d[1][1] = (f32) h;
+	vdp1mtx2d[0][3] = (f32) ((s16) vdp1cmd->XA);
+	vdp1mtx2d[1][3] = (f32) ((s16) vdp1cmd->YA);
+	GX_LoadPosMtxImm(vdp1mtx2d, GXMTX_VDP1_POS2D);
+	GX_SetCurrentMtx(GXMTX_VDP1_POS2D);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(1);
@@ -617,20 +660,22 @@ void SGX_Vdp1DrawNormalSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
-		GX_Position2s16(x0, y0);
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
+		GX_Position2s16(0, 0);
 		GX_Color1u16(colors[0]);
-		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
-		GX_Position2s16(x1, y0);
+		GX_Position2s16(1, 0);
 		GX_Color1u16(colors[1]);
-		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
-		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[2]);
-		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
-		GX_Position2s16(x0, y1);
+		GX_Position2s16(0, 1);
 		GX_Color1u16(colors[3]);
-		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
+		GX_Position2s16(1, 1);
+		GX_Color1u16(colors[2]);
 	GX_End();
+
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
+	GX_SetCurrentMtx(GXMTX_VDP1);
 }
 
 void SGX_Vdp1DrawScaledSpr(void)
@@ -679,19 +724,19 @@ void SGX_Vdp1DrawScaledSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
 		GX_Position2s16(x1, y0);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
-		GX_Position2s16(x1, y1);
-		GX_Color1u16(colors[2]);
-		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 		GX_Position2s16(x0, y1);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
+		GX_Position2s16(x1, y1);
+		GX_Color1u16(colors[2]);
+		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 	GX_End();
 }
 
@@ -742,19 +787,19 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
 		GX_Position2s16(x1, y1);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
-		GX_Position2s16(x2, y2);
-		GX_Color1u16(colors[2]);
-		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 		GX_Position2s16(x3, y3);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
+		GX_Position2s16(x2, y2);
+		GX_Color1u16(colors[2]);
+		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 	GX_End();
 }
 
@@ -803,18 +848,18 @@ void SGX_Vdp1DrawPolygon(void)
 	}
 
 	//Draw the sprite
-	GX_Begin(GX_QUADS, GX_VTXFMT2, 4);
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
 		GX_Position2s16(x0, y0);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
 		GX_Position2s16(x1, y1);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(x2, y2);
-		GX_Color1u16(colors[2]);
-		GX_TexCoord1u16(0);
 		GX_Position2s16(x3, y3);
 		GX_Color1u16(colors[3]);
+		GX_TexCoord1u16(0);
+		GX_Position2s16(x2, y2);
+		GX_Color1u16(colors[2]);
 		GX_TexCoord1u16(0);
 	GX_End();
 }
@@ -909,7 +954,7 @@ void SGX_Vdp1SysClip(void)
 
 void SGX_Vdp1LocalCoord(void)
 {
-	vdp1mtx[0][3] = ((f32) ((s16)vdp1cmd->XA));
-	vdp1mtx[1][3] = ((f32) ((s16)vdp1cmd->YA));
-	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
+	local_coordx = (f32) ((s16)vdp1cmd->XA);
+	local_coordy = (f32) ((s16)vdp1cmd->YA);
+	SGX_SetVtxOffset(-local_coordx, -local_coordy);
 }

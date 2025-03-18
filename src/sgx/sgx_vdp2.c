@@ -237,7 +237,7 @@ static void SGX_Vdp2DrawBitmap(void)
  * All Ptrn Name data size [x]
  * All plane sizes [x]
  * 4 plane count [x]
- * Scale function []
+ * No arbitrary scale function
  * Mosaic function []
  * No line scroll
  * No vertical cell scroll function
@@ -262,6 +262,8 @@ static void SGX_Vdp2DrawCellSimple(void)
 	u32 y_max = (vdp2_disp_h / cell.char_size) + 1;
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
+	//GX_SetPointSize(cell.char_size * 6, GX_TO_ONE);
+
 	switch (cell.color_fmt) {
 		case 0:{ // 4bpp
 			SGX_BeginVdp2Scroll(GX_TF_CI4, cell.char_size);
@@ -289,6 +291,7 @@ static void SGX_Vdp2DrawCellSimple(void)
 			SGX_BeginVdp2Scroll(GX_TF_RGBA8, cell.char_size);
 		} break;
 	}
+
 
 	for (u32 j = 0; j < y_max; ++j) {
 		u32 y = j + y_tile;
@@ -322,13 +325,14 @@ static void SGX_Vdp2DrawCellSimple(void)
 			GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
 			wgPipe->F32 = (f32) (16777215 - (cell.pri | ((prcc >> 25) & 0x10)));
 
-			GX_Begin(GX_QUADS, GX_VTXFMT5, 4);
+			GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT5, 4);
+			//GX_Begin(GX_POINTS, GX_VTXFMT5, 1);
 			//wgPipe->U8 = GX_QUADS | GX_VTXFMT5;
 			//wgPipe->U16 = 4;
 				wgPipe->U32 = vert ^ flip;
 				wgPipe->U32 = vert + (0x01000100 ^ flip);
-				wgPipe->U32 = vert + (0x01010101 ^ flip);
 				wgPipe->U32 = vert + (0x00010001 ^ flip);
+				wgPipe->U32 = vert + (0x01010101 ^ flip);
 			GX_End();
 		}
 	}

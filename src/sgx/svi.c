@@ -83,6 +83,8 @@ void SVI_Init(void)
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA6, 0);
 
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XYZ,  GX_F32, 1);
+
 	//VDP2 vertex format
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
@@ -114,7 +116,7 @@ void SVI_Init(void)
 	guOrtho(perspective, 0, 480.0, 0, 640.0, 0, 256.0);
 	GX_LoadProjectionMtx(perspective, GX_ORTHOGRAPHIC);
 
-	GX_SetViewport(0, 0, rmode->fbWidth, rmode->efbHeight, 0.0f, 1.0f);
+	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 
 	//Reset various parameters

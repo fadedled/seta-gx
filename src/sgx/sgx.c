@@ -128,6 +128,15 @@ void SGX_Init(void)
 	SGX_Vdp1Init();
 	SGX_Vdp2Init();
 	SGX_CellConverterInit();
+
+	GX_EnableTexOffsets(GX_TEXCOORD0, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD1, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD2, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD3, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD4, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD5, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD6, GX_ENABLE, GX_ENABLE);
+	GX_EnableTexOffsets(GX_TEXCOORD7, GX_ENABLE, GX_ENABLE);
 }
 
 
@@ -159,6 +168,21 @@ void SGX_SetZOffset(u32 offset)
 {
 	GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
 	wgPipe->F32 = (f32) (16777215 - offset);
+}
+
+
+void SGX_SetVtxOffset(f32 x, f32 y)
+{
+	f32 p0 = 2.0f / 640.0f;
+	f32 p1 = -(640.0f + (x*2.0f) ) / 640.0f;
+	f32 p2 = 2.0f / -480.0f;
+	f32 p3 = -(480.0f + (y*2.0f)) / -480.0f;
+
+	GX_LOAD_XF_REGS(0x1020, 4); //Set the Viewport Origin
+	wgPipe->F32 = p0;
+	wgPipe->F32 = p1;
+	wgPipe->F32 = p2;
+	wgPipe->F32 = p3;
 }
 
 
@@ -317,7 +341,7 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
 	u32 tmem_even = 0x8C000000 | 0x100000 | 0x20000;	// 128k cache
 	u32 tmem_odd = 0x90000000;	//No odd tmem cache
 
-	u32 tex_filt = 0x80000000;
+	u32 tex_filt = 0x8000000A; //Wrap s/t = mirror
 	u32 tex_lod = 0x84000000;
 	//Modifiable values
 	u32 tex_maddr = 0x94000000;

@@ -36,6 +36,17 @@
 #define GXMTX_VDP2				GX_PNMTX3
 #define GXMTX_VDP2_BG			GX_PNMTX3
 
+//TODO: These should be used wisely
+#define GXMTX_VDP1_POS2D		GX_PNMTX4
+#define GXMTX_VDP1_POS3D		GX_PNMTX5
+
+#define GXMTX_VDP1_TEX_N		GX_TEXMTX1
+#define GXMTX_VDP1_TEX_X		GX_TEXMTX2
+#define GXMTX_VDP1_TEX_Y		GX_TEXMTX3
+#define GXMTX_VDP1_TEX_XY		GX_TEXMTX4
+#define GXMTX_VDP1_TEX_GOUR		GX_TEXMTX5
+
+
 #define TLUT_TYPE_FULL			0x0
 #define TLUT_TYPE_4BPP			0x80
 #define TLUT_TYPE_8BPP			0x100
@@ -143,7 +154,7 @@ void SGX_SetZOffset(u32 offset);
 
 void SGX_CellConverterInit(void);
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id);
-
+void SGX_SetVtxOffset(f32 x, f32 y);
 
 void SGX_DrawScroll(void);
 void SGX_DrawBitmap(void);

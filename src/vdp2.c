@@ -376,7 +376,7 @@ void Vdp2VBlankOUT(void)
 		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
 	} else {
 		//SVI_CopyXFB();
-		Vdp1NoDraw();	//Do nothing
+		Vdp1Draw();	//Do nothing
 	}
 	//VIDSoftVdp1SwapFrameBuffer();
 	//osd_ProfDraw();

@@ -373,23 +373,17 @@ void vdp1_BuildVram(void) {
 //////////////////////////////////////////////////////////////////////////////
 
 void Vdp1Draw(void) {
-   u32 returnAddr;
-   u32 commandCounter;
-   u16 command;
-
+	u32 returnAddr;
+	u32 commandCounter;
+	u16 command;
 
 	if (!Vdp1External.disptoggle) {
 		Vdp1NoDraw();
 		return;
 	}
 
-#if USE_NEW_VDP1
-	SGX_Vdp1Begin();
-#else
-	VIDSoftVdp1DrawStart();
-#endif
-	//TODO: Only do this once.
 	DCFlushRange(Vdp1Ram, 0x80000);
+	SGX_Vdp1Begin();
 	Vdp1Regs->addr = 0;
 	returnAddr = 0xFFFFFFFF;
 	commandCounter = 0;
@@ -408,7 +402,6 @@ void Vdp1Draw(void) {
    while (!(command & 0x8000) && commandCounter < 2048) { // fix me
       // First, process the command
       if (!(command & 0x4000)) { // if (!skip)
-#if USE_NEW_VDP1
 			switch (command & 0x000F) {
 				case 0: SGX_Vdp1DrawNormalSpr();    break;
 				case 1: SGX_Vdp1DrawScaledSpr();    break;
@@ -428,59 +421,7 @@ void Vdp1Draw(void) {
 					Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
 					return;
 			}
-#else
-         switch (command & 0x000F) {
-            case 0: // normal sprite draw
-				//VidSoftTexConvert(Vdp1Regs->addr);
-				VIDSoftVdp1NormalSpriteDraw();
-				break;
-            case 1: // scaled sprite draw
-				//VidSoftTexConvert(Vdp1Regs->addr);
-				VIDSoftVdp1ScaledSpriteDraw();
-				break;
-            case 2: // distorted sprite draw
-            case 3: //Mirror Distorted sprite
-				//VidSoftTexConvert(Vdp1Regs->addr);
-				VIDSoftVdp1DistortedSpriteDraw();
-				break;
-            case 4: // polygon draw
-//XXX: Note
-//for the actual hardware, polygons are essentially identical to distorted sprites
-//the actual hardware draws using diagonal lines, which is why using half-transparent processing
-//on distorted sprites and polygons is not recommended since the hardware overdraws to prevent gaps
-//thus, with half-transparent processing some pixels will be processed more than once, producing moire patterns in the drawn shapes
-               VIDSoftVdp1DistortedSpriteDraw();
-               break;
-            case 5: // polyline draw
-               VIDSoftVdp1PolylineDraw();
-               break;
-            case 6: // line draw
-               VIDSoftVdp1LineDraw();
-               break;
-            case 7: //Mirror Line draw
-               VIDSoftVdp1PolylineDraw();
-               break;
-            case 8: // user clipping coordinates
-               VIDSoftVdp1UserClipping();
-               break;
-            case 9: // system clipping coordinates
-               VIDSoftVdp1SystemClipping();
-               break;
-            case 10: // local coordinate
-               VIDSoftVdp1LocalCoordinate();
-               break;
-            case 11: //Mirror Local Coordinate
-               VIDSoftVdp1UserClipping();
-               break;
-            default: // Abort
-               Vdp1Regs->EDSR |= 2;
-               VIDSoftVdp1DrawEnd();
-               Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
-               Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-               return;
-         }
-#endif
-      }
+		}
 
 		if (Vdp1Regs->EDSR & 0x02){
 			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
@@ -522,126 +463,105 @@ void Vdp1Draw(void) {
 			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
 			Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
 		}
-   }
-	//Get vram out of the cache
-	//DCFlushRange(wii_vram, 0x80000);
-	#if USE_NEW_VDP1
+	}
 	SGX_Vdp1End();
-	#endif
-   // we set two bits to 1
-   Vdp1Regs->EDSR |= 2;
-   Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-   ScuSendDrawEnd();
+	// we set two bits to 1
+	Vdp1Regs->EDSR |= 2;
+	Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+	ScuSendDrawEnd();
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void Vdp1NoDraw(void) {
-   u32 returnAddr;
-   u32 commandCounter;
-   u16 command;
+	u32 returnAddr;
+	u32 commandCounter;
+	u16 command;
 
+	Vdp1Regs->addr = 0;
+	returnAddr = 0xFFFFFFFF;
+	commandCounter = 0;
 
-   Vdp1Regs->addr = 0;
-   returnAddr = 0xFFFFFFFF;
-   commandCounter = 0;
+	// beginning of a frame
+	// BEF <- CEF
+	// CEF <- 0
+	Vdp1Regs->EDSR >>= 1;
+	/* this should be done after a frame change or a plot trigger */
+	Vdp1Regs->COPR = 0;
 
-   // beginning of a frame (ST-013-R3-061694 page 53)
-   // BEF <- CEF
-   // CEF <- 0
-   Vdp1Regs->EDSR >>= 1;
-   /* this should be done after a frame change or a plot trigger */
-   Vdp1Regs->COPR = 0;
+	command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr);
 
-   command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr);
+	//TODO: See if SGX_Vdp1End() is necesary in all returns.
+	vdp1cmd = (Vdp1Cmd*) (Vdp1Ram + Vdp1Regs->addr);
+	while (!(command & 0x8000) && commandCounter < 2048) { // fix me
+		// First, process the command
+		if (!(command & 0x4000)) { // if (!skip)
+			switch (command & 0x000F) {
+				case 0: break;
+				case 1: break;
+				case 2: break;
+				case 3: break;
+				case 4: break;
+				case 5: break;
+				case 6: break;
+				case 7: break;
+				case 8: SGX_Vdp1UserClip();         break;
+				case 9: SGX_Vdp1SysClip();          break;
+				case 10: SGX_Vdp1LocalCoord();      break;
+				case 11: SGX_Vdp1UserClip();        break;
+				default: // Abort
+					Vdp1Regs->EDSR |= 2;
+					Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
+					Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+					return;
+			}
+		}
 
-   while (!(command & 0x8000) && commandCounter < 2000) { // fix me
-      // First, process the command
-	   if (!(command & 0x4000)) { // if (!skip)
-#if USE_NEW_VDP1
-		   switch (command & 0x000F) {
-			   case 0: break;
-			   case 1: break;
-			   case 2: break;
-			   case 3: break;
-			   case 4: break;
-			   case 5: break;
-			   case 6: break;
-			   case 7: break;
-			   case 8: SGX_Vdp1UserClip();         break;
-			   case 9: SGX_Vdp1SysClip();          break;
-			   case 10: SGX_Vdp1LocalCoord();      break;
-			   case 11: SGX_Vdp1UserClip();        break;
-			   default: // Abort
-				   Vdp1Regs->EDSR |= 2;
-				   Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
-				   Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-				   return;
-		   }
-#else
-		   switch (command & 0x000F) {
-            case 0: // normal sprite draw
-            case 1: // scaled sprite draw
-            case 2: // distorted sprite draw
-            case 3: // distorted sprite draw
-            case 4: // polygon draw
-            case 5: // polyline draw
-            case 6: // line draw
-            case 7:
-               break;
-            case 8: // user clipping coordinates
-               VIDSoftVdp1UserClipping();
-               break;
-            case 9: // system clipping coordinates
-               VIDSoftVdp1SystemClipping();
-               break;
-            case 10: // local coordinate
-               VIDSoftVdp1LocalCoordinate();
-               break;
-            case 11: // undocumented mirror
-               VIDSoftVdp1UserClipping();
-               break;
-            default: // Abort
-               Vdp1Regs->EDSR |= 2;
-               VIDSoftVdp1DrawEnd();
-               Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
-               Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
-               return;
-         }
-#endif
-      }
+		if (Vdp1Regs->EDSR & 0x02){
+			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
+			Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+			return;
+		}
 
 		// Next, determine where to go next
 		switch ((command & 0x3000) >> 12) {
-		case 0: // NEXT, jump to following table
-			Vdp1Regs->addr += 0x20;
-			break;
-		case 1: // ASSIGN, jump to CMDLINK
-			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 2) * 8;
-			break;
-		case 2: // CALL, call a subroutine
-			if (returnAddr == 0xFFFFFFFF)
-				returnAddr = Vdp1Regs->addr + 0x20;
-
-			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, Vdp1Regs->addr + 2) * 8;
-			break;
-		case 3: // RETURN, return from subroutine
-			if (returnAddr != 0xFFFFFFFF) {
-				Vdp1Regs->addr = returnAddr;
-				returnAddr = 0xFFFFFFFF;
-			}
-			else
+			case 0: // NEXT, jump to following table
 				Vdp1Regs->addr += 0x20;
+				break;
+			case 1: // ASSIGN, jump to CMDLINK
+				Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
+				if (Vdp1Regs->addr == 0) {return;}
+				break;
+			case 2: // CALL, call a subroutine
+				if (returnAddr == 0xFFFFFFFF)
+					returnAddr = Vdp1Regs->addr + 0x20;
+
+			Vdp1Regs->addr = T1ReadWord(Vdp1Ram, (Vdp1Regs->addr + 2)  & 0x7FFFF) * 8;
+			if (Vdp1Regs->addr == 0) {return;}
+			break;
+			case 3: // RETURN, return from subroutine
+				if (returnAddr != 0xFFFFFFFF) {
+					Vdp1Regs->addr = returnAddr;
+					returnAddr = 0xFFFFFFFF;
+				}
+				else
+					Vdp1Regs->addr += 0x20;
+			if (Vdp1Regs->addr == 0) {return;}
 			break;
 		}
 
-      command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr);
-      commandCounter++;
-   }
-
-   // we set two bits to 1
-   Vdp1Regs->EDSR |= 2;
-   ScuSendDrawEnd();
+		command = T1ReadWord(Vdp1Ram, Vdp1Regs->addr & 0x7FFFF);
+		vdp1cmd = (Vdp1Cmd*) (Vdp1Ram + Vdp1Regs->addr);
+		commandCounter++;
+		if (command & 0x8000) {
+			Vdp1Regs->LOPR = Vdp1Regs->addr >> 3;
+			Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+		}
+	}
+	// we set two bits to 1
+	Vdp1Regs->EDSR |= 2;
+	Vdp1Regs->COPR = Vdp1Regs->addr >> 3;
+	ScuSendDrawEnd();
 }
 
 //////////////////////////////////////////////////////////////////////////////
