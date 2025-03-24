@@ -20,18 +20,18 @@
 
 #include <gccore.h>
 #include <stdlib.h>
-#include "vidsoft.h"
 #include "sgx/sgx.h"
 #include "vdp2.h"
 #include "debug.h"
 #include "scu.h"
 #include "sh2core.h"
 #include "vdp1.h"
-#include "vidsoft.h"
 #include "yui.h"
 #include "yabause.h"
 #include "osd/osd.h"
 #include <ogc/lwp_watchdog.h>
+#include "sgx/sgx.h"
+#include "sgx/svi.h"
 
 u8 * Vdp2Ram;
 u8 * Vdp2ColorRam;
@@ -271,7 +271,7 @@ void Vdp2Reset(void) {
    yabsys.VBlankLineCount = 224;
    Vdp2Internal.ColorMode = 0;
 
-   VIDSoftVdp2SetResolution(0x0000);
+   SVI_SetResolution(0x0000);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -352,12 +352,8 @@ void Vdp2VBlankOUT(void)
 	//GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
 	//GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
 
-#if USE_NEW_VDP1
 	//If there where changes in resolution then apply them
-	if (prev_tvmd ^ Vdp2Regs->TVMD) {
-		SVI_SetResolution(Vdp2Regs->TVMD);
-		prev_tvmd = Vdp2Regs->TVMD;
-	}
+	SVI_SetResolution(Vdp2Regs->TVMD);
 
 	if (Vdp2Regs->TVMD & 0x8000) {
 		DCFlushRange(Vdp2Ram, 0x80000);
@@ -368,58 +364,15 @@ void Vdp2VBlankOUT(void)
 
 		cycles_start = gettime();
 		SGX_Vdp2GenCRAM();
-		SGX_Vdp1DrawFramebuffer();
-		//SGX_Vdp1ProcessFramebuffer();
 		SGX_Vdp2Draw();
-		//SGX_Vdp2Postprocess();
-		//SVI_CopyXFB();
 		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
 	} else {
-		//SVI_CopyXFB();
 		Vdp1Draw();	//Do nothing
+		SVI_ClearFrame();
 	}
-	//VIDSoftVdp1SwapFrameBuffer();
 	//osd_ProfDraw();
-	SVI_EndFrame(!(Vdp2Regs->TVMD & 0x8000));
 	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
-#else
-	u32 tpi, tpo, bpi, bpo, cpi, cc;
-	if (Vdp2Regs->TVMD & 0x8000) {
-		//Generate sprite Window texture
-		GX_ClearPixMetric();
-		GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_FALSE);
-		gfx_WindowTextureGen();
-		GX_DrawDone();
-		GX_Flush();
-		GX_ReadPixMetric(&tpi, &tpo, &bpi, &bpo, &cpi, &cc);
-		//We draw sprites first to not waste CPU time
-		cycles_start = gettime();
-		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-		Vdp1Draw();	//Create DL for GX
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 
-		cycles_start = gettime();
-		GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
-		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_FALSE, 1, 1);
-		VIDSoftVdp2DrawScreens();
-
-
-		//XXX: Do this elsewhere
-		//Vdp1NoDraw();
-		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-		VIDSoftVdp2DrawEnd();	//Make this use another function
-		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
-	} else {
-		cycles_start = gettime();
-		Vdp1NoDraw();	//Do nothing
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
-	}
-	VIDSoftVdp1SwapFrameBuffer();
-	FPSDisplay(cc);
-	//osd_MsgShow();
-	osd_ProfDraw();
-	YuiSwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
-#endif
 
 	//XXX: Limit FPS.. we can do better than this
 	current_ticks = gettime();
@@ -512,7 +465,6 @@ void FASTCALL Vdp2WriteWord(u32 addr, u16 val) {
    switch (addr)
    {
       case 0x000:
-         VIDSoftVdp2SetResolution(val);
          Vdp2Regs->TVMD = val;
          yabsys.VBlankLineCount = 224+(val & 0x30);
          return;
@@ -930,27 +882,21 @@ void FASTCALL Vdp2WriteWord(u32 addr, u16 val) {
          return;
       case 0x114:
          Vdp2Regs->COAR = val;
-         ocolor_A.r = (val & 0xFF) | (-(val & 0x100));
          return;
       case 0x116:
          Vdp2Regs->COAG = val;
-         ocolor_A.g = (val & 0xFF) | (-(val & 0x100));
          return;
       case 0x118:
          Vdp2Regs->COAB = val;
-         ocolor_A.b = (val & 0xFF) | (-(val & 0x100));
          return;
       case 0x11A:
          Vdp2Regs->COBR = val;
-         ocolor_B.r = (val & 0xFF) | (-(val & 0x100));
          return;
       case 0x11C:
          Vdp2Regs->COBG = val;
-         ocolor_B.g = (val & 0xFF) | (-(val & 0x100));
          return;
       case 0x11E:
          Vdp2Regs->COBB = val;
-         ocolor_B.b = (val & 0xFF) | (-(val & 0x100));
          return;
       default:
       {

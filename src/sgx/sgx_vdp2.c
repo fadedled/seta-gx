@@ -2,7 +2,6 @@
 #include "sgx.h"
 #include "../vidshared.h"
 #include "../vdp1.h"
-#include "../vidsoft.h"
 #include "../vdp2.h"
 #include <malloc.h>
 
@@ -12,10 +11,16 @@
 
 
 
-Mtx vdp2mtx ATTRIBUTE_ALIGN(32);
+Mtx vdp2mtx ATTRIBUTE_ALIGN(32) = {
+	{1.0, 0.0, 0.0, 0.0},
+	{0.0, 1.0, 0.0, 0.0},
+	{0.0, 0.0, 1.0, 0.0}
+};
+
+
+u16 color_ofs_tlut[16] ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
-u8 *bg_tex ATTRIBUTE_ALIGN(32);
 u8 *prop_tex ATTRIBUTE_ALIGN(32);
 
 u8 cram_4bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
@@ -25,6 +30,7 @@ u8 cram_11bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 
 u32 vdp1_fb_w = SS_DISP_WIDTH;	/*framebuffer width visible in vdp2*/
 u32 vdp1_fb_h = SS_DISP_HEIGHT;	/*framebuffer heigth visible in vdp2*/
+u32 vdp1_fb_mtx = MTX_TEX_SCALED_N;				/*framebuffer scaling in vdp2*/
 
 u32 vdp2_disp_w = SS_DISP_WIDTH;	/*display width*/
 u32 vdp2_disp_h = SS_DISP_HEIGHT;	/*display height*/
@@ -60,9 +66,96 @@ void SGX_Vdp2Init(void)
 {
 	//Set initial matrix
 	guMtxIdentity(vdp2mtx);
-	GX_LoadPosMtxImm(vdp2mtx, GXMTX_VDP2);
-	bg_tex = (u8*) memalign(32, 704*512*2);
+	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
 	prop_tex = (u8*) memalign(32, 704*512);
+}
+
+
+// Lower z-buffer has priority and screen information as follows:
+// pix = [pri : 4][screen_id : 4]
+// This means we can use a TLUT to generate
+// the information of what pixels are affected with color offset and shadows
+void __Vdp2DrawColorOffset(void)
+{
+	if (!(Vdp2Regs->CLOFEN & 0x7F)) {
+		return;
+	}
+
+	//Copy the lower 8bit Z-buffer that has information on 8
+	u32 w = MIN(vdp2_disp_w, 640);
+	u32 h = vdp2_disp_h;
+
+	GX_SetTexCopySrc(0, 0, w, h);
+	GX_SetTexCopyDst(w, h, GX_CTF_Z8L, GX_FALSE);
+	GX_CopyTex(prop_tex, GX_FALSE);
+
+	//Generate the TLUT CLOFSL
+	color_ofs_tlut[PRI_NGB1] = ((Vdp2Regs->CLOFEN & 0x02) << 8) | ((-((Vdp2Regs->CLOFSL >> 1) & 1)) & 0xFF);
+	color_ofs_tlut[PRI_NGB0] = ((Vdp2Regs->CLOFEN & 0x01) << 8) | ((-((Vdp2Regs->CLOFSL >> 0) & 1)) & 0xFF);
+	color_ofs_tlut[PRI_NGB2] = ((Vdp2Regs->CLOFEN & 0x04) << 8) | ((-((Vdp2Regs->CLOFSL >> 2) & 1)) & 0xFF);
+	color_ofs_tlut[PRI_NGB3] = ((Vdp2Regs->CLOFEN & 0x08) << 8) | ((-((Vdp2Regs->CLOFSL >> 3) & 1)) & 0xFF);
+	color_ofs_tlut[PRI_RGB0] = ((Vdp2Regs->CLOFEN & 0x10) << 8) | ((-((Vdp2Regs->CLOFSL >> 4) & 1)) & 0xFF);
+	color_ofs_tlut[0]        = ((Vdp2Regs->CLOFEN & 0x20) << 8) | ((-((Vdp2Regs->CLOFSL >> 5) & 1)) & 0xFF);
+	color_ofs_tlut[PRI_SPR]  = ((Vdp2Regs->CLOFEN & 0x40) << 8) | ((-((Vdp2Regs->CLOFSL >> 6) & 1)) & 0xFF);
+	SGX_LoadTlut(color_ofs_tlut, TLUT_SIZE_16 | TLUT_INDX_CLROFS);
+
+	//set the color offsets (CO_A -> KONST and CO_B -> RAS0)
+	u32 co_a = ((Vdp2Regs->COAR & 0xFF) << 24) | ((Vdp2Regs->COAG & 0xFF) << 16) | ((Vdp2Regs->COAB & 0xFF) << 8);
+	u32 co_b = ((Vdp2Regs->COBR & 0xFF) << 24) | ((Vdp2Regs->COBG & 0xFF) << 16) | ((Vdp2Regs->COBB & 0xFF) << 8);
+	u32 mask_a = (((-(Vdp2Regs->COAR & 0x100)) & 0xFF00) << 16) | (((-(Vdp2Regs->COAG & 0x100)) & 0xFF00) << 8) | ((-(Vdp2Regs->COAB & 0x100)) & 0xFF00);
+	u32 mask_b = (((-(Vdp2Regs->COBR & 0x100)) & 0xFF00) << 16) | (((-(Vdp2Regs->COBG & 0x100)) & 0xFF00) << 8) | ((-(Vdp2Regs->COBB & 0x100)) & 0xFF00);
+	u32 ras_a = (co_a & ~mask_a);
+	u32 invras_a = (~co_a & mask_a);
+	u32 ras_b = (co_b & ~mask_b);
+	u32 invras_b = (~co_b & mask_b);
+
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	//Set up general TEV
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(1);
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+
+	//TEXMAP6 is for VDP2 scaling
+	SGX_SetOtherTex(GX_TEXMAP5, prop_tex, GX_TF_CI8, w, h, TLUT_FMT_IA8 | TLUT_INDX_CLROFS);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, MTX_IDENTITY);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP5, GX_COLOR0A0);
+
+	//GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
+	GX_SetZMode(GX_DISABLE, GX_GREATER, GX_TRUE);
+	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	//GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_KONST, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
+	//GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ADDHALF, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+	GX_SetCurrentMtx(MTX_IDENTITY);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+
+	GX_PixModeSync(); //Not necesary?
+	GX_SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ONE, GX_LO_CLEAR);
+	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) (&ras_a)));
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT1, 4);
+		GX_Position2s16(0, 0); GX_Color1u32(ras_b);
+		GX_Position2s16(w, 0); GX_Color1u32(ras_b);
+		GX_Position2s16(0, h); GX_Color1u32(ras_b);
+		GX_Position2s16(w, h); GX_Color1u32(ras_b);
+	GX_End();
+
+	GX_SetBlendMode(GX_BM_SUBTRACT, GX_BL_ONE, GX_BL_ONE, GX_LO_CLEAR);
+	GX_SetTevKColor(GX_KCOLOR0, *((GXColor*) (&invras_a)));
+	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT1, 4);
+		GX_Position2s16(0, 0); GX_Color1u32(invras_b);
+		GX_Position2s16(w, 0); GX_Color1u32(invras_b);
+		GX_Position2s16(0, h); GX_Color1u32(invras_b);
+		GX_Position2s16(w, h); GX_Color1u32(invras_b);
+	GX_End();
+
 }
 
 static void __Vdp2SetPatternData(void)
@@ -251,8 +344,8 @@ static void SGX_Vdp2DrawCellSimple(void)
 	//want to worry with artifacts
 	vdp2mtx[0][3] = -(((f32)((cell.xscroll & char_ofs_mask) >> 8)));
 	vdp2mtx[1][3] = -(((f32)((cell.yscroll & char_ofs_mask) >> 8)));
-	GX_LoadPosMtxImm(vdp2mtx, GXMTX_VDP2);
-	GX_SetCurrentMtx(GXMTX_VDP2);
+	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
+	GX_SetCurrentMtx(MTX_VDP2_POS_BG);
 
 	//TODO: add scaling and screen dims to the format
 
@@ -323,7 +416,10 @@ static void SGX_Vdp2DrawCellSimple(void)
 			GX_LOAD_BP_REG(tex_maddr);
 			GX_LOAD_BP_REG(tlut_addr);
 			GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
-			wgPipe->F32 = (f32) (16777215 - (cell.pri | ((prcc >> 25) & 0x10)));
+			wgPipe->F32 = (f32) (16777216 - (cell.pri | ((prcc >> 25) & 0x10)));
+			//GX_LOAD_XF_REGS(0x1025, 1); //Set the Projection registers
+			//wgPipe->F32 = - (0.00000006f * (cell.pri | ((prcc >> 25) & 0x10)));
+
 
 			GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT5, 4);
 			//GX_Begin(GX_POINTS, GX_VTXFMT5, 1);
@@ -370,6 +466,8 @@ void SGX_Vdp2GenCRAM(void) {
 void SGX_Vdp2Draw(void)
 {
 	GX_SetScissor(0, 0, vdp2_disp_w, vdp2_disp_h);
+	SGX_Vdp1DrawFramebuffer();
+
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -448,103 +546,14 @@ void SGX_Vdp2Draw(void)
 		}
 	}
 	//TODO: handle Rotation BGs
-	//TODO: handle Color calculation
-	GX_SetScissor(0, 0, 640, 480);
-	SGX_SetZOffset(0);
-	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
+	//Color calculation
+	//NOTE: Right now we should only draw color calc full screens
+	//Copy z-buffer as priority and apply Color offset and shadow
+	__Vdp2DrawColorOffset();
 	//Copy the screens to texture...
-	GX_SetTexCopySrc(0, 0, vdp1_fb_w, vdp1_fb_h);
-	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB565, GX_FALSE);
-
-	//GX_CopyTex(bg_tex, GX_TRUE);
+	SVI_CopyFrame();
 }
 
-
-extern void YuiPartialSwapBuffers(u32 offset);
-
-void SGX_Vdp2Postprocess(void)
-{
-	GX_SetCurrentMtx(GXMTX_IDENTITY);
-	GX_ClearVtxDesc();
-	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	//Set up general TEV
-	GX_SetNumTevStages(1);
-	GX_SetNumTexGens(1);
-	GX_SetNumChans(0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
-
-	GX_SetNumIndStages(0);
-	GX_SetTevDirect(GX_TEVSTAGE0);
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
-	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
-	//GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
-	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-	SGX_SetTex(bg_tex, GX_TF_RGB565, vdp2_disp_w, vdp2_disp_h, 0);
-
-	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
-	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
-	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-
-	GX_PixModeSync(); //Not necesary?
-	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 32, vdp2_disp_h);
-	switch (vdp2_disp_w) {
-		case 320: { //Display must be zoomed 2x
-			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-				GX_Position2s16(0, 0);
-				GX_TexCoord1u16(0x0000);
-				GX_Position2s16(640, 0);
-				GX_TexCoord1u16(0x0A00);
-				GX_Position2s16(640, vdp2_disp_h);
-				GX_TexCoord1u16(0x0A01);
-				GX_Position2s16(0, vdp2_disp_h);
-				GX_TexCoord1u16(0x0001);
-			GX_End();
-			SVI_CopyXFB();
-		} break;
-		case 352: { //Display must be zoomed 2x and copied in parts
-			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-			GX_Position2s16(0, 0);
-			GX_TexCoord1u16(0x0000);
-			GX_Position2s16(640, 0);
-			GX_TexCoord1u16(0x0B00);
-			GX_Position2s16(640, vdp2_disp_h);
-			GX_TexCoord1u16(0x0B01);
-			GX_Position2s16(0, vdp2_disp_h);
-			GX_TexCoord1u16(0x0001);
-			GX_End();
-			SVI_CopyXFB();
-		} break;
-		case 640: { //Do not scale
-			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-				GX_Position2s16(0, 0);
-				GX_TexCoord1u16(0x0000);
-				GX_Position2s16(640, 0);
-				GX_TexCoord1u16(0x1400);
-				GX_Position2s16(640, vdp2_disp_h);
-				GX_TexCoord1u16(0x1401);
-				GX_Position2s16(0, vdp2_disp_h);
-				GX_TexCoord1u16(0x0001);
-			GX_End();
-			SVI_CopyXFB();
-		} break;
-		case 704: {
-			GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
-			GX_Position2s16(0, 0);
-			GX_TexCoord1u16(0x0000);
-			GX_Position2s16(640, 0);
-			GX_TexCoord1u16(0x1600);
-			GX_Position2s16(640, vdp2_disp_h);
-			GX_TexCoord1u16(0x1601);
-			GX_Position2s16(0, vdp2_disp_h);
-			GX_TexCoord1u16(0x0001);
-			GX_End();
-			SVI_CopyXFB();
-		} break;
-	}
-}
 
 
 

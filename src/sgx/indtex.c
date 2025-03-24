@@ -206,7 +206,7 @@ void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align)
 		SGXTexPre *tex = indtex_arr + t;
 		if (!tex->addr) {
 			u32 tile_cnt;
-			tex->addr = preloadtex_addr | 0x200000 | 0xD8000;
+			tex->addr = preloadtex_addr | (0x200000 | 0xD8000);
 			tex->attr = TEX_ATTR(GX_CLAMP, GX_REPEAT);
 			//Check bpp to generate texture
 			if (bpp_id == SPRITE_4BPP) {

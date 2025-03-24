@@ -42,8 +42,6 @@
 #include "yui.h"
 #include "sh2/sh2.h"
 
-#include "vidsoft.h"
-
 //////////////////////////////////////////////////////////////////////////////
 
 WriteFunc8 mem_write8_arr[0x100];
@@ -400,7 +398,7 @@ void mem_allocate(void)
 	wram = (u8*) memalign(32, 0x200000);
 	Vdp1FrameBuffer = (u8*) memalign(32, 0x80000);
 	Vdp1Ram = (u8*) memalign(32, 0x80000);
-	wii_vram = (u8*) memalign(32, 0x80000);	//Should be done in another place
+	//wii_vram = (u8*) memalign(32, 0x80000);	//Should be done in another place
 
 
 	//Should be in MEM2
@@ -428,9 +426,9 @@ void mem_Deinit(void)
 	if (Vdp1Ram) {
 		free(Vdp1Ram);
 	}
-	if (wii_vram) {
-		free(wii_vram);
-	}
+	//if (wii_vram) {
+	//	free(wii_vram);
+	//}
 	if (SoundRam) {
 		free(SoundRam);
 	}

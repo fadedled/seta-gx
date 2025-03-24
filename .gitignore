@@ -4,3 +4,4 @@
 /build
 /*.dol
 /*.elf
+/src/*.old

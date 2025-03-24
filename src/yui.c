@@ -39,7 +39,6 @@
 #include "snd.h"
 #include "m68kcore.h"
 #include "peripheral.h"
-#include "vidsoft.h"
 #include "vdp2.h"
 #include "yui.h"
 #include "memory.h"
@@ -355,7 +354,7 @@ void menu_Handle(void)
 		strcat(isofilename, "/");
 		strcat(isofilename, filename_items.item[filename_items.cursor].data);
 		YuiExec();
-		SVI_SetResolution(0x80C2);
+		SVI_SetResolution(0x80D2);
 		//iso_loaded = 1;
 	}
 	else if (buttons & PAD_BUTTON_B) {
@@ -485,7 +484,7 @@ int main(int argc, char **argv)
 	while(1) {
 		menu_Handle();
 		gui_Draw(&filename_items);
-		SVI_EndFrame(0);
+		SVI_CopyFrame();
 		SVI_SwapBuffers(1);
 	}
 

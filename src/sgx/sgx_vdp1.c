@@ -2,7 +2,6 @@
 #include "sgx.h"
 #include "../vidshared.h"
 #include "../vdp1.h"
-#include "../vidsoft.h"
 #include "../vdp2.h"
 #include <malloc.h>
 
@@ -36,8 +35,12 @@ u8 *output_tex ATTRIBUTE_ALIGN(32);
 u8  *win_tex ATTRIBUTE_ALIGN(32);
 u8  *prcc_tex ATTRIBUTE_ALIGN(32);
 
-u32 sys_clipx = 320;
+u32 sys_clipx = 352;
 u32 sys_clipy = 240;
+u32 usr_clipx = 0;
+u32 usr_clipy = 0;
+u32 usr_clipw = 352;
+u32 usr_cliph = 240;
 f32 local_coordx = 0.0f;
 f32 local_coordy = 0.0f;
 
@@ -48,6 +51,7 @@ extern u32 vdp1_fb_w;	/*framebuffer width visible in vdp2*/
 extern u32 vdp1_fb_h;	/*framebuffer heigth visible in vdp2*/
 extern u32 vdp2_disp_w;	/*display width*/
 extern u32 vdp2_disp_h;	/*display height*/
+extern u32 vdp1_fb_mtx;
 
 //Texture for mesh creating
 static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
@@ -69,27 +73,10 @@ static Mtx vdp1mtx2d = {
 	{0.0f, 0.0f, 0.0f, 0.0f},
 };
 
-static Mtx vdp1mtxtex[4] = {
-	//Normal tex
-	{{1.0f, 0.0f, 0.0f, 0.0f},
-	 {0.0f, 1.0f, 0.0f, 0.0f},
-	 {0.0f, 0.0f, 0.0f, 0.0f}},
-	//X flipped tex
-	{{-1.0f, 0.0f, 0.0f, 1.0f},
-	 {0.0f, 1.0f, 0.0f, 0.0f},
-	 {0.0f, 0.0f, 0.0f, 0.0f}},
-	//Y flipped tex
-	{{1.0f, 0.0f, 0.0f, 0.0f},
-	 {0.0f, -1.0f, 0.0f, 1.0f},
-	 {0.0f, 0.0f, 0.0f, 0.0f}},
-	//XY flipped tex
-	{{-1.0f, 0.0f, 0.0f, 1.0f},
-	 {0.0f, -1.0f, 0.0f, 1.0f},
-	 {0.0f, 0.0f, 0.0f, 0.0f}},
-	 //GOURAUD tex
-	{{2.0f, 0.0f, 0.0f, 0.5f},
-	 {0.0f, 2.0f, 0.0f, 0.5f},
-	 {0.0f, 0.0f, 0.0f, 0.0f}},
+static Mtx vdp1mtx3d = {
+	{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f},
 };
 
 extern u32 *tlut_data;
@@ -100,20 +87,17 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP0, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
 	SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP2, TEXREG(0x28000, TEXREG_SIZE_32K), 0);
-	SGX_InitTex(GX_TEXMAP3, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
-	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
+	SGX_InitTex(GX_TEXMAP3, TEXREG(0x30000, TEXREG_SIZE_32K), 0);
+	SGX_InitTex(GX_TEXMAP4, TEXREG(0x38000, TEXREG_SIZE_32K), 0);
+	SGX_InitTex(GX_TEXMAP5, TEXREG(0x40000, TEXREG_SIZE_32K), 0);
+	SGX_InitTex(GX_TEXMAP6, TEXREG(0x48000, TEXREG_SIZE_32K), 0);
 	color_tex = (u8*) memalign(32, 704*512);
 	color_rgb_tex = color_tex + (704*256);
 	output_tex = (u8*) memalign(32, 704*512);
 	win_tex  = (u8*) memalign(32, 704*256);
 	prcc_tex = win_tex + (704*128);
-	GX_LoadPosMtxImm(vdp1mtx2d, GXMTX_VDP1_POS2D);
-	GX_LoadTexMtxImm(vdp1mtxtex[0], GXMTX_VDP1_TEX_N, GX_MTX2x4);
-	GX_LoadTexMtxImm(vdp1mtxtex[1], GXMTX_VDP1_TEX_X, GX_MTX2x4);
-	GX_LoadTexMtxImm(vdp1mtxtex[2], GXMTX_VDP1_TEX_Y, GX_MTX2x4);
-	GX_LoadTexMtxImm(vdp1mtxtex[3], GXMTX_VDP1_TEX_XY, GX_MTX2x4);
-	GX_LoadTexMtxImm(vdp1mtxtex[4], GXMTX_VDP1_TEX_GOUR, GX_MTX2x4);
-
+	GX_LoadPosMtxImm(vdp1mtx2d, MTX_VDP1_POS_2D);
+	GX_LoadPosMtxImm(vdp1mtx3d, MTX_VDP1_POS_3D);
 
 	GX_TexModeSync();
 }
@@ -163,7 +147,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetNumTevStages(1);
 	GX_SetNumTexGens(1);
 	GX_SetNumChans(1);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
 
 	//XXX: this is for paletted sprites, Konst is for transparency, gouraud is always active and half
@@ -183,7 +167,7 @@ void SGX_Vdp1Begin(void)
 
 	//Set how the textures are set up
 	//TODO: do this in another function
-	SGX_InitTex(GX_TEXMAP0, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
+	SGX_InitTex(GX_TEXMAP0, TEXREG(0x00000, TEXREG_SIZE_128K), 0);
 
 	//Draw the mesh z-texture
 	GX_SetNumIndStages(0);
@@ -193,11 +177,10 @@ void SGX_Vdp1Begin(void)
 	GX_SetAlphaUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 	//NOTE: Necesary?
-	GX_SetTexCoordBias(GX_TEXCOORD0, GX_ENABLE, GX_ENABLE);
-	GX_LoadPosMtxImm(vdp1mtx, GXMTX_VDP1);
-	GX_SetCurrentMtx(GXMTX_VDP1);
+	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
+	GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
 
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
@@ -282,20 +265,20 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
-	GX_SetCurrentMtx(GXMTX_IDENTITY);
+	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
-	SGX_SetZOffset(0);
 	//Generate and load the Priority and Colorcalculation TLUT
 	__Vdp1LoadPrCcTlut();
 
 	//Set up TEV depending on sprite bitdepth
 	if (1) { 	//16bpp framebuffer
 		//TODO: Add texture
+		u32 fb_mtx = MTX_TEX_SCALED_N + (((vdp2_disp_w > 352) | ((vdp2_disp_h > 256) << 1)) << 1);
 		u32 tev = 0;
 		GX_SetNumTexGens(1);
 		GX_SetNumChans(0);
-		GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, GX_IDENTITY);
+		GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, fb_mtx);
 
 		GXColor convk = {0x7F, 0xFF, 0x7F, 0xff};
 		GX_SetTevKColor(GX_KCOLOR0, convk);
@@ -317,7 +300,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		if (Vdp2Regs->SPCTL & 0x20) {
 			GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
 			GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
-			SGX_InitTex(GX_TEXMAP1, TEXREG(0x2000, TEXREG_SIZE_32K), 0);
+			SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
 			SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, vdp1pix.fb_w, vdp1pix.fb_h, 0);
 			GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 			GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
@@ -341,7 +324,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 
 		GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, PRI_SPR);
 	} else {	//8bpp framebuffer
-
+		// The matrix should always use MTX_TEX_SCALED_N
 	}
 
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
@@ -374,7 +357,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetNumTevStages(1);
 	GX_SetNumTexGens(1);
 	GX_SetNumChans(0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, GX_IDENTITY);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, MTX_IDENTITY);
 	GX_SetTexCopySrc(0, 0, vdp1_fb_w, vdp1_fb_h);
 	//Check if there is mixed RGB and palette format
 	if (Vdp2Regs->SPCTL & 0x20) {
@@ -395,7 +378,7 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetDstAlpha(GX_FALSE, 0x00);
 		GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
 		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
-		GX_SetCurrentMtx(GXMTX_IDENTITY);
+		GX_SetCurrentMtx(MTX_IDENTITY);
 
 		//Extend Alpha for correct RGBA5551 copying
 		//NOTE: This is done twice to make Alpha = 255,
@@ -465,7 +448,7 @@ void SGX_Vdp1End(void)
 {
 	SGX_SpriteConverterSet(0, SPRITE_NONE, 0);
 	SGX_SetVtxOffset(0, 0);
-	GX_SetScissor(0, 0, vdp1_fb_w, vdp1_fb_h);
+	GX_SetScissor(0, 0, 640, 480);
 	//Copy colors
 	if (1) { //16bpp framebuffer
 		__Vdp1Convert16bpp();
@@ -637,18 +620,18 @@ void SGX_Vdp1DrawNormalSpr(void)
 	}
 
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_CLR0, GX_NONE);
-	u32 flip = ((vdp1cmd->CTRL & 0x30) >> 4)*3;
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, GXMTX_VDP1_TEX_N + flip);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_NONE);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	u32 flip_mtx = MTX_TEX_FLIP_N + ((vdp1cmd->CTRL & 0x30) >> 3);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, flip_mtx);
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, w << 3, h);
 	vdp1mtx2d[0][0] = (f32) (w << 3);
 	vdp1mtx2d[1][1] = (f32) h;
 	vdp1mtx2d[0][3] = (f32) ((s16) vdp1cmd->XA);
 	vdp1mtx2d[1][3] = (f32) ((s16) vdp1cmd->YA);
-	GX_LoadPosMtxImm(vdp1mtx2d, GXMTX_VDP1_POS2D);
-	GX_SetCurrentMtx(GXMTX_VDP1_POS2D);
+	GX_LoadPosMtxImm(vdp1mtx2d, MTX_VDP1_POS_2D);
+	GX_SetCurrentMtx(MTX_VDP1_POS_2D);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(1);
@@ -674,8 +657,9 @@ void SGX_Vdp1DrawNormalSpr(void)
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_TEXMTX0);
-	GX_SetCurrentMtx(GXMTX_VDP1);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
+	GX_SetCurrentMtx(MTX_IDENTITY);
 }
 
 void SGX_Vdp1DrawScaledSpr(void)
@@ -942,12 +926,19 @@ void SGX_Vdp1DrawLine(void)
 void SGX_Vdp1UserClip(void)
 {
 	//TODO
+	usr_clipx = vdp1cmd->XA;
+	usr_clipy = vdp1cmd->YA;
+	usr_clipw = vdp1cmd->XC + 1 - usr_clipx;
+	usr_cliph = vdp1cmd->YC + 1 - usr_clipy;
+	usr_clipw = MIN(usr_clipw, sys_clipx);
+	usr_cliph = MIN(usr_cliph, sys_clipy);
+	GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
 }
 
 void SGX_Vdp1SysClip(void)
 {
 	//TODO: should clamp value.
-	sys_clipx = vdp1cmd->XC + 1;
+	usr_clipx = vdp1cmd->XC + 1;
 	sys_clipy = vdp1cmd->YC + 1;
 	GX_SetScissor(0, 0, sys_clipx, sys_clipy);
 }

@@ -20,12 +20,12 @@
 */
 
 #include <stdlib.h>
-#include "vidsoft.h"
 #include "vdp1.h"
 #include "debug.h"
 #include "scu.h"
 #include "vdp2.h"
 #include "osd/osd.h"
+#include "sgx/sgx.h"
 #ifdef GEKKO
 #include "yabause.h"
 #endif
@@ -307,68 +307,6 @@ void FASTCALL Vdp1WriteWord(u32 addr, u16 val) {
 void FASTCALL Vdp1WriteLong(u32 addr, UNUSED u32 val) {
    //trying to long-write a Vdp1 register
 }
-
-//////////////////////////////////////////////////////////////////////////////
-
-//Builds Vram for wii textures and palettes
-//XXX: Todo: Add palettes
-void vdp1_BuildVram(void) {
-	u32 returnAddr;
-	u32 commandCounter;
-	u16 command;
-
-	u32 addr = 0;
-	returnAddr = 0xFFFFFFFF;
-	commandCounter = 0;
-
-	command = T1ReadWord(Vdp1Ram, addr);
-
-	while (!(command & 0x8000) && commandCounter < 2000) { // fix me
-		// First, process the command
-		if (!(command & 0x4000)) { // if (!skip)
-			switch (command & 0x000F) {
-			case 0: // normal sprite draw
-			case 1: // scaled sprite draw
-			case 2: // distorted sprite draw
-			case 3: //Mirror Distorted sprite
-			case 4: // polygon draw
-				VidSoftTexConvert(addr);
-						break;
-			default: // Abort or useless
-				if ((command & 0x000F) > 11) {
-					return;
-				}
-			}
-		}
-
-		// Next, determine where to go next
-		switch ((command & 0x3000) >> 12) {
-		case 0: // NEXT, jump to following table
-			addr += 0x20;
-			break;
-		case 1: // ASSIGN, jump to CMDLINK
-			addr = T1ReadWord(Vdp1Ram, addr + 2) * 8;
-			break;
-		case 2: // CALL, call a subroutine
-			if (returnAddr == 0xFFFFFFFF)
-				returnAddr = addr + 0x20;
-
-			addr = T1ReadWord(Vdp1Ram, addr + 2) * 8;
-			break;
-		case 3: // RETURN, return from subroutine
-			if (returnAddr != 0xFFFFFFFF) {
-				addr = returnAddr;
-				returnAddr = 0xFFFFFFFF;
-			}
-			else
-				addr += 0x20;
-			break;
-		}
-		command = T1ReadWord(Vdp1Ram, addr);
-		commandCounter++;
-	}
-}
-
 
 //////////////////////////////////////////////////////////////////////////////
 

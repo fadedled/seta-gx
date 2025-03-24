@@ -2,6 +2,7 @@
 
 #include "gui.h"
 #include "../peripheral.h"
+#include "../sgx/sgx.h"
 
 
 GXTexObj gui_tobj;
@@ -165,14 +166,12 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_InitTexObj(&gui_tobj, menu_tex_4bpp_data, GUI_SYSTEX_W, GUI_SYSTEX_H, GX_TF_I4, GX_CLAMP, GX_CLAMP, GX_FALSE);
 	GX_InitTexObjLOD(&gui_tobj, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
 	GX_LoadTexObj(&gui_tobj, GX_TEXMAP0);
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 4, 8);
-	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
-
 
 	for (int i = 0; i < shown_entries; ++i) {
 		u32 x = ofs_x + 24, y = (i * 12) + ofs_y;
@@ -248,18 +247,22 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 
 	gui_DrawControllers();
 
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_RASC, GX_CC_TEXA, GX_CC_ZERO);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4*4);
 		GX_Position2u16(32, 216);					// Top Left
-		GX_Color1u16(0xFFFF);
+		GX_Color1u16(0x9773);
 		GX_TexCoord2u8(0, 4);
 		GX_Position2u16(48, 216);			// Top Right
-		GX_Color1u16(0xFFFF);
+		GX_Color1u16(0x9773);
 		GX_TexCoord2u8(4, 4);
 		GX_Position2u16(48, 216+ 16);	// Bottom Right
-		GX_Color1u16(0xFFFF);
+		GX_Color1u16(0x9773);
 		GX_TexCoord2u8(4, 6);
 		GX_Position2u16(32, 216+ 16);			// Bottom Left
-		GX_Color1u16(0xFFFF);
+		GX_Color1u16(0x9773);
 		GX_TexCoord2u8(0, 6);
 
 		GX_Position2u16(50, 216 + 4); 					// Top Left
@@ -276,17 +279,17 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 		GX_TexCoord2u8(0, 8);
 
 		GX_Position2u16(32 + 60, 216);					// Top Left
-		GX_Color1u16(0xFFFF);
-		GX_TexCoord2u8(0, 4);
-		GX_Position2u16(48 + 60, 216);			// Top Right
-		GX_Color1u16(0xFFFF);
+		GX_Color1u16(0xfc92);
 		GX_TexCoord2u8(4, 4);
+		GX_Position2u16(48 + 60, 216);			// Top Right
+		GX_Color1u16(0xfc92);
+		GX_TexCoord2u8(8, 4);
 		GX_Position2u16(48 + 60, 216+ 16);	// Bottom Right
-		GX_Color1u16(0xFFFF);
-		GX_TexCoord2u8(4, 6);
+		GX_Color1u16(0xfc92);
+		GX_TexCoord2u8(8, 6);
 		GX_Position2u16(32 + 60, 216+ 16);			// Bottom Left
-		GX_Color1u16(0xFFFF);
-		GX_TexCoord2u8(0, 6);
+		GX_Color1u16(0xfc92);
+		GX_TexCoord2u8(4, 6);
 
 		GX_Position2u16(50 + 60, 216 + 4); 					// Top Left
 		GX_Color1u16(0xFFFF);
@@ -307,7 +310,7 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CC_RASC, GX_CC_TEXC, GX_CC_ZERO);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
-
+#if 0
 	GX_Begin(GX_QUADS, GX_VTXFMT4, 4*2);
 	GX_Position2u16(32+2, 216+2);					// Top Left
 	GX_Color1u16(0x5e4f);
@@ -335,7 +338,7 @@ static void gui_DrawItems(GuiItems *items, u32 width, u32 height)
 	GX_Color1u16(0xf42d);
 	GX_TexCoord2u8(15, 7);
 	GX_End();
-
+#endif
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -357,7 +360,7 @@ void gui_Draw(GuiItems *items)
 	GX_SetLineWidth(2 << 2, 0);
 	/*Reserve GX_VTXFMT7 for OSD & GUI*/
 	GX_SetScissor(0, 0, 640, 480);
-	GX_SetCurrentMtx(GX_PNMTX1);
+	GX_SetCurrentMtx(MTX_IDENTITY_2X);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
@@ -374,7 +377,7 @@ void gui_Draw(GuiItems *items)
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
 
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP_NULL, GX_COLOR0);
-	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, GX_IDENTITY);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_LoadTexObjPreloaded(&gui_tobj, &gui_treg, GX_TEXMAP0);
 
 	//Only if alpha is checked
@@ -447,7 +450,6 @@ void gui_Draw(GuiItems *items)
 	}
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
-	GX_SetTexCoordBias(GX_TEXCOORD0, GX_DISABLE, GX_DISABLE);
 
 	GX_SetLineWidth(1 << 2, 0);
 }

@@ -21,31 +21,43 @@
 #define TLUT_FMT_RGB565			(GX_TL_RGB565 << 10)
 
 #define TLUT_INDX_CRAM			(0x200)
-#define TLUT_INDX_PPCC			(0x210)
-#define TLUT_INDX_CLRBANK		(0x2F0)
+#define TLUT_INDX_PPCC			(0x210)		//Priority and colorcalculation (256 colors)
+#define TLUT_INDX_CLROFS		(0x22F)		//Vdp2 Color Offset				(16 colors)
+#define TLUT_INDX_CLRBANK		(0x2F0)		//Vdp1 color bank parts			(256 colors)
 #define TLUT_INDX_CRAM0			(0x300)
-#define TLUT_INDX_CRAM1			(0x380)
-#define TLUT_INDX_IMM4			(0x310)
+#define TLUT_INDX_CRAM1			(0x380)		//Color Ram
+#define TLUT_INDX_IMM4			(0x310)		//Vdp1 CLUT parts
 #define TLUT_INDX_IMM			((GX_TLUT_16 << 10) | (0x380 & 0x3ff))
 #define TLUT_INDX_IMM8			(((GX_TLUT_256) << 10) | (0x3E0 & 0x3ff))
 
+//=========================
+//Matrices
+//=========================
+//We use the matrix memory to generate textures and positions
+//Without having to make costly calculations, i.e. we use the
+//GPU to our advantage
+//Position matrices:
+#define MTX_IDENTITY		0	// Identity matrix (Constant)
+#define MTX_MOVED_640		3	// Identity matrix that has been moved 640 pixels (Constant)
+#define MTX_VDP1_POS_2D		6	// For positions of 2d sprites
+#define MTX_VDP1_POS_3D		9	// For positions of 3d polygons
+#define MTX_VDP2_POS_BG		12	// For positions of backgrounds
+#define MTX_IDENTITY_2X		15	// Identity matrix (Constant)
 
-#define GXMTX_IDENTITY			GX_PNMTX0
-#define GXMTX_IDENTITY_2X		GX_PNMTX1
-#define GXMTX_VDP1				GX_PNMTX2
-#define GXMTX_VDP2				GX_PNMTX3
-#define GXMTX_VDP2_BG			GX_PNMTX3
 
-//TODO: These should be used wisely
-#define GXMTX_VDP1_POS2D		GX_PNMTX4
-#define GXMTX_VDP1_POS3D		GX_PNMTX5
+//Texture matrices:
+#define MTX_TEX_IDENTITY	28	// Textures set identity (Constant)
+#define MTX_TEX_FLIP_N		30	// Textures set identity (Constant)
+#define MTX_TEX_FLIP_X		32	// Textures get flipped in X axis (Constant)
+#define MTX_TEX_FLIP_Y		34	// Textures get flipped in Y axis (Constant)
+#define MTX_TEX_FLIP_XY		36	// Textures get flipped in X and Y axis	(Constant)
+#define MTX_TEX_VDP1_GOUR	38	// For Gouraud shaded VDP1 parts (Constant)
+#define MTX_TEX_SCALED_N	40	// For scaled axis aligned textures (Vdp1 fb or display scaling)
+#define MTX_TEX_SCALED_X	42	// For scaled axis aligned textures (Vdp1 fb or display scaling)
+#define MTX_TEX_SCALED_Y	44	// For scaled axis aligned textures (Vdp1 fb or display scaling)
+#define MTX_TEX_SCALED_XY	46	// For scaled axis aligned textures (Vdp1 fb or display scaling)
 
-#define GXMTX_VDP1_TEX_N		GX_TEXMTX1
-#define GXMTX_VDP1_TEX_X		GX_TEXMTX2
-#define GXMTX_VDP1_TEX_Y		GX_TEXMTX3
-#define GXMTX_VDP1_TEX_XY		GX_TEXMTX4
-#define GXMTX_VDP1_TEX_GOUR		GX_TEXMTX5
-
+//=========================
 
 #define TLUT_TYPE_FULL			0x0
 #define TLUT_TYPE_4BPP			0x80

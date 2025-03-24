@@ -28,6 +28,7 @@
 #include "smpc.h"
 #include "vdp1.h"
 #include "yabause.h"
+#include "sgx/svi.h"
 
 #define RED_SIZE        1
 #define GREEN_SIZE      2

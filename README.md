@@ -4,7 +4,7 @@
 
 This software is licensed under the GNU General Public License v2, available at: http://www.gnu.org/licenses/gpl-2.0.txt This requires any released modifications to be licensed similarly, and to have the source available.
 
-**DISCLAIMER:** This project is experimental and in no way close to good in terms of code quality and stability (this is to be expected), so you may find a lot of bugs/crashes/in
+**DISCLAIMER:** This project is experimental and in no way close to good in terms of code quality and stability (this is to be expected), so you may find a lot of bugs/crashes/softlocks.
 
 ## Features
 
@@ -28,9 +28,9 @@ Remapping is planned, currently only the GameCube Controller is supported:
 | D-pad       | D-pad     |
 | A           | B         |
 | B           | A         |
-| C           | Cstick-UP |
-| X           | Y         |
-| Y           | X         |
+| C           | X         |
+| X           | Cstick-UP |
+| Y           | Y         |
 | Z           | Z         |
 | R           | R         |
 | L           | L         |

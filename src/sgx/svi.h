@@ -10,6 +10,7 @@ void SVI_Init(void);
 void SVI_CopyXFB();
 void SVI_SwapBuffers(u32 wait_vsync);
 void SVI_SetResolution(u32 tvmd);
-void SVI_EndFrame(u32 black);
+void SVI_CopyFrame(void);
+void SVI_ClearFrame(void);
 
 #endif //__SVI_H__

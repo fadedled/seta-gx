@@ -35,8 +35,8 @@
 #include "osd/osd.h"
 #include "smpc.h"
 #include "vdp2.h"
-#include "vidsoft.h"
 #include "yui.h"
+#include "sgx/svi.h"
 #include "bios.h"
 
 
@@ -820,7 +820,7 @@ void YabauseSpeedySetup(void)
    Vdp2Regs->COAR = 0x0200;
    Vdp2Regs->COAG = 0x0200;
    Vdp2Regs->COAB = 0x0200;
-   VIDSoftVdp2SetResolution(Vdp2Regs->TVMD);
+   SVI_SetResolution(Vdp2Regs->TVMD);
 #ifdef GEKKO
    yabsys.VBlankLineCount = 224+(Vdp2Regs->TVMD & 0x30);
 #endif

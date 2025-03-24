@@ -51,19 +51,21 @@ static u32 per_updateDigitalGC(u32 indx, PADStatus *status)
 	btns |=  (u32) ((status->substickY > 32) | (status->substickY < -32)) << GC_BIT_Z2;
 
 	//XXX: get the user defined bits for the buttons
-	u8 d0 = (u8) ((((btns >> GC_BIT_A) & 1) << PAD_DI_BIT_B) |
-			(((btns >> GC_BIT_Z2) & 1) << PAD_DI_BIT_C) |
+	u8 d0 = (u8) (
+			(((btns >> GC_BIT_A) & 1) << PAD_DI_BIT_B) |
 			(((btns >> GC_BIT_B) & 1) << PAD_DI_BIT_A) |
+			(((btns >> GC_BIT_X) & 1) << PAD_DI_BIT_C) |
 			(((btns >> GC_BIT_STR) & 1) << PAD_DI_BIT_STR) |
 			(((btns >> GC_BIT_UP) & 1) << PAD_DI_BIT_UP) |
 			(((btns >> GC_BIT_DOWN) & 1) << PAD_DI_BIT_DOWN) |
 			(((btns >> GC_BIT_LEFT) & 1) << PAD_DI_BIT_LEFT) |
 			(((btns >> GC_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT));
 
-	u8 d1 = (u8) ((((btns >> GC_BIT_L) & 1) << PAD_DI_BIT_L) |
+	u8 d1 = (u8) (
+			(((btns >> GC_BIT_L) & 1) << PAD_DI_BIT_L) |
+			(((btns >> GC_BIT_Z2) & 1) << PAD_DI_BIT_X) |
+			(((btns >> GC_BIT_Y) & 1) << PAD_DI_BIT_Y) |
 			(((btns >> GC_BIT_Z) & 1) << PAD_DI_BIT_Z) |
-			(((btns >> GC_BIT_X) & 1) << PAD_DI_BIT_Y) |
-			(((btns >> GC_BIT_Y) & 1) << PAD_DI_BIT_X) |
 			(((btns >> GC_BIT_R) & 1) << PAD_DI_BIT_R) | 0x3);
 
 	per_data.data[per_data.data_size] = per_data.ids[indx];

@@ -55,6 +55,64 @@ static const f32 tex_array[] = {
 	8.0f, 8.0f
 };
 
+static Mtx mtx_pos[3] = {
+	//MTX_IDENTITY
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 1.0f, 0.0f}},
+	//MTX_MOVED_640
+	{{1.0f, 0.0f, 0.0f, -640.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 1.0f, 0.0f}},
+	//MTX_IDNTITY_2X
+	{{2.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 2.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 2.0f, 0.0f}},
+};
+
+static Mtx mtx_tex[10] = {
+	//MTX_TEX_IDENTITY
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_FLIP_N
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_FLIP_X
+	{{-1.0f, 0.0f, 0.0f, 1.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_FLIP_Y
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, -1.0f, 0.0f, 1.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_FLIP_XY
+	{{-1.0f, 0.0f, 0.0f, 1.0f},
+	{0.0f, -1.0f, 0.0f, 1.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_FLIP_GOUR
+	{{2.0f, 0.0f, 0.0f, 0.5f},
+	{0.0f, 2.0f, 0.0f, 0.5f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_SCALED_N
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_SCALED_X
+	{{0.5f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 1.0f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_SCALED_Y
+	{{1.0f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 0.5f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+	//MTX_TEX_SCALED_XY
+	{{0.5f, 0.0f, 0.0f, 0.0f},
+	{0.0f, 0.5f, 0.0f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 0.0f}},
+};
+
 
 static GXTlutRegion* __SGX_CalcTlutRegion(u32 idx)
 {
@@ -82,15 +140,6 @@ void SGX_Init(void)
 	gui_Init();
 	GX_SetArray(GX_VA_TEX0, tex_array, sizeof(*tex_array) * 2);
 
-	//Set matrices
-	Mtx ident_mtx;
-	guMtxIdentity(ident_mtx);
-	GX_LoadPosMtxImm(ident_mtx, GXMTX_IDENTITY);
-	guMtxScale(ident_mtx, 2.0f, 2.0f, 1.0f);
-	GX_LoadPosMtxImm(ident_mtx, GXMTX_IDENTITY_2X);
-	GX_SetCurrentMtx(GXMTX_IDENTITY);
-
-
 	//Set the texcache regions
 	GX_SetTexRegionCallback(__SGX_CalcTexRegion);
 	GX_SetTlutRegionCallback(__SGX_CalcTlutRegion);
@@ -113,6 +162,23 @@ void SGX_Init(void)
 
 	GX_LOAD_XF_REGS(0x101F, 1); //Viewport FP
 	wgPipe->F32 = 16777215.0f;
+
+	//Set matrices
+	GX_LoadPosMtxImm(mtx_pos[0], MTX_IDENTITY);
+	GX_LoadPosMtxImm(mtx_pos[1], MTX_MOVED_640);
+	GX_LoadPosMtxImm(mtx_pos[2], MTX_IDENTITY_2X);
+
+	GX_LoadTexMtxImm(mtx_tex[0], MTX_TEX_IDENTITY, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[1], MTX_TEX_FLIP_N, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[2], MTX_TEX_FLIP_X, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[3], MTX_TEX_FLIP_Y, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[4], MTX_TEX_FLIP_XY, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[5], MTX_TEX_VDP1_GOUR, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[6], MTX_TEX_SCALED_N, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[7], MTX_TEX_SCALED_X, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[8], MTX_TEX_SCALED_Y, GX_MTX2x4);
+	GX_LoadTexMtxImm(mtx_tex[9], MTX_TEX_SCALED_XY, GX_MTX2x4);
+	GX_SetCurrentMtx(MTX_IDENTITY);
 
 	//Set the color bank.
 	tlut_data = (u32*) memalign(32, 0x200);
@@ -167,7 +233,12 @@ void SGX_TlutLoadCRAMImm(u32 pos, u32 trn_code, u32 size)
 void SGX_SetZOffset(u32 offset)
 {
 	GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
-	wgPipe->F32 = (f32) (16777215 - offset);
+	wgPipe->F32 = (f32) (16777216 - offset);
+	//GX_LOAD_XF_REGS(0x101F, 1); //Set the Viewport FP
+	//wgPipe->F32 = (f32) (16777215);
+
+	//GX_LOAD_XF_REGS(0x1025, 1); //Set the Projection registers
+	//wgPipe->F32 = - (0.00000006f * offset);
 }
 
 
@@ -178,7 +249,7 @@ void SGX_SetVtxOffset(f32 x, f32 y)
 	f32 p2 = 2.0f / -480.0f;
 	f32 p3 = -(480.0f + (y*2.0f)) / -480.0f;
 
-	GX_LOAD_XF_REGS(0x1020, 4); //Set the Viewport Origin
+	GX_LOAD_XF_REGS(0x1020, 4); //Set the Projection registers
 	wgPipe->F32 = p0;
 	wgPipe->F32 = p1;
 	wgPipe->F32 = p2;
@@ -208,7 +279,7 @@ void SGX_BeginVdp1(void)
 void SGX_InitTex(u32 mapid, u32 even, u32 odd)
 {
 	//Texture regions
-	mapid <<= 24;
+	mapid = (((mapid & 0x4) << 3) |(mapid & 0x3)) << 24;
 	u32 tmem_even = 0x8C000000 | mapid | even;	// 128k cache
 	u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
 	//Texture filter
@@ -314,7 +385,7 @@ void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 	//Flush Texture State
 	__SGX_FLUSH_TEX_STATE;
 	//Set texture address and size
-	mapid <<= 24;
+	mapid = (((mapid & 0x4) << 3) |(mapid & 0x3)) << 24;
 	u32 tex_maddr = 0x94000000 | mapid | (MEM_VIRTUAL_TO_PHYSICAL(img_addr) >> 5);
 	u32 tex_size = 0x88000000 | mapid | (fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu);
 	GX_LOAD_BP_REG(tex_maddr);

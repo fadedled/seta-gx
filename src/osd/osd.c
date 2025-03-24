@@ -171,7 +171,7 @@ void osd_ProfDraw(void)
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetCurrentMtx(GXMTX_IDENTITY);
+	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 8);
 
 	GX_SetScissor(0, 0, 640, 480);
