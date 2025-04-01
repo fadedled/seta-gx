@@ -245,12 +245,17 @@ extern PerData per_data;
 typedef struct PerPad_t {
 	u32 type;
 	u32 port;
+	u32 prev_btn;
 	u32 btn;
 	s16 x;
 	s16 y;
+	s16 sx;
+	s16 sy;
 } PerPad;
 
 extern PerPad perpad[PER_PADMAX];
+
+#define PER_BUTTONS_DOWN(i)		(~perpad[i].prev_btn & perpad[i].btn)
 
   /* Port Status:
   0x04 - Sega-tap is connected
@@ -258,6 +263,9 @@ extern PerPad perpad[PER_PADMAX];
   0x21-0x2F - Clock serial peripheral is connected
   0xF0 - Not Connected or Unknown Device
   0xF1 - Peripheral is directly connected */
+#define PER_STAT_NONE		0xF0
+#define PER_STAT_DIRECT		0xF1
+#define PER_STAT_MULTITAP	0x16
 
   // PeripheralID:
 #define PER_ID_DIGITAL		0x02
@@ -267,19 +275,20 @@ extern PerPad perpad[PER_PADMAX];
 #define PER_ID_NONE			0xFF
 
 //Standard Sega Saturn Controller
-#define PAD_DI_UP					0x0001
-#define PAD_DI_RIGHT				0x0002
-#define PAD_DI_DOWN					0x0004
-#define PAD_DI_LEFT					0x0008
-#define PAD_DI_R		 			0x0010
-#define PAD_DI_L 					0x0020
-#define PAD_DI_STR					0x0040
-#define PAD_DI_A					0x0080
-#define PAD_DI_B					0x0100
-#define PAD_DI_C					0x0200
-#define PAD_DI_X					0x0400
-#define PAD_DI_Y					0x0800
+#define PAD_DI_B					0x0001
+#define PAD_DI_C					0x0002
+#define PAD_DI_A					0x0004
+#define PAD_DI_STR					0x0008
+#define PAD_DI_UP					0x0010
+#define PAD_DI_DOWN					0x0020
+#define PAD_DI_LEFT					0x0040
+#define PAD_DI_RIGHT				0x0080
+#define PAD_DI_L 					0x0800
 #define PAD_DI_Z					0x1000
+#define PAD_DI_X					0x2000
+#define PAD_DI_Y					0x4000
+#define PAD_DI_R		 			0x8000
+
 
 #define PAD_DI_BIT_B				0
 #define PAD_DI_BIT_C				1
@@ -289,13 +298,13 @@ extern PerPad perpad[PER_PADMAX];
 #define PAD_DI_BIT_DOWN				5
 #define PAD_DI_BIT_LEFT				6
 #define PAD_DI_BIT_RIGHT			7
-#define PAD_DI_BIT_L 				3
-#define PAD_DI_BIT_Z				4
-#define PAD_DI_BIT_X				5
-#define PAD_DI_BIT_Y				6
-#define PAD_DI_BIT_R		 		7
+#define PAD_DI_BIT_L 				(3+8)
+#define PAD_DI_BIT_Z				(4+8)
+#define PAD_DI_BIT_X				(5+8)
+#define PAD_DI_BIT_Y				(6+8)
+#define PAD_DI_BIT_R		 		(7+8)
 
-
+//Gamecube controller bit shifts
 #define GC_BIT_LEFT				0
 #define GC_BIT_RIGHT			1
 #define GC_BIT_DOWN				2
@@ -310,13 +319,45 @@ extern PerPad perpad[PER_PADMAX];
 #define GC_BIT_Y				11
 #define GC_BIT_STR				12
 
+//Wiimote bit shifts
+#define WII_BIT_LEFT 			0
+#define WII_BIT_RIGHT			1
+#define WII_BIT_DOWN			2
+#define WII_BIT_UP				3
+#define WII_BIT_PLUS			4
+#define WII_BIT_2				8
+#define WII_BIT_1				9
+#define WII_BIT_B				10
+#define WII_BIT_A				11
+#define WII_BIT_MINUS			12
+#define WII_BIT_HOME			15
+
+//Classic controller bit shifts
+#define WCL_BIT_UP			(8+16)
+#define WCL_BIT_LEFT		(9+16)
+#define WCL_BIT_ZR			(10+16)
+#define WCL_BIT_X			(11+16)
+#define WCL_BIT_A			(12+16)
+#define WCL_BIT_Y		 	(13+16)
+#define WCL_BIT_B 			(14+16)
+#define WCL_BIT_ZL			(15+16)
+#define WCL_BIT_R			(1+16)
+#define WCL_BIT_PLUS		(2+16)
+#define WCL_BIT_HOME		(3+16)
+#define WCL_BIT_MINUS		(4+16)
+#define WCL_BIT_L			(5+16)
+#define WCL_BIT_DOWN		(6+16)
+#define WCL_BIT_RIGHT		(7+16)
+
 //TODO: Make generic wrapper for controller
 
 void per_Init(void);
 u32 per_updatePads(void);
 void per_closePad(u32 indx);
 
-#define GC_AXIS_TO_DIGITAL(x, y)	((x < -46) | ((x > 46) << 1) | (((y < -54) << 2) | ((y > 54) << 3)))
+#define GC_AXIS_TO_DIGITAL(x, y)		(((x < -46) << GC_BIT_LEFT) | ((x > 46) << GC_BIT_RIGHT) | (((y < -54) << GC_BIT_DOWN) | ((y > 54) << GC_BIT_UP)))
+#define CLASSIC_AXIS_TO_DIGITAL(x, y)	(((x < -46) << WCL_BIT_LEFT) | ((x > 46) << WCL_BIT_RIGHT) | (((y < -54) << WCL_BIT_DOWN) | ((y > 54) << WCL_BIT_UP)))
+
 
 /** @} */
 

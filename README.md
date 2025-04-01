@@ -23,20 +23,20 @@ Download and extract the latest release. Copy the `apps/SetaGX` folder into the 
 
 Remapping is planned, currently only the GameCube Controller is supported:
 
-| Sega Saturn | GameCube  |
-|-------------|-----------|
-| D-pad       | D-pad     |
-| A           | B         |
-| B           | A         |
-| C           | X         |
-| X           | Cstick-UP |
-| Y           | Y         |
-| Z           | Z         |
-| R           | R         |
-| L           | L         |
-| Start       | Start     |
+| Sega Saturn | GameCube  | WiiMote | Classic |
+|-------------|-----------|---------|---------|
+| D-pad       | D-pad     | D-pad   | D-pad   |
+| A           | B         | A       | Y       |
+| B           | A         | 1       | B       |
+| C           | X         | 2       | A       |
+| X           | Cstick-UP | -       | X       |
+| Y           | Y         | B       | ZL      |
+| Z           | Z         |         | ZR      |
+| R           | R         |         | R       |
+| L           | L         |         | L       |
+| Start       | Start     | +       | +       |
 
-To return to the menu press Start + Z, this will close the game so remember to save before doing this. In the menu you can select a game and press A to start it, by pressing B you return to the Homebrew Channel.
+To return to the menu press Start + Z on GameCube Controller and Home on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A to start it, by pressing B you return to the Homebrew Channel.
 
 ## Credits/Special Thanks
 

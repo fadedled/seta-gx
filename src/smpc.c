@@ -554,7 +554,7 @@ void FASTCALL SmpcWriteByte(u32 addr, u8 val) {
 			SmpcSetTiming();
 			return;
 		case 0x63:
-			SMPC_REG_SF &= 0x1;
+			SMPC_REG_SF &= val;
 			return;
 		//XXX: Copy for other port
 		case 0x75:

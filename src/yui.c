@@ -206,21 +206,6 @@ void powerdown()
 	//SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0); // Goto wii menu
 }
 
-#define		DISP_W_A				320
-#define		DISP_W_B				352
-#define		DISP_W_HIGHRES_A		640
-#define		DISP_W_HIGHRES_B		704
-
-static struct Display {
-	u32 x;
-	u32 y;
-	u32 w;
-	u32 h;
-	u32 scale_y;	// how much to scale texture in y direction
-	u32 highres;	// how much to scale texture in x direction
-} disp = {0, 0, DISP_W_A, 240, 0, 0};
-
-
 #define GUI_FILENAMES_MAX		15
 
 
@@ -303,27 +288,19 @@ void menu_Init(void)
 
 void menu_Handle(void)
 {
-	s8 gcX, gcY;
 	u32 buttons;
-
-	//WPAD_ScanPads();
 	per_updatePads();
-	PAD_ScanPads();
-	gcX = perpad[0].x;
-	gcY = perpad[0].y;
-	axis_button_prev = axis_button;
-	axis_button = GC_AXIS_TO_DIGITAL(gcX, gcY);
-	buttons = perpad[0].btn | (axis_button & ~axis_button_prev);
-	//XXX: Check for other controllers
-	//WPAD_Expansion(0, &exp);
-	//claX = classic_analog_val(&exp, true, false);
-	//claY = classic_analog_val(&exp, false, false);
-	//buttonsDown = WPAD_ButtonsHeld(0);
-	//buttonsDown1 = WPAD_ButtonsDown(0);
-	//u16 lr_btns = PAD_ButtonsHeld(0);
+	buttons = PER_BUTTONS_DOWN(0);
+	u32 btn_a = PAD_DI_C;
+	u32 btn_b = PAD_DI_B;
+	if (perpad[0].type == PAD_TYPE_GCPAD) {
+		btn_a = PAD_DI_B;
+		btn_b = PAD_DI_A;
+	} else if (perpad[0].type == PAD_TYPE_NONE) {
+		return;
+	}
 
-
-	if(buttons & PAD_BUTTON_DOWN) {
+	if(buttons & PAD_DI_DOWN) {
 		if (filename_items.cursor == filename_items.count - 1) {
 			filename_items.cursor = 0;
 			filename_items.disp_offset = 0;
@@ -336,7 +313,7 @@ void menu_Handle(void)
 			filename_items.cursor++;
 		}
 	}
-	else if(buttons & PAD_BUTTON_UP) {
+	else if(buttons & PAD_DI_UP) {
 		if (filename_items.cursor == 0) {
 			filename_items.cursor = filename_items.count - 1;
 			filename_items.disp_offset = (filename_items.count - filename_items.disp_count);
@@ -349,7 +326,7 @@ void menu_Handle(void)
 			filename_items.cursor--;
 		}
 	}
-	else if (buttons & PAD_BUTTON_A) {
+	else if (buttons & btn_a) {	//Uses the C button as A button
 		strcpy(isofilename, games_dir);
 		strcat(isofilename, "/");
 		strcat(isofilename, filename_items.item[filename_items.cursor].data);
@@ -357,7 +334,7 @@ void menu_Handle(void)
 		SVI_SetResolution(0x80D2);
 		//iso_loaded = 1;
 	}
-	else if (buttons & PAD_BUTTON_B) {
+	else if (buttons & btn_b) {	//Uses the B button as B button
 		//XXX: ask to quit?
 		mem_Deinit();
 		exit(0);
@@ -423,7 +400,6 @@ int main(int argc, char **argv)
 {
 	char *device_path = NULL;
 	L2Enhance();
-	per_Init();
 	SYS_SetResetCallback(reset);
 	SYS_SetPowerCallback(powerdown);
 
@@ -467,6 +443,7 @@ int main(int argc, char **argv)
 	snd_Init();
 	menu_Init();
 	games_LoadList();
+	per_Init();
 
 	osd_ProfAddCounter(PROF_SH2M, "SH2M");
 	osd_ProfAddCounter(PROF_SH2S, "SH2S");
@@ -542,7 +519,6 @@ int YuiExec()
 
       while(!done)
       {
-#if 1
 			u32 result = 0;
 			if (per_updatePads()) {
 				done = 1;
@@ -557,10 +533,6 @@ int YuiExec()
          if (result != 0){
             return -1;
 		}
-#else
-         if (PERCore->HandleEvents() != 0)
-            return -1;
-#endif
          if (resetemu)
          {
             YabauseReset();

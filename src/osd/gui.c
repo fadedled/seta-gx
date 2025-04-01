@@ -83,8 +83,8 @@ void gui_Init(void)
 static void gui_DrawControllers()
 {
 	//u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
-	const u32 num_pads = 2;
-	u32 x = 244, y = 186;
+	const u32 num_pads = PER_PADMAX;
+	u32 x = 244, y = 126;
 	GX_Begin(GX_QUADS, GX_VTXFMT4, num_pads*4*2);
 	// Only display 2 controllers for now
 	for (u32 i = 0; i < num_pads; ++i) {

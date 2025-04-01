@@ -36,136 +36,191 @@ PerData per_data;
 void per_Init(void)
 {
 	PAD_Init();
-	//WPAD_Init();
+	WPAD_Init();
 	per_data.ids[0] = PER_ID_DIGITAL;
 }
 
-
-static u32 per_updateDigitalGC(u32 indx, PADStatus *status)
+static void per_GCToSat(u32 indx, u32 *exit_code)
 {
-	per_data.ids[indx] = PER_ID_DIGITAL;
-	s8 axis_x = status->stickX;
-	s8 axis_y = status->stickY;
-	u32 btns = status->button | GC_AXIS_TO_DIGITAL(axis_x, axis_y);
-	//Use substick as another button
-	btns |=  (u32) ((status->substickY > 32) | (status->substickY < -32)) << GC_BIT_Z2;
+	s8 axis_x = perpad[indx].x;
+	s8 axis_y = perpad[indx].y;
+	//TODO: only do this when using the ANALOGUE controller
+	u32 btns = perpad[indx].btn | GC_AXIS_TO_DIGITAL(axis_x, axis_y);
+	//Use C-stick as another button
+	btns |=  (u32) ((perpad[indx].sy > 32) | (perpad[indx].sy < -32)) << GC_BIT_Z2;
+	*exit_code |= (btns & (PAD_BUTTON_START | PAD_TRIGGER_Z)) == (PAD_BUTTON_START | PAD_TRIGGER_Z);
 
-	//XXX: get the user defined bits for the buttons
-	u8 d0 = (u8) (
-			(((btns >> GC_BIT_A) & 1) << PAD_DI_BIT_B) |
-			(((btns >> GC_BIT_B) & 1) << PAD_DI_BIT_A) |
-			(((btns >> GC_BIT_X) & 1) << PAD_DI_BIT_C) |
-			(((btns >> GC_BIT_STR) & 1) << PAD_DI_BIT_STR) |
-			(((btns >> GC_BIT_UP) & 1) << PAD_DI_BIT_UP) |
-			(((btns >> GC_BIT_DOWN) & 1) << PAD_DI_BIT_DOWN) |
-			(((btns >> GC_BIT_LEFT) & 1) << PAD_DI_BIT_LEFT) |
-			(((btns >> GC_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT));
+	//TODO: get the user defined bits for the buttons
+	u32 sat_btns =
+		(((btns >> GC_BIT_A) & 1) << PAD_DI_BIT_B) |
+		(((btns >> GC_BIT_B) & 1) << PAD_DI_BIT_A) |
+		(((btns >> GC_BIT_X) & 1) << PAD_DI_BIT_C) |
+		(((btns >> GC_BIT_STR) & 1) << PAD_DI_BIT_STR) |
+		(((btns >> GC_BIT_UP) & 1) << PAD_DI_BIT_UP) |
+		(((btns >> GC_BIT_DOWN) & 1) << PAD_DI_BIT_DOWN) |
+		(((btns >> GC_BIT_LEFT) & 1) << PAD_DI_BIT_LEFT) |
+		(((btns >> GC_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT) |
+		(((btns >> GC_BIT_L) & 1) << PAD_DI_BIT_L) |
+		(((btns >> GC_BIT_Z2) & 1) << PAD_DI_BIT_X) |
+		(((btns >> GC_BIT_Y) & 1) << PAD_DI_BIT_Y) |
+		(((btns >> GC_BIT_Z) & 1) << PAD_DI_BIT_Z) |
+		(((btns >> GC_BIT_R) & 1) << PAD_DI_BIT_R) |
+		0x300;	//First 2 bits must be 0
+	perpad[indx].btn = sat_btns;
+}
 
-	u8 d1 = (u8) (
-			(((btns >> GC_BIT_L) & 1) << PAD_DI_BIT_L) |
-			(((btns >> GC_BIT_Z2) & 1) << PAD_DI_BIT_X) |
-			(((btns >> GC_BIT_Y) & 1) << PAD_DI_BIT_Y) |
-			(((btns >> GC_BIT_Z) & 1) << PAD_DI_BIT_Z) |
-			(((btns >> GC_BIT_R) & 1) << PAD_DI_BIT_R) | 0x3);
+static void per_WiiToSat(u32 indx, u32 *exit_code)
+{
+	s8 axis_x = 0;
+	s8 axis_y = 0;
+	//TODO: only do this when using the ANALOGUE controller
+	u32 btns = perpad[indx].btn | CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
+	*exit_code |= (btns & WPAD_BUTTON_HOME);
 
-	per_data.data[per_data.data_size] = per_data.ids[indx];
-	per_data.data[per_data.data_size + 1] = ~d0;
-	per_data.data[per_data.data_size + 2] = ~d1;
-	per_data.data_size += 3;		//XXX: get the byte size and add 1
+	//TODO: get the user defined bits for the buttons
+	u32 sat_btns =
+	(((btns >> WII_BIT_A) & 1) << PAD_DI_BIT_A) |
+	(((btns >> WII_BIT_1) & 1) << PAD_DI_BIT_B) |
+	(((btns >> WII_BIT_2) & 1) << PAD_DI_BIT_C) |
+	(((btns >> WII_BIT_PLUS) & 1) << PAD_DI_BIT_STR) |
+	(((btns >> WII_BIT_RIGHT) & 1) << PAD_DI_BIT_UP) |
+	(((btns >> WII_BIT_LEFT) & 1) << PAD_DI_BIT_DOWN) |
+	(((btns >> WII_BIT_UP) & 1) << PAD_DI_BIT_LEFT) |
+	(((btns >> WII_BIT_DOWN) & 1) << PAD_DI_BIT_RIGHT) |
+	//(((btns >> WII_BIT_L) & 1) << PAD_DI_BIT_L) |
+	(((btns >> WII_BIT_MINUS) & 1) << PAD_DI_BIT_X) |
+	(((btns >> WII_BIT_B) & 1) << PAD_DI_BIT_Y) |
+	//(((btns >> WII_BIT_ZR) & 1) << PAD_DI_BIT_Z) |
+	//(((btns >> WII_BIT_R) & 1) << PAD_DI_BIT_R) |
+	0x300;	//First 2 bits must be 0
+	perpad[indx].btn = sat_btns;
+}
 
-	return (status->button & (PAD_BUTTON_START | PAD_TRIGGER_Z)) == (PAD_BUTTON_START | PAD_TRIGGER_Z);
+static void per_ClassicToSat(u32 indx, u32 *exit_code)
+{
+	s8 axis_x = perpad[indx].x;
+	s8 axis_y = perpad[indx].y;
+	//TODO: only do this when using the ANALOGUE controller
+	u32 btns = perpad[indx].btn | CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
+	*exit_code |= (btns & WPAD_CLASSIC_BUTTON_HOME);
+
+	//TODO: get the user defined bits for the buttons
+	u32 sat_btns =
+	(((btns >> WCL_BIT_Y) & 1) << PAD_DI_BIT_A) |
+	(((btns >> WCL_BIT_B) & 1) << PAD_DI_BIT_B) |
+	(((btns >> WCL_BIT_A) & 1) << PAD_DI_BIT_C) |
+	(((btns >> WCL_BIT_PLUS) & 1) << PAD_DI_BIT_STR) |
+	(((btns >> WCL_BIT_UP) & 1) << PAD_DI_BIT_UP) |
+	(((btns >> WCL_BIT_DOWN) & 1) << PAD_DI_BIT_DOWN) |
+	(((btns >> WCL_BIT_LEFT) & 1) << PAD_DI_BIT_LEFT) |
+	(((btns >> WCL_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT) |
+	(((btns >> WCL_BIT_L) & 1) << PAD_DI_BIT_L) |
+	(((btns >> WCL_BIT_X) & 1) << PAD_DI_BIT_X) |
+	(((btns >> WCL_BIT_ZL) & 1) << PAD_DI_BIT_Y) |
+	(((btns >> WCL_BIT_ZR) & 1) << PAD_DI_BIT_Z) |
+	(((btns >> WCL_BIT_R) & 1) << PAD_DI_BIT_R) |
+	0x300;	//First 2 bits must be 0
+	perpad[indx].btn = sat_btns;
 }
 
 
 u32 per_updatePads()
 {
 	PADStatus padstatus[PAD_CHANMAX];
-	//Do port stuff here
-	u32 request_quit = 0;
+	u32 port_stat[2] = {PER_STAT_NONE, PER_STAT_NONE};
+	u32 per_num = 0;
+
+	//Reset ports
+	u32 exit_code = 0;
 	per_data.data_sent = 0;
-	per_data.data_size = 1;
-	per_data.data[0] = 0xF0;
+	per_data.data_size = 2;
+	per_data.data[0] = PER_STAT_NONE;	//Port 1
+	per_data.data[1] = PER_STAT_NONE;	//Port 2
 	per_data.port2_offset = 1;
-	//Fill the Pads with connected
-	//XXX: this is only for 4 GC controllers... do same with Wii
-	//XXX: handle multitap (only 6 more controllers)
-	WPAD_ScanPads();
-	PAD_Read(padstatus);
+
+	//Fill with gc controllers
+	u32 connected = PAD_ScanPads();
 	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		if (padstatus[i].err == PAD_ERR_NONE) {
-			perpad[i].type = PAD_TYPE_GCPAD;
-			perpad[i].x = padstatus[i].stickX;
-			perpad[i].y = padstatus[i].stickY;
-			perpad[i].btn = padstatus[i].button;
-		} else {
-			perpad[i].type = PAD_TYPE_NONE;
-			perpad[i].x = 0;
-			perpad[i].y = 0;
-			perpad[i].btn = 0;
+		if ((connected >> i) & 1) {
+			perpad[per_num].type = PAD_TYPE_GCPAD;
+			perpad[per_num].x = PAD_StickX(i);
+			perpad[per_num].y = PAD_StickY(i);
+			perpad[per_num].sx = PAD_SubStickX(i);
+			perpad[per_num].sy = PAD_SubStickY(i);
+			perpad[per_num].prev_btn = perpad[per_num].btn;
+			perpad[per_num].btn = PAD_ButtonsHeld(i);
+			per_GCToSat(per_num, &exit_code);
+			++per_num;
 		}
 	}
-	u32 per_num = 0;
-#if 0
-	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		while (perpad[per_num].type != PAD_TYPE_NONE) {
-			per_num++;
-		}
-		//WPADData *wpad = WPAD_Data(i);
-		if (wpad->err == WPAD_ERR_NONE) {
-			if (wpad->exp.type == WPAD_EXP_NONE) {
-				perpad[per_num].type = PAD_TYPE_WIIMOTE;
-				//TODO: fix the pointer coords
-				perpad[per_num].x = (s16) wpad->ir.x;
-				perpad[per_num].y = (s16) wpad->ir.y;
-				perpad[per_num].btn = wpad->btns_h;
-			} else if (wpad->exp.type == WPAD_EXP_CLASSIC) {
-				struct classic_ctrl_t *classic = &wpad->exp.classic;
-				perpad[per_num].type = PAD_TYPE_CLASSIC;
 
-				perpad[per_num].x = (s16) ((s8)classic->ljs.pos.x);
-				perpad[per_num].y = (s16) ((s8)classic->ljs.pos.y);
-				perpad[per_num].btn = wpad->btns_h;
-			} else {
-				perpad[per_num].type = PAD_TYPE_NONE;
+	//Fill with wiimote
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		WPADData *wpad = WPAD_Data(i);
+		u32 exp_type;
+		u32 err = WPAD_Probe(i, &exp_type);
+		WPAD_ReadPending(i, NULL);
+		if (err == WPAD_ERR_NONE) {
+			if (exp_type == WPAD_EXP_NONE) {	//Wiimote used
+				perpad[per_num].type = PAD_TYPE_WIIMOTE;
 				perpad[per_num].x = 0;
 				perpad[per_num].y = 0;
-				perpad[per_num].btn = 0;
+				perpad[per_num].prev_btn = perpad[per_num].btn;
+				perpad[per_num].btn = wpad->btns_h;
+				per_WiiToSat(per_num, &exit_code);
+				++per_num;
+			} else if (exp_type == WPAD_EXP_CLASSIC) { //Classic controller used
+				perpad[per_num].type = PAD_TYPE_CLASSIC;
+				perpad[per_num].x = (s16) (wpad->exp.classic.ljs.pos.x);
+				perpad[per_num].y = (s16) (wpad->exp.classic.ljs.pos.y);
+				perpad[per_num].prev_btn = perpad[per_num].btn;
+				perpad[per_num].btn = wpad->btns_h;
+				per_ClassicToSat(per_num, &exit_code);
+				++per_num;
 			}
-			per_num++;
-		}
-	}
-#endif
-	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		if (padstatus[i].err == PAD_ERR_NONE) {
-			perpad[i].type = PAD_TYPE_GCPAD;
-			perpad[i].x = padstatus[i].stickX;
-			perpad[i].y = padstatus[i].stickY;
-			perpad[i].btn = padstatus[i].button;
-		} else {
-			perpad[i].type = PAD_TYPE_NONE;
-			perpad[i].x = 0;
-			perpad[i].y = 0;
-			perpad[i].btn = 0;
 		}
 	}
 
+	//Set the port stats
+	port_stat[0] = (per_num ? (per_num == 8 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
+	port_stat[1] = (per_num > 1 ? (per_num > 2 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
+	u32 size = 0;
+	u32 port_count = 0;
+	u32 port_ofs = 0b00000011 + (per_num == 8 ? 2 : 0);
 
-	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		if (padstatus[i].err == PAD_ERR_NONE) {
-			//XXX: Check what type of pad it is
-			//XXX:this hardcodes direct saturn controller... do a multitap insead (if needed)
-			per_data.data[0] = 0xF1;
-			per_data.data_size = 1;
-			request_quit |= per_updateDigitalGC(1, &padstatus[i]);
-			per_data.port2_offset = per_data.data_size;
-			break;
+	//Generate Peripheral data for SMPC
+	for (u32 i = 0; i < per_num; ++i) {
+		if ((port_ofs >> i) & 1) {	//See if port stat must be set
+			per_data.data[size++] = port_stat[port_count++];
+		}
+		if (perpad[i].type != PAD_TYPE_NONE) {
+			per_data.data[size++] = PER_ID_DIGITAL;
+			per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+			per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
 		}
 	}
-	//XXX: no 2nd player yet
-	per_data.data[per_data.data_size] = 0xF0;
-	++per_data.data_size;
+	//Fill rest of data with no input
+	if (2 < per_num && per_num < 8){ //Fill the rest of multitap
+		for (u32 i = per_num; i < 7; ++i) {
+			per_data.data[size++] = PER_ID_NONE;
+		}
+	} else if (per_num == 1) {	//Only have one controller
+		per_data.data[size++] = PER_STAT_NONE;
+	}
 
-	return request_quit;
+	//Fill the rest of the pads
+	while (per_num < PER_PADMAX) {
+		perpad[per_num].type = PAD_TYPE_NONE;
+		perpad[per_num].x = 0;
+		perpad[per_num].y = 0;
+		perpad[per_num].sx = 0;
+		perpad[per_num].sy = 0;
+		perpad[per_num].btn = 0;
+		++per_num;
+	}
+
+	per_data.data_size = size;
+	return exit_code;
 }
 
 
