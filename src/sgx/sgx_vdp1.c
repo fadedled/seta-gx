@@ -65,6 +65,12 @@ static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 	0x0F, 0x0F, 0x0F, 0x0F
 };
 
+SGXTexPre pretex_mesh = {
+	.addr = (0x7FF80 >> 5) | (0x200000 | 0xD8000),
+	.fmt = TEX_FMT(GX_TF_I4, 8, 8),
+	.attr = TEX_ATTR(GX_REPEAT, GX_REPEAT)
+};
+
 static u32 prcc_tlut[128] ATTRIBUTE_ALIGN(32);
 
 static Mtx vdp1mtx2d = {
@@ -98,7 +104,7 @@ void SGX_Vdp1Init(void)
 	prcc_tex = win_tex + (704*128);
 	GX_LoadPosMtxImm(vdp1mtx2d, MTX_VDP1_POS_2D);
 	GX_LoadPosMtxImm(vdp1mtx3d, MTX_VDP1_POS_3D);
-
+	SGX_PreloadTex(mesh_tex, pretex_mesh.addr, TEXPRE_TYPE_4BPP | 1);
 	GX_TexModeSync();
 }
 
@@ -140,13 +146,11 @@ void SGX_Vdp1Begin(void)
 
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
-	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
 
 	//Set up general TEV
 	GX_SetNumTevStages(1);
 	GX_SetNumTexGens(1);
-	GX_SetNumChans(1);
+	GX_SetNumChans(0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
 
@@ -157,7 +161,6 @@ void SGX_Vdp1Begin(void)
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_TEXA, GX_CA_ZERO, GX_CA_KONST, GX_CA_ZERO);
 
 	//TODO: This blending does not work always
-	GX_SetBlendMode(GX_BM_BLEND, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetDstAlpha(GX_TRUE, 0x00);
 
 	//ONLY FOR CONSTATNS
@@ -169,18 +172,44 @@ void SGX_Vdp1Begin(void)
 	//TODO: do this in another function
 	SGX_InitTex(GX_TEXMAP0, TEXREG(0x00000, TEXREG_SIZE_128K), 0);
 
-	//Draw the mesh z-texture
+	//Draw the mesh z-texture vvv
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
+	SGX_SetVtxOffset(0, 0);
+	GX_SetScissor(0, 0, 640, 480);
+	GX_SetNumChans(0);
+	GX_SetCurrentMtx(MTX_IDENTITY);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, MTX_IDENTITY);
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP7, GX_COLORNULL);
+	GX_SetColorUpdate(GX_FALSE);
+	GX_SetAlphaUpdate(GX_FALSE);
+	SGX_SetTexPreloaded(GX_TEXMAP7, &pretex_mesh);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_ENABLE);
+	GX_SetZTexture(GX_ZT_REPLACE, GX_TF_Z8, 0);
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+		GX_Position2s16(0, 0);
+		GX_Position2s16(vdp1_fb_w, 0);
+		GX_Position2s16(vdp1_fb_w, vdp1_fb_h);
+		GX_Position2s16(0, vdp1_fb_h);
+	GX_End();
+	//Draw the mesh z-texture ^^^
+
+	GX_SetNumChans(1);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLOR0A0);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
 
 	GX_SetColorUpdate(GX_TRUE);
 	GX_SetAlphaUpdate(GX_TRUE);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 8, 1);
 	//NOTE: Necesary?
-	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 	GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
+	GX_SetLineWidth(9, 0);
 
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
@@ -521,14 +550,7 @@ static void __SGX_Vdp1SetConstantPart(u32 is_rgb)
 	}
 	//Set mesh processing
 	//TODO: use another tev stage
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
-#if 0
-	if (vdp1cmd->PMOD & 0x100) {
-		GX_SetZMode(GX_ENABLE, GX_NEQUAL, GX_DISABLE);
-	} else {
-		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
-	}
-#endif
+	GX_SetZMode((vdp1cmd->PMOD >> 8) & 0x1, GX_GREATER, GX_DISABLE);
 }
 
 static u32 __SGX_Vdp1SetMode(u32 w, u32 h)
@@ -678,10 +700,8 @@ void SGX_Vdp1DrawScaledSpr(void)
 	tex_flip 	|= (-(vdp1cmd->CTRL & 0x20) >> 5) & 0x00FF;
 
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA;
-	s32 y0 = vdp1cmd->YA;
-	s32 x1 = vdp1cmd->XB;
-	s32 y1 = vdp1cmd->YB;
+	s32 x0 = vdp1cmd->XA; s32 y0 = vdp1cmd->YA;
+	s32 x1 = vdp1cmd->XB; s32 y1 = vdp1cmd->YB;
 
 	u32 zp = (vdp1cmd->CTRL >> 8) & 0xF;
 	if ((0b0001000100011111 >> zp) & 1) {
@@ -740,26 +760,13 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	tex_flip 	|= (-(vdp1cmd->CTRL & 0x20) >> 5) & 0x00FF;
 
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA;
-	s32 y0 = vdp1cmd->YA;
-	s32 x1 = vdp1cmd->XB;
-	s32 y1 = vdp1cmd->YB;
-	s32 x2 = vdp1cmd->XC;
-	s32 y2 = vdp1cmd->YC;
-	s32 x3 = vdp1cmd->XD;
-	s32 y3 = vdp1cmd->YD;
-	//TODO: Extend to leftmost edge
-	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
-	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
-
-	x0 += (((u32)(x0 - cx) >> 31) ^ 1);
-	y0 += (((u32)(y0 - cy) >> 31) ^ 1);
-	x1 += (((u32)(x1 - cx) >> 31) ^ 1);
-	y1 += (((u32)(y1 - cy) >> 31) ^ 1);
-	x2 += (((u32)(x2 - cx) >> 31) ^ 1);
-	y2 += (((u32)(y2 - cy) >> 31) ^ 1);
-	x3 += (((u32)(x3 - cx) >> 31) ^ 1);
-	y3 += (((u32)(y3 - cy) >> 31) ^ 1);
+	s32 x0 = vdp1cmd->XA; s32 y0 = vdp1cmd->YA;
+	s32 x1 = vdp1cmd->XB; s32 y1 = vdp1cmd->YB;
+	s32 x2 = vdp1cmd->XC; s32 y2 = vdp1cmd->YC;
+	s32 x3 = vdp1cmd->XD; s32 y3 = vdp1cmd->YD;
+	//Get center point
+	s32 cx = ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
+	s32 cy = ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(1);
@@ -769,6 +776,15 @@ void SGX_Vdp1DrawDistortedSpr(void)
 	if (vdp1cmd->PMOD & 0x4) {
 		__SGX_GetGouraud(colors);
 	}
+
+	//TODO: If c is 0 then we have a line, make sure it has atleast width 1
+	cx += x0; cy += y0;
+
+	//TODO: Extend to leftmost edge
+	x0 += (((u32)(x0 - cx) >> 31) ^ 1); y0 += (((u32)(y0 - cy) >> 31) ^ 1);
+	x1 += (((u32)(x1 - cx) >> 31) ^ 1); y1 += (((u32)(y1 - cy) >> 31) ^ 1);
+	x2 += (((u32)(x2 - cx) >> 31) ^ 1); y2 += (((u32)(y2 - cy) >> 31) ^ 1);
+	x3 += (((u32)(x3 - cx) >> 31) ^ 1); y3 += (((u32)(y3 - cy) >> 31) ^ 1);
 
 	//Draw the sprite
 	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
@@ -793,26 +809,13 @@ void SGX_Vdp1DrawDistortedSpr(void)
 void SGX_Vdp1DrawPolygon(void)
 {
 	//Get the vertex positions
-	s32 x0 = vdp1cmd->XA;
-	s32 y0 = vdp1cmd->YA;
-	s32 x1 = vdp1cmd->XB;
-	s32 y1 = vdp1cmd->YB;
-	s32 x2 = vdp1cmd->XC;
-	s32 y2 = vdp1cmd->YC;
-	s32 x3 = vdp1cmd->XD;
-	s32 y3 = vdp1cmd->YD;
-	//TODO: Extend to leftmost edge
-	s32 cx = x0 + ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
-	s32 cy = y0 + ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
-
-	x0 += (((u32)(x0 - cx) >> 31) ^ 1);
-	y0 += (((u32)(y0 - cy) >> 31) ^ 1);
-	x1 += (((u32)(x1 - cx) >> 31) ^ 1);
-	y1 += (((u32)(y1 - cy) >> 31) ^ 1);
-	x2 += (((u32)(x2 - cx) >> 31) ^ 1);
-	y2 += (((u32)(y2 - cy) >> 31) ^ 1);
-	x3 += (((u32)(x3 - cx) >> 31) ^ 1);
-	y3 += (((u32)(y3 - cy) >> 31) ^ 1);
+	s32 x0 = vdp1cmd->XA; s32 y0 = vdp1cmd->YA;
+	s32 x1 = vdp1cmd->XB; s32 y1 = vdp1cmd->YB;
+	s32 x2 = vdp1cmd->XC; s32 y2 = vdp1cmd->YC;
+	s32 x3 = vdp1cmd->XD; s32 y3 = vdp1cmd->YD;
+	//Get center point
+	s32 cx = ((x1 - x0) >> 1) + ((x3 - x0) >> 1) + ((x0 - x1 + x2 - x3) >> 2);
+	s32 cy = ((y1 - y0) >> 1) + ((y3 - y0) >> 1) + ((y0 - y1 + y2 - y3) >> 2);
 
 	//Set up the texture processing depending on mode.
 	GX_SetNumTexGens(0);
@@ -830,6 +833,15 @@ void SGX_Vdp1DrawPolygon(void)
 		GX_SetTevKColor(GX_KCOLOR0, konst);
 		__SGX_GetGouraud(colors);
 	}
+
+	//TODO: If c is 0 then we have a line, make sure it has atleast width 1
+	cx += x0; cy += y0;
+
+	//TODO: Extend to leftmost edge
+	x0 += (((u32)(x0 - cx) >> 31) ^ 1); y0 += (((u32)(y0 - cy) >> 31) ^ 1);
+	x1 += (((u32)(x1 - cx) >> 31) ^ 1); y1 += (((u32)(y1 - cy) >> 31) ^ 1);
+	x2 += (((u32)(x2 - cx) >> 31) ^ 1); y2 += (((u32)(y2 - cy) >> 31) ^ 1);
+	x3 += (((u32)(x3 - cx) >> 31) ^ 1); y3 += (((u32)(y3 - cy) >> 31) ^ 1);
 
 	//Draw the sprite
 	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);

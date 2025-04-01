@@ -546,8 +546,26 @@ void SGX_Vdp2Draw(void)
 		}
 	}
 	//TODO: handle Rotation BGs
-	//Color calculation
-	//NOTE: Right now we should only draw color calc full screens
+	//VDP2 Process will be as follows:
+	//First generate a value that flags enabled screens
+	//Calculate what screens have opaque pixels and which do not, here we have two cases:
+	//1) using Additive blending (advantage, no need to order)
+	//	Here we just draw opaque pixels at the same time as transparent pixels (no issues with ordering).
+	//	we can do this with the following blending: color = src_pix*1 + dst_pix*invsrc_alpha (where alpha is 1 or 0)
+	// if there is a transparent pixel we just use invsrc_alpha = 1 and multiply color with alpha in tev
+	//
+	//2) using Mixing/blending (advantage no need to draw twice most of the time)
+	//	Generate a sort of "display list" that draws in order (back to front), for each transparent
+	//	screen we also check if there are possible color calculated pixels
+	//	in sprite buffer above, if there are then we redraw with range of priorities above, in the best
+	//	case we only draw once (is all opaque or every other screen uses no CC) or twice.
+	//
+	//	As a first version we can simply draw each screen (would be up to 3 times)
+	//	Draw more than once, we can defer special case tiles to display list if the following happens:
+	//		1) per pixel CC (must have opaque part and transparent part) (only when using additive transparncy)
+	//		2) CC window is used (same as above)	(only when using additive transparncy)
+	//		3) per pixel pri that uses CC (exept when using per pixel pri and per pixel cc that uses Special Function Code) (worst case draw twice)
+
 	//Copy z-buffer as priority and apply Color offset and shadow
 	__Vdp2DrawColorOffset();
 	//Copy the screens to texture...
