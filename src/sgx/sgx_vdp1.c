@@ -381,6 +381,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_ClearVtxDesc();
 	GX_SetColorUpdate(GX_TRUE);
 	GX_SetAlphaUpdate(GX_TRUE);
+	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetNumTevStages(1);
@@ -406,7 +407,6 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetBlendMode(GX_BM_BLEND, GX_BL_DSTALPHA, GX_BL_ONE, GX_LO_OR);
 		GX_SetDstAlpha(GX_FALSE, 0x00);
 		GX_SetAlphaCompare(GX_ALWAYS, 0, GX_AOP_AND, GX_ALWAYS, 0);
-		GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 		GX_SetCurrentMtx(MTX_IDENTITY);
 
 		//Extend Alpha for correct RGBA5551 copying
