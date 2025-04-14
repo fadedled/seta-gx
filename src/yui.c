@@ -117,7 +117,27 @@ char settingpath[512];
 static char bupfilename[512]="/bkram.bin";
 static char isofilename[512]="";
 
+enum MessageId {
+	MESSAGE_NO_FOLDER,
+	MESSAGE_NO_BIOS,
+	MESSAGE_NO_GAMES,
+	MESSAGE_GAME_SAVED,
+	MESSAGE_GAME_NOT_SAVED,
+};
 
+
+const String gui_messages[8] = {
+	{30," Could not "
+		"open games "
+		"  folder"},
+	{18,"No BIOS.bin"
+		"  found"},
+	{19,"No games   "
+		" found"},
+	{11,"Game saved!"},
+	{20,"Could not  "
+		"save game"},
+};
 
 extern int vdp2width, vdp2height;
 int wii_width, wii_height;
@@ -225,6 +245,7 @@ s32 games_LoadList()
 	struct dirent *entry;
 	DIR *dp = opendir(games_dir);
 	if (!dp) {
+		gui_SetMessage(gui_messages[MESSAGE_NO_FOLDER], 0xffff);
 		return -1;
 	}
 	//Allocate memory for filename storing
@@ -260,6 +281,12 @@ s32 games_LoadList()
 	}
 
 	filename_items.count = games_filecount;
+	if (!filename_items.count) {
+		closedir(dp);
+		gui_SetMessage(gui_messages[MESSAGE_NO_GAMES], 0xffff);
+		return -1;
+	}
+
 	qsort(filename_items.item, games_filecount, sizeof(*filename_items.item), fn_compare);
 	closedir(dp);
 	return 0;
@@ -327,12 +354,14 @@ void menu_Handle(void)
 		}
 	}
 	else if (buttons & btn_a) {	//Uses the C button as A button
-		strcpy(isofilename, games_dir);
-		strcat(isofilename, "/");
-		strcat(isofilename, filename_items.item[filename_items.cursor].data);
-		YuiExec();
-		SVI_SetResolution(0x80D2);
-		//iso_loaded = 1;
+		if (filename_items.count && filename_items.cursor < filename_items.count) {
+			strcpy(isofilename, games_dir);
+			strcat(isofilename, "/");
+			strcat(isofilename, filename_items.item[filename_items.cursor].data);
+			YuiExec();
+			SVI_SetResolution(0x80D2);
+			//iso_loaded = 1;
+		}
 	}
 	else if (buttons & btn_b) {	//Uses the B button as B button
 		//XXX: ask to quit?

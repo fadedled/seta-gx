@@ -73,7 +73,7 @@ typedef struct GuiAnim {
 
 void gui_Init(void);
 void gui_Draw(GuiItems *items);
-
+void gui_SetMessage(String msg, u32 color);
 
 u32 gui_AnimSet(GuiAnim *anim, GuiElem *elems);
 
