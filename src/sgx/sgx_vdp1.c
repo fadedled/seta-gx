@@ -28,12 +28,10 @@ struct Vdp1Pix {
 Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
-u8 *color_tex ATTRIBUTE_ALIGN(32);
-u8 *color_rgb_tex ATTRIBUTE_ALIGN(32);
-u8 *output_tex ATTRIBUTE_ALIGN(32);
-
-u8  *win_tex ATTRIBUTE_ALIGN(32);
-u8  *prcc_tex ATTRIBUTE_ALIGN(32);
+u32 vdp1_fb;
+u8 *dot_tex[2];
+u8 *rgb_tex[2];
+u8 *prcc_tex[2];
 
 u32 sys_clipx = 352;
 u32 sys_clipy = 240;
@@ -97,11 +95,15 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP4, TEXREG(0x38000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP5, TEXREG(0x40000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP6, TEXREG(0x48000, TEXREG_SIZE_32K), 0);
-	color_tex = (u8*) memalign(32, 704*512);
-	color_rgb_tex = color_tex + (704*256);
-	output_tex = (u8*) memalign(32, 704*512);
-	win_tex  = (u8*) memalign(32, 704*256);
-	prcc_tex = win_tex + (704*128);
+
+	vdp1_fb = 0;
+	dot_tex[0] = (u8*) memalign(32, 704*256*3);
+	rgb_tex[0] = dot_tex[0] + (704*256*1);
+	prcc_tex[0] = dot_tex[0] + (704*256*2); //NOTE: Uses double the memory for now
+	dot_tex[1] = (u8*) memalign(32, 704*256*3);
+	rgb_tex[1] = dot_tex[1] + (704*256*1);
+	prcc_tex[1] = dot_tex[1] + (704*256*2);	//NOTE: Uses double the memory for now
+
 	GX_LoadPosMtxImm(vdp1mtx2d, MTX_VDP1_POS_2D);
 	GX_LoadPosMtxImm(vdp1mtx3d, MTX_VDP1_POS_3D);
 	SGX_PreloadTex(mesh_tex, pretex_mesh.addr, TEXPRE_TYPE_4BPP | 1);
@@ -110,9 +112,8 @@ void SGX_Vdp1Init(void)
 
 void SGX_Vdp1Deinit(void)
 {
-	free(color_tex);
-	free(win_tex);
-	free(output_tex);
+	free(dot_tex[0]);
+	free(dot_tex[1]);
 }
 
 
@@ -317,7 +318,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
 		//Get CRAM colors using CI14 and RGB565
-		SGX_SetTex(color_tex, GX_TF_CI14, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_RGB5A3 | tlut_indx);
+		SGX_SetTex(dot_tex[vdp1_fb], GX_TF_CI14, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_RGB5A3 | tlut_indx);
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
@@ -330,7 +331,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 			GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
 			GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
 			SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
-			SGX_SetOtherTex(GX_TEXMAP1, color_rgb_tex, GX_TF_RGB5A3, vdp1pix.fb_w, vdp1pix.fb_h, 0);
+			SGX_SetOtherTex(GX_TEXMAP1, rgb_tex[vdp1_fb], GX_TF_RGB5A3, vdp1pix.fb_w, vdp1pix.fb_h, 0);
 			GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 			GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
 			GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -345,7 +346,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//Get priority (as z-texture) and color calculation (as alpha)
 		GX_SetTevSwapMode(tev_stage, GX_TEV_SWAP0, GX_TEV_SWAP2);
 		GX_SetTevOrder(tev_stage, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
-		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex, GX_TF_CI8, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
+		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex[vdp1_fb], GX_TF_CI8, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
 		GX_SetTevColorOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(tev_stage, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
 		GX_SetTevAlphaOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -369,12 +370,31 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1 | GX_TEXMAP_DISABLE, GX_COLORNULL);
 }
 
+void SGX_Vdp1SwapFramebuffer(void)
+{
+	if ((~Vdp1Regs->FBCR & 2) | Vdp1External.manualchange) {
+		vdp1_fb ^= 1;
+		Vdp1External.manualchange = 0;
+	}
+}
+
+/*
+void SGX_Vdp1EraseFramebuffer(void)
+{
+	if ((~Vdp1Regs->FBCR & 2) | Vdp1External.manualchange) {
+		vdp1_fb ^= 1;
+		Vdp1External.manualchange = 0;
+	}
+}
+*/
+
 
 static void __Vdp1Convert16bpp(void)
 {
 	//The RGB5A3 in the Wii looses information that needs to be stored by
 	//Saturns 16bpp format. This means we must modify the framebuffer before
 	//a copy. We copy using the
+	u32 other_fb = vdp1_fb ^ 1;
 
 	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	//We shift EFB's bits to make one copy
@@ -422,7 +442,7 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetColorUpdate(GX_TRUE);
 		GX_SetAlphaUpdate(GX_TRUE);
 		GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB5A3, GX_FALSE);
-		GX_CopyTex(color_rgb_tex, GX_FALSE);
+		GX_CopyTex(rgb_tex[other_fb], GX_FALSE);
 
 		//Mask RGB colors for dot color copy
 		GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x00, 0x21, 0x00, 0x00});
@@ -436,7 +456,7 @@ static void __Vdp1Convert16bpp(void)
 	}
 	//Copy dot color data as is
 	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB565, GX_FALSE);
-	GX_CopyTex(color_tex, GX_TRUE);
+	GX_CopyTex(dot_tex[other_fb], GX_TRUE);
 	GX_PixModeSync(); //Not necesary?
 
 	//Generate Priority and ColorCalc texture...
@@ -445,7 +465,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 	//Set swap mode to get A->R and I->G
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP2);
-	SGX_SetTex(color_tex, GX_TF_IA8, vdp1_fb_w, vdp1_fb_h, 0);
+	SGX_SetTex(dot_tex[other_fb], GX_TF_IA8, vdp1_fb_w, vdp1_fb_h, 0);
 	//Check if IA is zero to test transparent pixels (LSB is on if it is not transparent)
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_COMP_RGB8_EQ, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC);
@@ -465,7 +485,7 @@ static void __Vdp1Convert16bpp(void)
 
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_CTF_R8, GX_FALSE);
-	GX_CopyTex(prcc_tex, GX_TRUE);
+	GX_CopyTex(prcc_tex[other_fb], GX_TRUE);
 	GX_PixModeSync(); //Not necesary?
 	vdp1pix.fb_w = vdp1_fb_w;
 	vdp1pix.fb_h = vdp1_fb_h;

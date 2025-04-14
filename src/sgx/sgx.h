@@ -184,6 +184,7 @@ void SGX_Vdp1Deinit(void);
 void SGX_Vdp1Begin(void);
 void SGX_Vdp1End(void);
 void SGX_Vdp1DrawFramebuffer(void);
+void SGX_Vdp1SwapFramebuffer(void);
 void SGX_Vdp1ProcessFramebuffer(void);
 void SGX_Vdp1DrawNormalSpr(void);
 void SGX_Vdp1DrawScaledSpr(void);

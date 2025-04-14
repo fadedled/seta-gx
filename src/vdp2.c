@@ -359,7 +359,7 @@ void Vdp2VBlankOUT(void)
 		DCFlushRange(Vdp2Ram, 0x80000);
 		DCFlushRange(Vdp2ColorRam, 0x1000);
 		cycles_start = gettime();
-		Vdp1Draw();	//Create DL for GX
+		Vdp1Draw();
 		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
 
 		cycles_start = gettime();
@@ -367,12 +367,12 @@ void Vdp2VBlankOUT(void)
 		SGX_Vdp2Draw();
 		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
 	} else {
-		Vdp1Draw();	//Do nothing
+		Vdp1NoDraw();	//Do nothing
 		SVI_ClearFrame();
 	}
 	//osd_ProfDraw();
+	SGX_Vdp1SwapFramebuffer();
 	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
-
 
 	//XXX: Limit FPS.. we can do better than this
 	current_ticks = gettime();
