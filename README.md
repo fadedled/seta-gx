@@ -9,19 +9,19 @@ This software is licensed under the GNU General Public License v2, available at:
 ## Features
 
 - CUE or CHD file support.
-- GameCube controller support.
+- WiiMote, Classic and GameCube controller support.
 - SD and/or USB storage (FAT32).
 - Can save games.
 
 ## Installation
 
-Download and extract the latest release. Copy the `apps/SetaGX` folder into the `apps` folder located on the root of your USB/SD card. Create a `vgames/Saturn` and a `saves/Saturn` folder where you can place your backups and saves, respectively.
+Download and extract the latest release. Copy the `apps/SetaGX` folder into the `apps` folder located on the root of your USB/SD card. From the root of your USB/SD card, games must be stored in a `vgames/Saturn` directory, saves will be located in a `saves/Saturn` directory, be sure to create these beforehand.
 
 > **BIOS NOT INCLUDED:** In order to start the emulator, you need to provide your own BIOS. Place a Saturn BIOS file inside the `apps/SetaGX/` folder with the name `bios.bin`.
 
 ## Controller Mapping
 
-Remapping is planned, currently only the GameCube Controller is supported:
+Remapping is planned, but the following is the standard mapping:
 
 | Sega Saturn | GameCube  | WiiMote | Classic |
 |-------------|-----------|---------|---------|
@@ -36,7 +36,7 @@ Remapping is planned, currently only the GameCube Controller is supported:
 | L           | L         |         | L       |
 | Start       | Start     | +       | +       |
 
-To return to the menu press Start + Z on GameCube Controller and Home on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A to start it, by pressing B you return to the Homebrew Channel.
+To return to the menu press **Start + Z** on GameCube Controller and **Home** on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it, pressing B/1 will return to the Homebrew Channel.
 
 ## Credits/Special Thanks
 
