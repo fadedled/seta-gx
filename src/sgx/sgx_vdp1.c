@@ -28,7 +28,7 @@ struct Vdp1Pix {
 Mtx vdp1mtx ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
-u32 vdp1_fb;
+u32 front_fb;
 u8 *dot_tex[2];
 u8 *rgb_tex[2];
 u8 *prcc_tex[2];
@@ -96,7 +96,6 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP5, TEXREG(0x40000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP6, TEXREG(0x48000, TEXREG_SIZE_32K), 0);
 
-	vdp1_fb = 0;
 	dot_tex[0] = (u8*) memalign(32, 704*256*3);
 	rgb_tex[0] = dot_tex[0] + (704*256*1);
 	prcc_tex[0] = dot_tex[0] + (704*256*2); //NOTE: Uses double the memory for now
@@ -140,7 +139,6 @@ void SGX_Vdp1Begin(void)
 {
 	//TODO: Should be used? NO
 	//VIDSoftVdp1EraseFrameBuffer();
-
 	//GX_LoadPosMtxIdx(0, GX_PNMTX0);
 	GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
 	//TODO: Load vdp1 matrix... should we clear the values? YES
@@ -294,10 +292,12 @@ void SGX_Vdp1DrawFramebuffer(void)
 	SGX_LoadTlut(cram_11bpp + (col_offset << 1), TLUT_SIZE_2K | tlut_indx);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	SGX_BeginVdp1();
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
-	GX_SetZMode(GX_ENABLE, GX_GREATER, GX_TRUE);
 	//Generate and load the Priority and Colorcalculation TLUT
 	__Vdp1LoadPrCcTlut();
 
@@ -305,7 +305,6 @@ void SGX_Vdp1DrawFramebuffer(void)
 	if (1) { 	//16bpp framebuffer
 		//TODO: Add texture
 		u32 fb_mtx = MTX_TEX_SCALED_N + (((vdp2_disp_w > 352) | ((vdp2_disp_h > 256) << 1)) << 1);
-		u32 tev = 0;
 		GX_SetNumTexGens(1);
 		GX_SetNumChans(0);
 		GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, fb_mtx);
@@ -318,7 +317,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
 		GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
 		//Get CRAM colors using CI14 and RGB565
-		SGX_SetTex(dot_tex[vdp1_fb], GX_TF_CI14, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_RGB5A3 | tlut_indx);
+		SGX_SetTex(dot_tex[front_fb], GX_TF_CI14, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_RGB5A3 | tlut_indx);
 		GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 		GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
@@ -331,7 +330,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 			GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP1);
 			GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
 			SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
-			SGX_SetOtherTex(GX_TEXMAP1, rgb_tex[vdp1_fb], GX_TF_RGB5A3, vdp1pix.fb_w, vdp1pix.fb_h, 0);
+			SGX_SetOtherTex(GX_TEXMAP1, rgb_tex[front_fb], GX_TF_RGB5A3, vdp1pix.fb_w, vdp1pix.fb_h, 0);
 			GX_SetTevColorOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 			GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_CPREV, GX_CC_TEXC, GX_CC_TEXA, GX_CC_ZERO);
 			GX_SetTevAlphaOp(GX_TEVSTAGE1, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -346,7 +345,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 		//Get priority (as z-texture) and color calculation (as alpha)
 		GX_SetTevSwapMode(tev_stage, GX_TEV_SWAP0, GX_TEV_SWAP2);
 		GX_SetTevOrder(tev_stage, GX_TEXCOORD0, GX_TEXMAP2, GX_COLORNULL);
-		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex[vdp1_fb], GX_TF_CI8, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
+		SGX_SetOtherTex(GX_TEXMAP2, prcc_tex[front_fb], GX_TF_CI8, vdp1pix.fb_w, vdp1pix.fb_h, TLUT_FMT_IA8 | TLUT_INDX_PPCC);
 		GX_SetTevColorOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 		GX_SetTevColorIn(tev_stage, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_CPREV);
 		GX_SetTevAlphaOp(tev_stage, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -364,16 +363,15 @@ void SGX_Vdp1DrawFramebuffer(void)
 		GX_Position2s16(0, vdp2_disp_h);
 	GX_End();
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
-	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
-	GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1 | GX_TEXMAP_DISABLE, GX_COLORNULL);
+	//GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1 | GX_TEXMAP_DISABLE, GX_COLORNULL);
 }
 
 void SGX_Vdp1SwapFramebuffer(void)
 {
 	if ((~Vdp1Regs->FBCR & 2) | Vdp1External.manualchange) {
-		vdp1_fb ^= 1;
+		front_fb ^= 1;	//NOTE: Wrong, should not swap
 		Vdp1External.manualchange = 0;
 	}
 }
@@ -394,7 +392,7 @@ static void __Vdp1Convert16bpp(void)
 	//The RGB5A3 in the Wii looses information that needs to be stored by
 	//Saturns 16bpp format. This means we must modify the framebuffer before
 	//a copy. We copy using the
-	u32 other_fb = vdp1_fb ^ 1;
+	u32 back_fb = front_fb ^ 1;
 
 	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	//We shift EFB's bits to make one copy
@@ -442,7 +440,7 @@ static void __Vdp1Convert16bpp(void)
 		GX_SetColorUpdate(GX_TRUE);
 		GX_SetAlphaUpdate(GX_TRUE);
 		GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB5A3, GX_FALSE);
-		GX_CopyTex(rgb_tex[other_fb], GX_FALSE);
+		GX_CopyTex(rgb_tex[back_fb], GX_FALSE);
 
 		//Mask RGB colors for dot color copy
 		GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x00, 0x21, 0x00, 0x00});
@@ -456,16 +454,17 @@ static void __Vdp1Convert16bpp(void)
 	}
 	//Copy dot color data as is
 	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_TF_RGB565, GX_FALSE);
-	GX_CopyTex(dot_tex[other_fb], GX_TRUE);
-	GX_PixModeSync(); //Not necesary?
+	GX_CopyTex(dot_tex[back_fb], GX_TRUE);
 
+	//TODO: Remove this copy when we pass on to drawing the sprites to a texture
+	GX_PixModeSync(); //Not necesary?
 	//Generate Priority and ColorCalc texture...
 	GX_SetPixelFmt(GX_PF_RGB8_Z24, GX_ZC_LINEAR);
 	GX_SetTevKColor(GX_KCOLOR0, (GXColor) {0x01, 0x01, 0x01, 0x01});
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0, GX_COLORNULL);
 	//Set swap mode to get A->R and I->G
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP2);
-	SGX_SetTex(dot_tex[other_fb], GX_TF_IA8, vdp1_fb_w, vdp1_fb_h, 0);
+	SGX_SetTex(dot_tex[back_fb], GX_TF_IA8, vdp1_fb_w, vdp1_fb_h, 0);
 	//Check if IA is zero to test transparent pixels (LSB is on if it is not transparent)
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_COMP_RGB8_EQ, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_TEXC, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC);
@@ -485,7 +484,7 @@ static void __Vdp1Convert16bpp(void)
 
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_CTF_R8, GX_FALSE);
-	GX_CopyTex(prcc_tex[other_fb], GX_TRUE);
+	GX_CopyTex(prcc_tex[back_fb], GX_TRUE);
 	GX_PixModeSync(); //Not necesary?
 	vdp1pix.fb_w = vdp1_fb_w;
 	vdp1pix.fb_h = vdp1_fb_h;
@@ -568,8 +567,18 @@ static void __SGX_Vdp1SetConstantPart(u32 is_rgb)
 		GX_SetAlphaUpdate(GX_TRUE);
 		GX_SetDstAlpha(GX_TRUE, 0x7F); //Only when RGB or window
 	}
+	//User clipping enabled
+	if (vdp1cmd->PMOD & 0x400) {
+		if (vdp1cmd->PMOD & 0x200) {
+			//TODO: Wrong, this should be done in a better way.
+			GX_SetScissor(0, 0, usr_clipy, sys_clipx);
+		} else {
+			GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
+		}
+	} else {
+		GX_SetScissor(0, 0, sys_clipx, sys_clipy);
+	}
 	//Set mesh processing
-	//TODO: use another tev stage
 	GX_SetZMode((vdp1cmd->PMOD >> 8) & 0x1, GX_GREATER, GX_DISABLE);
 }
 
@@ -964,7 +973,6 @@ void SGX_Vdp1UserClip(void)
 	usr_cliph = vdp1cmd->YC + 1 - usr_clipy;
 	usr_clipw = MIN(usr_clipw, sys_clipx);
 	usr_cliph = MIN(usr_cliph, sys_clipy);
-	GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
 }
 
 void SGX_Vdp1SysClip(void)
