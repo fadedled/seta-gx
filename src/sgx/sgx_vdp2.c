@@ -17,16 +17,32 @@ Mtx vdp2mtx ATTRIBUTE_ALIGN(32) = {
 	{0.0, 0.0, 1.0, 0.0}
 };
 
+//The bits in these numbers are for generating the window tluts,
+//they represent the first 8 enable values of the tlut. they are ordered
+//with respect to the window enable and active zone bits found in VDP2 registers
+//Only include the first 64 possible values since the other 64 can be caluclated by
+//XOR'ing with the OP value (OR = 0x00, AND = 0xFF).
+const u8 win_enable_bits[64] = {
+	0xFF, 0xFF, 0x55, 0xAA, 0xFF, 0xFF, 0x55, 0xAA,
+	0x33, 0x33, 0x11, 0x22, 0xCC, 0xCC, 0x44, 0x88,
+	0xFF, 0xFF, 0x55, 0xAA, 0xFF, 0xFF, 0x55, 0xAA,
+	0x33, 0x33, 0x11, 0x22, 0xCC, 0xCC, 0x44, 0x88,
+	0x0F, 0x0F, 0x05, 0x0A, 0x0F, 0x0F, 0x05, 0x0A,
+	0x03, 0x03, 0x01, 0x02, 0x0C, 0x0C, 0x04, 0x08,
+	0xF0, 0xF0, 0x50, 0xA0, 0xF0, 0xF0, 0x50, 0xA0,
+	0x30, 0x30, 0x10, 0x20, 0xC0, 0xC0, 0x40, 0x80,
+};
 
 u16 color_ofs_tlut[16] ATTRIBUTE_ALIGN(32);
+u16 win_tlut[8][16] ATTRIBUTE_ALIGN(32);
 
 //About 1 Meg of data combined
-u8 *prop_tex ATTRIBUTE_ALIGN(32);
+u8 *prop_tex;	//Priotiry texture
+u8 *win_tex;	//Window texture
 
 u8 cram_4bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 u8 cram_8bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 u8 cram_11bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
-
 
 u32 vdp1_fb_w = SS_DISP_WIDTH;	/*framebuffer width visible in vdp2*/
 u32 vdp1_fb_h = SS_DISP_HEIGHT;	/*framebuffer heigth visible in vdp2*/
@@ -34,6 +50,7 @@ u32 vdp1_fb_mtx = MTX_TEX_SCALED_N;				/*framebuffer scaling in vdp2*/
 
 u32 vdp2_disp_w = SS_DISP_WIDTH;	/*display width*/
 u32 vdp2_disp_h = SS_DISP_HEIGHT;	/*display height*/
+u32 screen_enable = 0;			/*Enable bits per screen (Uses the PRI_ marcros for bit access)*/
 
 static struct CellFormatData {
 	u32 disp_ctl;	/*Screen display Control*/
@@ -68,6 +85,7 @@ void SGX_Vdp2Init(void)
 	guMtxIdentity(vdp2mtx);
 	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
 	prop_tex = (u8*) memalign(32, 704*512);
+	win_tex = (u8*) memalign(32, 704*256);
 }
 
 
@@ -245,6 +263,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 6;
+			cell.pri = ((Vdp2Regs->PRINA & 0x7) << 4) | PRI_NGB0;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -262,6 +281,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.cram_offset = (Vdp2Regs->CRAOFA) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 4) & 0x7) << 6;
+			cell.pri = (((Vdp2Regs->PRINA >> 8) & 0x7) << 4) | PRI_NGB1;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -278,6 +298,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 4) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 8) & 0x7) << 6;
+			cell.pri = ((Vdp2Regs->PRINB & 0x7) << 4) | PRI_NGB2;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -294,6 +315,7 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 8) & 0x70;
 			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 12) & 0x7) << 6;
+			cell.pri = (((Vdp2Regs->PRINB >> 8) & 0x7) << 4) | PRI_NGB3;
 			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
 			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
@@ -434,6 +456,129 @@ static void SGX_Vdp2DrawCellSimple(void)
 	}
 }
 
+static void __SGX_DrawWindow(u32 win_ctl, u16 *win_pos)
+{
+	//Only use
+	//TODO: Fix this stuff for the diferent resolutions
+	u32 horizontal_shft = vdp2_disp_w < 400; //disp.highres ^ 1;
+	if (win_ctl & 0x80000000) {
+		u32 line_addr = (win_ctl & 0x7FFFE) << 1;
+		GX_Begin(GX_LINES, GX_VTXFMT1, vdp1_fb_h * 2);
+		for (u32 i = 0; i < vdp1_fb_h; ++i) {
+			u16 x0 = T1ReadWord(Vdp2Ram, line_addr);
+			u16 x1 = T1ReadWord(Vdp2Ram, line_addr + 2);
+			line_addr += 4;
+
+			if (x1 == 0xFFFF) {	//Not permitted
+				x0 = 0;
+				x1 = 0;
+			}
+
+			GX_Position2s16(x0 >> horizontal_shft, i + 1);
+			GX_Position2s16(x1 >> horizontal_shft, i + 1);
+		}
+		GX_End();
+	} else {
+		u16 x0 = win_pos[0] >> horizontal_shft;
+		u16 y0 = win_pos[1] + 1;
+		u16 x1 = win_pos[2] >> horizontal_shft;
+		u16 y1 = win_pos[3] + 1;
+		GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
+			GX_Position2s16(x0, y0);
+			GX_Position2s16(x1, y0);
+			GX_Position2s16(x0, y1);
+			GX_Position2s16(x1, y1);
+		GX_End();
+	}
+}
+
+static void __SGX_GenWindowTex(void)
+{
+	//Window bits are OR'ed and we generate a 4bpp texture
+	//then by using a TLUT we can obtain transparent pixels on each screen
+	const GXColor w0_kc = {0x10, 0x00, 0x00, 0xFF};
+	const GXColor w1_kc = {0x20, 0x00, 0x00, 0xFF};
+	const GXColor sw_kc = {0x40, 0x00, 0x00, 0xFF};
+
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
+	GX_SetNumTevStages(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumChans(0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, MTX_IDENTITY);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP0 | GX_TEXMAP_DISABLE, GX_COLORNULL);
+	GX_SetCurrentMtx(MTX_IDENTITY);
+
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_KONST);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
+	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+	GX_SetBlendMode(GX_BM_LOGIC, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_OR);
+
+	//TODO: check if windows must be made available or not
+	//First get mask of drawn screens, then AND with enabled
+	//windows for screens, if bit is 0 then we don't need to
+	//draw the window
+	//Draw Window 0
+	GX_SetTevKColor(GX_KCOLOR0, w0_kc);
+	__SGX_DrawWindow(Vdp2Regs->LWTA0.all, &Vdp2Regs->WPSX0);
+
+	//Draw Window 1
+	GX_SetTevKColor(GX_KCOLOR0, w1_kc);
+	__SGX_DrawWindow(Vdp2Regs->LWTA1.all, &Vdp2Regs->WPSX1);
+
+	//Sprite window (Only draw if sprite window is used)
+	//Change tev to accept textures
+	//TODO: Add this feature
+	u32 win_mask = 0xF;
+	if (0) {
+		GX_SetTevKColor(GX_KCOLOR0, sw_kc);
+		GX_SetVtxDesc(GX_VA_TEX0,  GX_DIRECT);
+		win_mask = 0x3F;
+		//gfx_DrawWindow(40, 40, 200, 100);
+	}
+
+	//Copy the red component of FB
+	//TODO: Use the vdp2 real height not the vdp1 height
+	GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
+	GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB565, GX_FALSE);
+	GX_CopyTex(win_tex, GX_TRUE);
+	GX_PixModeSync();
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_AND);
+
+	//Generate TLUTs for windows,
+	u8 wclt[8] = {
+		[0] = Vdp2Regs->WCTLD & 0xFF, //Rotation
+		[1] = Vdp2Regs->WCTLD >> 8,   //Color Calc
+		[PRI_NGB0] = Vdp2Regs->WCTLA & 0xFF,
+		[PRI_NGB1] = Vdp2Regs->WCTLA >> 8,
+		[PRI_NGB2] = Vdp2Regs->WCTLB & 0xFF,
+		[PRI_NGB3] = Vdp2Regs->WCTLB >> 8,
+		[PRI_RGB0] = Vdp2Regs->WCTLB & 0xFF,
+		[PRI_SPR]  = Vdp2Regs->WCTLB >> 8,
+	};
+	for (u32 s = 2; s < 8; ++s) {
+		u32 op = (-(wclt[s] >> 7)) & 0xFF;
+		u32 wctl = wclt[s] & win_mask;
+		u32 wbits = win_enable_bits[wctl] ^ op;
+		if (wbits == 0xFF) {
+			//Do not use window
+		} else if (wbits == 0x00) {
+			//Do not draw screen
+			screen_enable &= ~(1 << s);
+		} else {
+			//Generate window
+			for (u32 i = 0; i < 8; ++i) {
+				win_tlut[s][i] = (-(wbits & 1)) << 8;
+				wbits >>= 1;
+			}
+		}
+	}
+
+}
+
 
 void SGX_Vdp2GenCRAM(void) {
 	u32 *src = (u32*) Vdp2ColorRam;
@@ -466,8 +611,41 @@ void SGX_Vdp2GenCRAM(void) {
 void SGX_Vdp2Draw(void)
 {
 	GX_SetScissor(0, 0, vdp2_disp_w, vdp2_disp_h);
-	SGX_Vdp1DrawFramebuffer();
+	//Check for enabled screens
+	u32 scr_pri = 0;
+	u32 scr_enable = 0;
+	// If NBG0 16M mode is enabled, don't draw
+	// If NBG1 2048/32786 is enabled, don't draw
+	scr_pri = (Vdp2Regs->PRINB >> 8) & 0x7;
+	scr_enable = Vdp2Regs->BGON & 0x8;
+	screen_enable = (!(!(scr_pri) || !(scr_enable) ||
+					(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
+					(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) << PRI_NGB3;
 
+	//If NBG0 2048/32786/16M mode is enabled, don't draw
+	scr_pri = Vdp2Regs->PRINB & 0x7;
+	scr_enable = Vdp2Regs->BGON & 0x4;
+	screen_enable |= (!(!(scr_pri) || !(scr_enable) ||
+					(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) << PRI_NGB2;
+
+	// If NBG0 16M mode is enabled, don't draw
+	scr_pri = (Vdp2Regs->PRINA >> 8) & 0x7;
+	scr_enable = Vdp2Regs->BGON & 0x2;
+	screen_enable |= (!(!(scr_pri) || !(scr_enable) ||
+					(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4))) << PRI_NGB1;
+
+	scr_pri = Vdp2Regs->PRINA & 0x7;
+	scr_enable = Vdp2Regs->BGON & 0x1;
+	screen_enable |= (!(!(scr_pri) || !(scr_enable))) << PRI_NGB0;
+
+	//Clear with back color
+	u32 backcolor_addr = ((u32)(Vdp2Regs->BKTAU & 0x3) << 16) | (u32) Vdp2Regs->BKTAL;
+	u32 backcolor = T1ReadWord(Vdp2Ram, (backcolor_addr << 1));
+	GX_SetCopyClear((GXColor){backcolor & 0x1F, (backcolor >> 5) & 0x1F, (backcolor >> 10) & 0x1F, 0}, 0);
+	__SGX_GenWindowTex();
+
+	//Setup for Vdp2 drawing stuff
+	GX_SetCopyClear((GXColor){0, 0, 0, 0}, 0);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
 	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
@@ -485,47 +663,24 @@ void SGX_Vdp2Draw(void)
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
 	//SGX_SetTex(output_tex, GX_TF_RGB5A3, 352, 240, 0);
 	//SGX_SetOtherTex(GX_TEXMAP2, alpha_tex, GX_TF_IA8, 352, 240, 0);
-
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
 	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
 	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
 
-	//Setup GX things (vertex format, )
-	u32 scr_pri = 0;
-	u32 scr_enable = 0;
-	// If NBG0 16M mode is enabled, don't draw
-	// If NBG1 2048/32786 is enabled, don't draw
-	scr_pri = (Vdp2Regs->PRINB >> 8) & 0x7;
-	scr_enable = Vdp2Regs->BGON & 0x8;
-	if (!(!(scr_pri) || !(scr_enable) ||
-		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4) ||
-		(Vdp2Regs->BGON & 0x2 && (Vdp2Regs->CHCTLA & 0x3000) >> 12 >= 2))) {
-		cell.pri = (scr_pri << 4) | PRI_NGB3;
+
+	if (screen_enable & (1 << PRI_NGB3)) {
 		__Vdp2ReadNBG(3);	//Draw NBG3
 		SGX_Vdp2DrawCellSimple();
 	}
 
-	//If NBG0 2048/32786/16M mode is enabled, don't draw
-	scr_pri = Vdp2Regs->PRINB & 0x7;
-	scr_enable = Vdp2Regs->BGON & 0x4;
-	if (!(!(scr_pri) || !(scr_enable) ||
-		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 >= 2))) {
-		cell.pri = (scr_pri << 4) | PRI_NGB2;
+	if (screen_enable & (1 << PRI_NGB2)) {
 		__Vdp2ReadNBG(2);	//Draw NBG2
 		SGX_Vdp2DrawCellSimple();
 	}
 
-	//Copy the screens to texture...
-
-	// If NBG0 16M mode is enabled, don't draw
-	scr_pri = (Vdp2Regs->PRINA >> 8) & 0x7;
-	scr_enable = Vdp2Regs->BGON & 0x2;
-	if (!(!(scr_pri) || !(scr_enable) ||
-		(Vdp2Regs->BGON & 0x1 && (Vdp2Regs->CHCTLA & 0x70) >> 4 == 4))) {
-		cell.pri = (scr_pri << 4) | PRI_NGB1;
+	if (screen_enable & (1 << PRI_NGB1)) {
 		__Vdp2ReadNBG(1);	//Draw NBG1
-
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
@@ -533,18 +688,16 @@ void SGX_Vdp2Draw(void)
 		}
 	}
 
-	scr_pri = Vdp2Regs->PRINA & 0x7;
-	scr_enable = Vdp2Regs->BGON & 0x1;
-	if (!(!(scr_pri) || !(scr_enable))) {
-		cell.pri = (scr_pri << 4) | PRI_NGB0;
+	if (screen_enable & (1 << PRI_NGB0)) {
 		__Vdp2ReadNBG(0);	//Draw NBG0
-
 		if (cell.char_ctl & 0x2) {
 			SGX_Vdp2DrawBitmap();
 		} else {
 			SGX_Vdp2DrawCellSimple();
 		}
 	}
+
+	SGX_Vdp1DrawFramebuffer();
 	//TODO: handle Rotation BGs
 	//VDP2 Process will be as follows:
 	//First generate a value that flags enabled screens

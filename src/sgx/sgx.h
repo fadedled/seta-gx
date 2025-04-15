@@ -22,6 +22,7 @@
 
 #define TLUT_INDX_CRAM			(0x200)
 #define TLUT_INDX_PPCC			(0x210)		//Priority and colorcalculation (256 colors)
+#define TLUT_INDX_WIN			(0x22E)		//Vdp2 Window values			(16 colors)
 #define TLUT_INDX_CLROFS		(0x22F)		//Vdp2 Color Offset				(16 colors)
 #define TLUT_INDX_CLRBANK		(0x2F0)		//Vdp1 color bank parts			(256 colors)
 #define TLUT_INDX_CRAM0			(0x300)
