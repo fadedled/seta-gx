@@ -78,25 +78,28 @@ int YabauseQuickLoadGame(void);
 #define YABSYS_TIMING_BITS  20
 #define YABSYS_TIMING_MASK  ((1 << YABSYS_TIMING_BITS) - 1)
 
-typedef struct
-{
-   int DecilineMode;
-   int DecilineCount;
-   int LineCount;
-   int VBlankLineCount;
-   int MaxLineCount;
-   u32 DecilineStop;  // Fixed point
-   u32 SH2CycleFrac;  // Fixed point
-   u32 DecilineUsec;  // Fixed point
-   u32 UsecFrac;      // Fixed point
-   int CurSH2FreqType;
-   int IsPal;
-   u8 UseThreads;
-   u8 IsSSH2Running;
-   u64 OneFrameTime;
-   u64 tickfreq;
-   int emulatebios;
-   int usequickload;
+#define SYS_FLAGS_SHOW_FPS 			0x2	/* Shows FPS on screen */
+#define SYS_FLAGS_SHOW_DEBUG 		0x2	/* Shows debug info on screen */
+
+typedef struct {
+	int DecilineMode;
+	int DecilineCount;
+	int LineCount;
+	int VBlankLineCount;
+	int MaxLineCount;
+	u32 DecilineStop;  // Fixed point
+	u32 SH2CycleFrac;  // Fixed point
+	u32 DecilineUsec;  // Fixed point
+	u32 UsecFrac;      // Fixed point
+	u32 flags;         /* System flags */
+	int CurSH2FreqType;
+	int IsPal;
+	u8 UseThreads;
+	u8 IsSSH2Running;
+	u64 OneFrameTime;
+	u64 tickfreq;
+	int emulatebios;
+	int usequickload;
 } yabsys_struct;
 
 extern yabsys_struct yabsys;

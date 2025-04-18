@@ -15,7 +15,7 @@ This software is licensed under the GNU General Public License v2, available at:
 
 ## Installation
 
-Download and extract the latest release. Copy the `apps/SetaGX` folder into the `apps` folder located on the root of your USB/SD card. From the root of your USB/SD card, games must be stored in a `vgames/Saturn` directory, saves will be located in a `saves/Saturn` directory, be sure to create these beforehand.
+Download and extract the latest release. Copy the `apps/SetaGX` folder into the `apps` folder located on the root of your USB/SD card. From the root of your USB/SD card, games must be stored in a `vgames/Saturn` directory, saves will be located in a `saves/Saturn` directory, be sure to create these beforehand (Note: the paths are case sensitive).
 
 > **BIOS NOT INCLUDED:** In order to start the emulator, you need to provide your own BIOS. Place a Saturn BIOS file inside the `apps/SetaGX/` folder with the name `bios.bin`.
 
@@ -36,7 +36,7 @@ Remapping is planned, but the following is the standard mapping:
 | L           | L         |         | L       |
 | Start       | Start     | +       | +       |
 
-To return to the menu press **Start + Z** on GameCube Controller and **Home** on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it, pressing B/1 will return to the Homebrew Channel.
+To return to the menu press **Start + Z** on GameCube Controller and **Home** on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it (if you start a game while holding R a FPS counter will show), pressing B/1 will return to the Homebrew Channel.
 
 ## Credits/Special Thanks
 

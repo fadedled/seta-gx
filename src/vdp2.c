@@ -315,23 +315,18 @@ void Vdp2HBlankOUT(void) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void FPSDisplay(u32 p)
+static void FPSDisplay(void)
 {
-   static int fpsframecount = 0;
-   static u64 fpsticks;
-
-	char msg[64] = {0};
-	sprintf(msg, "FPS: %d", fps);
-   //OSDPushMessage(OSDMSG_FPS, 1, "%02d/%02d FPS %d %d %s %s", fps, yabsys.IsPal ? 50 : 60, framecounter, lagframecounter, MovieStatus, InputDisplayString);
-	osd_MsgAdd(20, 20, 0xFF0000FF, msg);
+	static int fpsframecount = 0;
+	static u64 fpsticks;
+	osd_FPSDraw(fps);
 	fpsframecount++;
 
-   if(YabauseGetTicks() >= fpsticks + yabsys.tickfreq)
-   {
-      fps = fpsframecount;
-      fpsframecount = 0;
-      fpsticks = YabauseGetTicks();
-   }
+	if(YabauseGetTicks() >= fpsticks + yabsys.tickfreq) {
+		fps = fpsframecount;
+		fpsframecount = 0;
+		fpsticks = YabauseGetTicks();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -370,7 +365,12 @@ void Vdp2VBlankOUT(void)
 		Vdp1NoDraw();	//Do nothing
 		SVI_ClearFrame();
 	}
-	//osd_ProfDraw();
+	if (yabsys.flags & SYS_FLAGS_SHOW_FPS) {
+		FPSDisplay();
+	}
+#if 0
+	osd_ProfDraw();
+#endif
 	SGX_Vdp1SwapFramebuffer();
 	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 

@@ -255,6 +255,7 @@ typedef struct PerPad_t {
 
 extern PerPad perpad[PER_PADMAX];
 
+#define PER_BUTTONS_HELD(i)		(perpad[i].btn)
 #define PER_BUTTONS_DOWN(i)		(~perpad[i].prev_btn & perpad[i].btn)
 
   /* Port Status:

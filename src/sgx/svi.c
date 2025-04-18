@@ -167,10 +167,12 @@ void SVI_SetResolution(u32 tvmd)
 	GX_Flush();
 }
 
-void SVI_CopyXFB()
+void SVI_CopyXFB(u32 x, u32 y)
 {
-	GX_CopyDisp(xfb[fbsel], GX_TRUE);
+	GX_SetDispCopyYScale(1.0);	//scale the XFB copy if not interlaced
+	GX_CopyDisp(xfb[fbsel] + (y * 704) + x, GX_TRUE);
 	GX_DrawDone();
+	GX_SetDispCopyYScale((f32)(2 - (vdp2_disp_h > 352)));	//scale the XFB copy if not interlaced
 }
 
 

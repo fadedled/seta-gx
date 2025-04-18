@@ -208,7 +208,7 @@ void SGX_Vdp1Begin(void)
 	GX_SetZMode(GX_ENABLE, GX_ALWAYS, GX_DISABLE);
 	GX_SetZTexture(GX_ZT_DISABLE, GX_TF_Z8, 0);
 	GX_SetScissor(usr_clipx, usr_clipy, usr_clipw, usr_cliph);
-	GX_SetLineWidth(9, 0);
+	GX_SetLineWidth(6, 0);
 
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;

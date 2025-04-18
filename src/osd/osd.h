@@ -39,5 +39,7 @@ void osd_ProfInit(u32 sys_cycles);
 void osd_ProfAddCounter(u32 indx, char *name);
 void osd_ProfAddTime(u32 indx, u32 ticks);
 void osd_ProfDraw(void);	//All counters reset to 0
+void osd_FPSDraw(u32 fps);
+
 
 #endif /*__OSD_H__*/

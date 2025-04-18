@@ -355,6 +355,11 @@ void menu_Handle(void)
 	}
 	else if (buttons & btn_a) {	//Uses the C button as A button
 		if (filename_items.count && filename_items.cursor < filename_items.count) {
+			if (PER_BUTTONS_HELD(0) & PAD_DI_R) {
+				yabsys.flags |= SYS_FLAGS_SHOW_FPS;
+			} else {
+				yabsys.flags &= ~SYS_FLAGS_SHOW_FPS;
+			}
 			strcpy(isofilename, games_dir);
 			strcat(isofilename, "/");
 			strcat(isofilename, filename_items.item[filename_items.cursor].data);
