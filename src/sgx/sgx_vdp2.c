@@ -542,13 +542,13 @@ static void __SGX_GenWindowTex(void)
 
 	//Copy the red component of FB
 	//TODO: Use the vdp2 real height not the vdp1 height
-	GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
-	GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB565, GX_FALSE);
+	GX_SetTexCopySrc(0, 0, vdp2_disp_w, vdp2_disp_h);
+	GX_SetTexCopyDst(vdp2_disp_w, 256, GX_CTF_R4, GX_FALSE);
 	GX_CopyTex(win_tex, GX_TRUE);
 	GX_PixModeSync();
 	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_AND);
 
-	//Generate TLUTs for windows,
+	//Generate TLUTs for windows
 	u8 wclt[8] = {
 		[0] = Vdp2Regs->WCTLD & 0xFF, //Rotation
 		[1] = Vdp2Regs->WCTLD >> 8,   //Color Calc
