@@ -270,21 +270,20 @@ extern "C" {
   } Cs2;
 
   typedef struct {
-    char system[17];
-    char company[17];
-    char itemnum[11];
-    char version[7];
-    char date[11];
-    char cdinfo[9];
-    char region[11];
-    char peripheral[17];
-    char gamename[113];
+    char system[16];
+    char company[16];
+    char itemnum[10];
+    char version[6];
+    char date[8];
+    char cdinfo[8];
+    char region[16];
+    char peripheral[16];
+    char gamename[112];
     u32 ipsize;
     u32 msh2stack;
     u32 ssh2stack;
     u32 firstprogaddr;
     u32 firstprogsize;
-    u64 gameid;
   } ip_struct;
 
   extern Cs2 * Cs2Area;
@@ -411,10 +410,6 @@ extern "C" {
   u32 Cs2GetSlaveStackAdress(void);
   u64 Cs2GetGameId();
   char * Cs2GetCurrentGmaecode();
-
-  // external CD drive command
-  void Cs2ForceOpenTray();
-  int Cs2ForceCloseTray(int coreid, const char * cdpath);
 
 #ifdef __cplusplus
 }

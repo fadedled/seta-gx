@@ -1,6 +1,5 @@
 
 #include "sgx.h"
-#include "../vidshared.h"
 #include "../vdp1.h"
 #include "../vdp2.h"
 #include <malloc.h>
@@ -394,7 +393,6 @@ static void __Vdp1Convert16bpp(void)
 	//a copy. We copy using the
 	u32 back_fb = front_fb ^ 1;
 
-	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
 	//We shift EFB's bits to make one copy
 	GX_ClearVtxDesc();
 	GX_SetColorUpdate(GX_TRUE);

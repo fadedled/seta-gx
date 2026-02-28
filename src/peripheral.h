@@ -241,6 +241,8 @@ extern PerData per_data;
 #define PAD_TYPE_GCPAD		1
 #define PAD_TYPE_WIIMOTE	2
 #define PAD_TYPE_CLASSIC	3
+#define PAD_TYPE_N64PAD		4
+#define PAD_TYPE_WIIUPRO	5
 
 typedef struct PerPad_t {
 	u32 type;
@@ -350,6 +352,40 @@ extern PerPad perpad[PER_PADMAX];
 #define WCL_BIT_DOWN		(6+16)
 #define WCL_BIT_RIGHT		(7+16)
 
+//Classic controller bit shifts
+#define WUP_BIT_UP			(8+16)
+#define WUP_BIT_LEFT		(9+16)
+#define WUP_BIT_ZR			(10+16)
+#define WUP_BIT_X			(11+16)
+#define WUP_BIT_A			(12+16)
+#define WUP_BIT_Y		 	(13+16)
+#define WUP_BIT_B 			(14+16)
+#define WUP_BIT_ZL			(15+16)
+#define WUP_BIT_R			(1+16)
+#define WUP_BIT_PLUS		(2+16)
+#define WUP_BIT_HOME		(3+16)
+#define WUP_BIT_MINUS		(4+16)
+#define WUP_BIT_L			(5+16)
+#define WUP_BIT_DOWN		(6+16)
+#define WUP_BIT_RIGHT		(7+16)
+
+//N64 controller bit shifts
+#define N64_BIT_CR      0
+#define N64_BIT_CL      1
+#define N64_BIT_CD      2
+#define N64_BIT_CU      3
+#define N64_BIT_R       4
+#define N64_BIT_L       5
+#define N64_BIT_RIGHT   8
+#define N64_BIT_LEFT    9
+#define N64_BIT_DOWN    10
+#define N64_BIT_UP      11
+#define N64_BIT_STR     12
+#define N64_BIT_Z       13
+#define N64_BIT_B       14
+#define N64_BIT_A       15
+
+
 //TODO: Make generic wrapper for controller
 
 void per_Init(void);
@@ -357,7 +393,8 @@ u32 per_updatePads(void);
 void per_closePad(u32 indx);
 
 #define GC_AXIS_TO_DIGITAL(x, y)		(((x < -46) << GC_BIT_LEFT) | ((x > 46) << GC_BIT_RIGHT) | (((y < -54) << GC_BIT_DOWN) | ((y > 54) << GC_BIT_UP)))
-#define CLASSIC_AXIS_TO_DIGITAL(x, y)	(((x < -46) << WCL_BIT_LEFT) | ((x > 46) << WCL_BIT_RIGHT) | (((y < -54) << WCL_BIT_DOWN) | ((y > 54) << WCL_BIT_UP)))
+#define CLASSIC_AXIS_TO_DIGITAL(x, y)	(((x < -30) << WCL_BIT_LEFT) | ((x > 30) << WCL_BIT_RIGHT) | (((y < -30) << WCL_BIT_DOWN) | ((y > 30) << WCL_BIT_UP)))
+#define WIIUPRO_AXIS_TO_DIGITAL(x, y)	(((x < -30) << WCL_BIT_LEFT) | ((x > 30) << WCL_BIT_RIGHT) | (((y < -30) << WCL_BIT_DOWN) | ((y > 30) << WCL_BIT_UP)))
 
 
 /** @} */

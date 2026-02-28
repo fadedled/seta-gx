@@ -32,15 +32,18 @@
 #include "cs2.h"
 #include "debug.h"
 #include "error.h"
-#include "sh2core.h"
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
 #include "scsp.h"
 #include "scu.h"
 #include "smpc.h"
 #include "vdp1.h"
 #include "vdp2.h"
 #include "yabause.h"
-#include "yui.h"
-#include "sh2/sh2.h"
+//#include "sh2/sh2.h"
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -108,10 +111,8 @@ void T1MemoryDeInit(u8 * mem)
    if (mem)
       free(*(u8 **)(mem - sizeof(u8 *)));
 #else
-#ifdef GEKKO
    if (mem) //avoid crash
-#endif
-   free(mem);
+	   free(mem);
 #endif
 }
 
@@ -136,14 +137,10 @@ T3Memory * T3MemoryInit(u32 size)
 
 void T3MemoryDeInit(T3Memory * mem)
 {
-#ifdef GEKKO
    if(mem->base_mem)
-#endif
-   free(mem->base_mem);
-#ifdef GEKKO
+	   free(mem->base_mem);
    if(mem)
-#endif
-   free(mem);
+	   free(mem);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -273,7 +270,7 @@ void FASTCALL wram_Write32(u32 addr, u32 val)
 
 static u8 FASTCALL discr_Vdp2ScuRead8(u32 addr)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		return ScuReadByte(addr);
 	}
 	return Vdp2ReadByte(addr);
@@ -281,7 +278,7 @@ static u8 FASTCALL discr_Vdp2ScuRead8(u32 addr)
 
 static u16 FASTCALL discr_Vdp2ScuRead16(u32 addr)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		return ScuReadWord(addr);
 	}
 	return Vdp2ReadWord(addr);
@@ -289,7 +286,7 @@ static u16 FASTCALL discr_Vdp2ScuRead16(u32 addr)
 
 static u32 FASTCALL discr_Vdp2ScuRead32(u32 addr)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		return ScuReadLong(addr);
 	}
 	return Vdp2ReadLong(addr);
@@ -297,7 +294,7 @@ static u32 FASTCALL discr_Vdp2ScuRead32(u32 addr)
 
 static void FASTCALL discr_Vdp2ScuWrite8(u32 addr, u8 val)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		ScuWriteByte(addr, val);
 	} else {
 		Vdp2WriteByte(addr, val);
@@ -306,7 +303,7 @@ static void FASTCALL discr_Vdp2ScuWrite8(u32 addr, u8 val)
 
 static void FASTCALL discr_Vdp2ScuWrite16(u32 addr, u16 val)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		ScuWriteWord(addr, val);
 	} else {
 		Vdp2WriteWord(addr, val);
@@ -315,7 +312,7 @@ static void FASTCALL discr_Vdp2ScuWrite16(u32 addr, u16 val)
 
 static void FASTCALL discr_Vdp2ScuWrite32(u32 addr, u32 val)
 {
-	if ((addr & 0xFFFF0000) == 0x05FE0000) {
+	if ((addr & 0x0FFF0000) == 0x05FE0000) {
 		ScuWriteLong(addr, val);
 		return;
 	} else {
@@ -521,6 +518,7 @@ void MappedMemoryInit()
                                 &wram_Write8,
                                 &wram_Write16,
                                 &wram_Write32);
+#ifdef USE_SH2_OLD
    //Master SH2 Init
    FillMemoryArea(0x20, 0x30, &UnhandledMemoryReadByte,
                                 &UnhandledMemoryReadWord,
@@ -535,6 +533,22 @@ void MappedMemoryInit()
                                 &UnhandledMemoryWriteByte,
                                 &MSH2InputCaptureWriteWord,
                                 &UnhandledMemoryWriteLong);
+#else
+   //Master SH2 Init
+   FillMemoryArea(0x20, 0x30, &UnhandledMemoryReadByte,
+                                &UnhandledMemoryReadWord,
+                                &UnhandledMemoryReadLong,
+                                &UnhandledMemoryWriteByte,
+                                &sh2_SSH2InputCaptureWrite16,
+                                &UnhandledMemoryWriteLong);
+   //Slave SH2 Init
+   FillMemoryArea(0x30, 0x40, &UnhandledMemoryReadByte,
+                                &UnhandledMemoryReadWord,
+                                &UnhandledMemoryReadLong,
+                                &UnhandledMemoryWriteByte,
+                                &sh2_MSH2InputCaptureWrite16,
+                                &UnhandledMemoryWriteLong);
+#endif
    //CS0
    FillMemoryArea(0x40, 0x80,   cs0_read8, cs0_read16, cs0_read32,
 								cs0_write8, cs0_write16, cs0_write32);
@@ -626,7 +640,7 @@ void MappedMemoryInit()
 
 //XXX: Beware the commented lines, they could be important
 //XXX: Very important, must mask the sectors repeating to have an acurate real memory map
-
+#ifdef USE_SH2_OLD
 u8 FASTCALL mem_Read8(u32 addr)
 {
 	switch(addr >> 29) {
@@ -760,7 +774,7 @@ void FASTCALL mem_Write32(u32 addr, u32 val)
 	}
 	UnhandledMemoryWriteLong(addr, val);
 }
-
+#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -771,9 +785,142 @@ int LoadBios(const char *filename)
 
 //////////////////////////////////////////////////////////////////////////////
 
+
+struct BUPHeader {
+	u8 magic[4];
+	u8 _padding0[12];
+	//Dir Structure
+	u8 save_name[12];
+	u8 comment[11];
+	u8 lang;
+	u32 date;
+	u32 size;
+	u32 _padding1;
+	u32 date_repeat;
+	u32 _padding3;
+	u32 _padding4;
+} bup_header = {.magic = {'V', 'm', 'e', 'm'}};
+
+#define BUP_MAX_SAVEFILE	(32*1024)
+
+static u32 *bup_savefile;
+
+void bup_Format()
+{
+	const char *BupHeader = "BBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaatt";
+	u32 *src = (u32*) BupHeader;
+	u32 *dst = (u32*) bup_ram;
+	for (u32 i = 0; i < 64; ++i) {
+		dst[i] = src[i];
+	}
+}
+
+
+u32 BupLastUsedBlock(void)
+{
+	u32 *bup_addr = (u32*) bup_ram;
+	u32 last_block = 1;
+
+	for (u32 i = 0x20 * 2; i < 512*0x20; i += 0x20) {
+		// Find a block with the start of a save
+		if (((bup_addr[i] & 0x00FF00FF << 8) | (bup_addr[i+1] & 0x00FF00FF)) == 0x80000000) {
+			u32 block_num = 0;
+			//Get list of data blocks
+			u32 block_list = i + 0x11;
+			while ((block_num = (bup_addr[block_list] & 0x00FF00FF)) != 0) {
+				block_num = (block_num & 0xFF) | (block_num >> 8);
+				last_block = MAX(block_num, last_block);
+				++block_list;
+				//TODO: Sometimes lists extend blocks,
+				//if ((block_list & 0x1F) == 0) {
+					//Confirm that the block is a data block
+					//if (((bup_addr[block_list] & 0x00FF00FF << 8) |
+					// 		(bup_addr[block_list+1] & 0x00FF00FF)) == 0) {
+					//	block_list += 2;
+					//}
+				//}
+			}
+			//Skip rest of blocks, they are just data blocks
+			i = last_block * 0x20;
+		}
+	}
+
+	return last_block;
+}
+
 int LoadBackupRam(const char *filename)
 {
-	return T123Load(bup_ram, BACKUP_RAM_SIZE, 1, filename);
+	FILE *fp;
+ 	if ((fp = fopen(filename, "rb")) == NULL) {
+		return -1;
+	}
+
+	// Calculate file size
+	fseek(fp, 0, SEEK_END);
+	u32 filesize = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	if ((bup_savefile = (u32 *)malloc(BUP_MAX_SAVEFILE)) == NULL) {
+		fclose(fp);
+		return -1;
+	}
+
+	//Read savefile
+	if (fread(&bup_savefile, 1, filesize, fp) <= sizeof(bup_header)) {
+		fclose(fp);
+		return -1;
+	}
+
+	bup_Format();
+	u32 *dst = (u32*) &(bup_ram[0x80*2]);
+	for(u32 i = 0; i < filesize >> 2; ++i) {
+		u32 val = bup_savefile[i];
+		*(dst++) = ((val >> 8) & 0xFF0000) | ((val >> 16) & 0xFF);
+		*(dst++) = ((val << 8) & 0xFF0000) | (val & 0xFF);
+	}
+
+	free(bup_savefile);
+	fclose(fp);
+	return 0;
+}
+
+
+int SaveBackupRam(const char *filename)
+{
+	FILE *fp;
+
+	//Get the last block used, if no data is written then do not save.
+	u32 last_block = BupLastUsedBlock() + 1;
+	if (last_block == 2) {
+		return -1;
+	}
+
+ 	if ((fp = fopen(filename, "wb")) == NULL) {
+		return -1;
+	}
+
+	if ((bup_savefile = (u32 *)malloc(BUP_MAX_SAVEFILE)) == NULL) {
+		fclose(fp);
+		return -1;
+	}
+
+	u32 *src = (u32*) bup_ram;
+	u32 *dst = (u32*) bup_savefile;
+	for(u32 i = 2*0x20; i < last_block * 0x20; i+=2) {
+		u32 v0 = src[i];
+		u32 v1 = src[i+1];
+		*(dst++) = ((v0 & 0xFF0000) << 8) | ((v0 & 0xFF) << 16) |
+					((v1 & 0xFF0000) >> 8) | ((v1 & 0xFF));
+		//*(dst++) = ((val >> 8) & 0xFF000) | ((val >> 16) & 0xFF);
+		//*(dst++) = ((val << 8) & 0xFF000) | (val & 0xFF);
+	}
+
+	fwrite(bup_savefile, 1, (last_block-2) * 0x40, fp);
+
+	free(bup_savefile);
+	fclose(fp);
+	return 0;
+
 }
 
 //////////////////////////////////////////////////////////////////////////////

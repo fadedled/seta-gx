@@ -31,28 +31,29 @@
 #include "peripheral.h"
 #include "scsp.h"
 #include "scu.h"
-#include "sh2core.h"
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
 #include "osd/osd.h"
 #include "smpc.h"
+#include "vdp1.h"
 #include "vdp2.h"
-#include "yui.h"
 #include "sgx/svi.h"
-#include "bios.h"
 
 
 
 
 #include <sys/time.h>
 
-#ifdef GEKKO
 #include <ogc/lwp_watchdog.h>
 #include <string.h>
-extern char saves_dir[512];
+extern char saves_dir[128];
 extern int eachbackupramon;
 extern char prev_itemnum[512];
 int declinenum = 15; //10 in original yabause
 int dividenumclock = 1; //1 in original yabause
-#endif
 
 #ifdef SYS_PROFILE_H
  #include SYS_PROFILE_H
@@ -66,33 +67,13 @@ int dividenumclock = 1; //1 in original yabause
 //Dynarec sh2
 
 yabsys_struct yabsys;
-const char *bupfilename = NULL;
+char bupfilename[512];
 u64 tickfreq;
 
 int lagframecounter;
 int LagFrameFlag;
 int framelength=16;
 int framecounter;
-
-//////////////////////////////////////////////////////////////////////////////
-
-#ifndef NO_CLI
-void print_usage(const char *program_name) {
-   printf("Yabause v" VERSION "\n");
-   printf("\n"
-          "Purpose:\n"
-          "  This program is intended to be a Sega Saturn emulator\n"
-          "\n"
-          "Usage: %s [OPTIONS]...\n", program_name);
-   printf("   -h         --help                 Print help and exit\n");
-   printf("   -b STRING  --bios=STRING          bios file\n");
-   printf("   -i STRING  --iso=STRING           iso/cue file\n");
-   printf("   -c STRING  --cdrom=STRING         cdrom path\n");
-   printf("   -ns        --nosound              turn sound off\n");
-   printf("   -a         --autostart            autostart emulation\n");
-   printf("   -f         --fullscreen           start in fullscreen mode\n");
-}
-#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -135,31 +116,13 @@ int	YabauseInit(yabauseinit_struct *init)
 	yabsys.UseThreads = init->usethreads;
 
 	// Initialize both cpu's
+#ifdef USE_SH2_OLD
 	if (SH2Init(init->sh2coretype) != 0) {
 		//YabSetError(YAB_ERR_CANNOTINIT, _("SH2"));
 		return -1;
 	}
-
-#ifdef GEKKO
-   if(!eachbackupramon)
-   {
-#endif
-   if (LoadBackupRam(init->buppath) != 0)
-      FormatBackupRam(bup_ram, 0x10000);
-
-   bup_ram_written = 0;
-
-   bupfilename = init->buppath;
-#ifdef GEKKO
-   }
-#endif
-
-#ifndef GEKKO
-   if (cart_Init(init->carttype, init->cartpath) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "Cartridge");
-      return -1;
-   }
+#else
+	sh2_Init();
 #endif
 
 #ifdef SCSP_PLUGIN
@@ -168,10 +131,6 @@ int	YabauseInit(yabauseinit_struct *init)
       YabSetError(YAB_ERR_CANNOTINIT, "SCSP");
       return -1;
    }
-#endif
-
-#ifndef GEKKO
-   MappedMemoryInit();
 #endif
 
    if (VideoInit(init->vidcoretype) != 0)
@@ -187,7 +146,6 @@ int	YabauseInit(yabauseinit_struct *init)
       return -1;
    }
 
-#ifdef GEKKO
    Cs2GetRegionID(); //for getting itemnum
 
    if (cart_Init(init->carttype, init->cartpath) != 0)
@@ -196,35 +154,18 @@ int	YabauseInit(yabauseinit_struct *init)
       return -1;
    }
 
-   MappedMemoryInit();
+	MappedMemoryInit();
 
-   if(eachbackupramon)
-   {
-      Cs2GetRegionID(); //for getting itemnum
-      static char buppath[512];
-      strcpy(buppath, saves_dir);
-      strcat(buppath, "/");
-      if(strlen(cdip->itemnum)!=0)
-      {
-         strcat(buppath, cdip->itemnum);
-      }
-      else
-      {
-         if(strlen(prev_itemnum)!=0)
-            strcat(buppath, prev_itemnum);
-         else
-            strcat(buppath, "bkram");
-      }
-      strcat(buppath, ".bin");
-      init->buppath = buppath;
-      if (LoadBackupRam(init->buppath) != 0)
-         FormatBackupRam(bup_ram, 0x10000);
-
-      bup_ram_written = 0;
-
-      bupfilename = init->buppath;
-   }
-#endif
+	//Get the BUP file
+	Cs2GetRegionID(); //for getting itemnum
+	for (u32 i = 0; i < sizeof(cdip->itemnum); ++i) {
+		cdip->itemnum[i] = ((cdip->itemnum[i] >= 33) && (cdip->itemnum[i] <= 126) ? cdip->itemnum[i] : '\0');
+	}
+	sprintf(bupfilename, "%s/%.10s.bup", saves_dir, cdip->itemnum);
+	if (LoadBackupRam(bupfilename)) {
+		FormatBackupRam(bup_ram, 0x10000);
+	}
+	bup_ram_written = 0;
 
    if (ScuInit() != 0)
    {
@@ -242,17 +183,14 @@ int	YabauseInit(yabauseinit_struct *init)
       return -1;
    }
 
-   if (Vdp1Init() != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "VDP1");
-      return -1;
-   }
-
-   if (Vdp2Init() != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "VDP2");
-      return -1;
-   }
+	if (Vdp1Init() != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "VDP1");
+		return -1;
+	}
+	if (Vdp2Init() != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "VDP2");
+		return -1;
+	}
 
    if (SmpcInit(init->regionid, init->clocksync, init->basetime) != 0)
    {
@@ -265,36 +203,19 @@ int	YabauseInit(yabauseinit_struct *init)
    yabsys.DecilineMode = 1;
 
 
-   if (init->biospath != NULL && strlen(init->biospath))
-   {
-      if (LoadBios(init->biospath) != 0)
-      {
-         YabSetError(YAB_ERR_FILENOTFOUND, (void *)init->biospath);
-         return -2;
-      }
-      yabsys.emulatebios = 0;
-   }
-   else
-      yabsys.emulatebios = 1;
+	if (LoadBios(init->biospath) != 0) {
+		YabSetError(YAB_ERR_FILENOTFOUND, (void *)init->biospath);
+		return -2;
+	}
+	YabauseResetNoLoad();
 
-   yabsys.usequickload = 0;
-
-
-   YabauseResetNoLoad();
-
-   if (yabsys.usequickload || yabsys.emulatebios)
-   {
-      if (YabauseQuickLoadGame() != 0)
-      {
-         if (yabsys.emulatebios)
-         {
-            YabSetError(YAB_ERR_CANNOTINIT, "Game");
-            return -2;
-         }
-         else
-            YabauseResetNoLoad();
-      }
-   }
+	//NOTE: QuickLoad is disabled for now
+	yabsys.usequickload = 0;
+	if (yabsys.usequickload) {
+		if (YabauseQuickLoadGame() != 0) {
+			YabauseResetNoLoad();
+		}
+	}
 
    return 0;
 }
@@ -302,9 +223,12 @@ int	YabauseInit(yabauseinit_struct *init)
 //////////////////////////////////////////////////////////////////////////////
 
 void YabauseDeInit(void) {
+#ifdef USE_SH2_OLD
 	SH2DeInit();
-
-	if (T123Save(bup_ram, 0x10000, 1, bupfilename) != 0)
+#else
+	sh2_Deinit();
+#endif
+	if (SaveBackupRam(bupfilename))
          YabSetError(YAB_ERR_FILEWRITE, (void *)bupfilename);
 
    cart_Deinit();
@@ -326,38 +250,39 @@ void YabauseSetDecilineMode(int on) {
 //////////////////////////////////////////////////////////////////////////////
 
 void YabauseResetNoLoad(void) {
+#ifdef USE_SH2_OLD
 	SH2Reset(MSH2);
+#else
+	sh2_Reset(&msh2);
+#endif
+	YabauseStopSlave();
+	memset(wram, 0, 0x200000);
 
-   YabauseStopSlave();
-   memset(wram, 0, 0x200000);
+	// Reset CS0 area here
+	// Reset CS1 area here
+	Cs2Reset();
+	ScuReset();
+	ScspReset();
+	Vdp1Reset();
+	Vdp2Reset();
+	SmpcReset();
+#ifdef USE_SH2_OLD
+	SH2PowerOn(MSH2);
+#else
+	sh2_PowerOn(&msh2);
+#endif
 
-   // Reset CS0 area here
-   // Reset CS1 area here
-   Cs2Reset();
-   ScuReset();
-   ScspReset();
-   Vdp1Reset();
-   Vdp2Reset();
-   SmpcReset();
-
-   SH2PowerOn(MSH2);
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void YabauseReset(void) {
-   YabauseResetNoLoad();
-
-   if (yabsys.usequickload || yabsys.emulatebios)
-   {
-      if (YabauseQuickLoadGame() != 0)
-      {
-         if (yabsys.emulatebios)
-            YabSetError(YAB_ERR_CANNOTINIT, "Game");
-         else
-            YabauseResetNoLoad();
-      }
-   }
+	YabauseResetNoLoad();
+	if (yabsys.usequickload) {
+		if (YabauseQuickLoadGame() != 0) {
+			YabauseResetNoLoad();
+		}
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -403,27 +328,15 @@ int YabauseEmulate(void) {
 
    if (yabsys.IsPal)
    {
-#ifndef GEKKO
-      /* 11.2896MHz / 50Hz / 313 lines / 10 calls/line = 72.20 cycles/call */
-      m68kcycles = yabsys.DecilineMode ? 72 : 722;
-      m68kcenticycles = yabsys.DecilineMode ? 20 : 0;
-#else
       /* 11.2896MHz / 50Hz / 313 lines / declinenum calls/line = 721.4 cycles/ declinenum call */
       m68kcycles = yabsys.DecilineMode ? (7214/declinenum)/10 : 716;
       m68kcenticycles = yabsys.DecilineMode ? 7214-((7214/declinenum)/10)*100 : 20;
-#endif
    }
    else
    {
-#ifndef GEKKO
-      /* 11.2896MHz / 60Hz / 263 lines / 10 calls/line = 71.62 cycles/call */
-      m68kcycles = yabsys.DecilineMode ? 71 : 716;
-      m68kcenticycles = yabsys.DecilineMode ? 62 : 20;
-#else
       /* 11.2896MHz / 60Hz / 263 lines / declinenum calls/line = 715.4 cycles/ declinenum call */
       m68kcycles = yabsys.DecilineMode ? (7154/declinenum)/10 : 716;
       m68kcenticycles = yabsys.DecilineMode ? 7154-((7154/declinenum)/10)*100 : 20;
-#endif
    }
 #endif
 #else // SCSP_PLUGIN
@@ -476,12 +389,22 @@ int YabauseEmulate(void) {
          yabsys.SH2CycleFrac &= ((YABSYS_TIMING_MASK << 1) | 1);
 			//Run the main SH2
 			cycles_start = gettime();
+#ifdef USE_SH2_OLD
 			SH2Exec(MSH2, sh2cycles);
+#else
+			//TODO: Cycles are not the same
+			sh2_Exec(&msh2, sh2cycles);
+#endif
 			osd_ProfAddTime(PROF_SH2M, gettime() - cycles_start);
 			//Run the secondary SH2
 			cycles_start = gettime();
 			if (yabsys.IsSSH2Running)
+#ifdef USE_SH2_OLD
 				SH2Exec(SSH2, sh2cycles);
+#else
+			//TODO: Cycles are not the same
+				sh2_Exec(&ssh2, sh2cycles);
+#endif
 			osd_ProfAddTime(PROF_SH2S, gettime() - cycles_start);
 
 #ifndef SCSP_PLUGIN
@@ -649,18 +572,15 @@ int YabauseEmulate(void) {
 
 void YabauseStartSlave(void)
 {
-	if (yabsys.emulatebios) {
-		SH2GetRegisters(SSH2, &SSH2->regs);
-		SSH2->regs.R[15] = 0x06001000;
-		SSH2->regs.VBR = 0x06000400;
-		SSH2->regs.PC = mem_Read32(0x06000250);
-		SH2SetRegisters(SSH2, &SSH2->regs);
-	} else {
-		SH2PowerOn(SSH2);
-		SH2GetRegisters(SSH2, &SSH2->regs);
-		SSH2->regs.PC = 0x20000200;
-		SH2SetRegisters(SSH2, &SSH2->regs);
-	}
+#ifdef USE_SH2_OLD
+	SH2PowerOn(SSH2);
+	SH2GetRegisters(SSH2, &SSH2->regs);
+	SSH2->regs.PC = 0x20000200;
+	SH2SetRegisters(SSH2, &SSH2->regs);
+#else
+	sh2_PowerOn(&ssh2);
+	ssh2.pc = 0x20000200;
+#endif
 	yabsys.IsSSH2Running = 1;
 }
 
@@ -668,7 +588,11 @@ void YabauseStartSlave(void)
 
 void YabauseStopSlave(void)
 {
+#ifdef USE_SH2_OLD
 	SH2Reset(SSH2);
+#else
+	sh2_Reset(&ssh2);
+#endif
 	yabsys.IsSSH2Running = 0;
 }
 
@@ -699,54 +623,49 @@ void YabauseSpeedySetup(void)
    u32 data;
    int i;
 
-   if (yabsys.emulatebios)
-      BiosInit();
-   else
-   {
-      // Setup the vector table area, etc.(all bioses have it at 0x00000600-0x00000810)
-      for (i = 0; i < 0x210; i+=4)
-      {
-         data = mem_Read32(0x00000600+i);
-         mem_Write32(0x06000000+i, data);
-      }
+	// Setup the vector table area, etc.(all bioses have it at 0x00000600-0x00000810)
+	for (i = 0; i < 0x210; i+=4)
+	{
+		data = mem_Read32(0x00000600+i);
+		mem_Write32(0x06000000+i, data);
+	}
 
-      // Setup the bios function pointers, etc.(all bioses have it at 0x00000820-0x00001100)
-      for (i = 0; i < 0x8E0; i+=4)
-      {
-         data = mem_Read32(0x00000820+i);
-         mem_Write32(0x06000220+i, data);
-      }
+	// Setup the bios function pointers, etc.(all bioses have it at 0x00000820-0x00001100)
+	for (i = 0; i < 0x8E0; i+=4)
+	{
+		data = mem_Read32(0x00000820+i);
+		mem_Write32(0x06000220+i, data);
+	}
 
-      // I'm not sure this is really needed
-      for (i = 0; i < 0x700; i+=4)
-      {
-         data = mem_Read32(0x00001100+i);
-         mem_Write32(0x06001100+i, data);
-      }
+	// I'm not sure this is really needed
+	for (i = 0; i < 0x700; i+=4)
+	{
+		data = mem_Read32(0x00001100+i);
+		mem_Write32(0x06001100+i, data);
+	}
 
-      // Fix some spots in 0x06000210-0x0600032C area
-      mem_Write32(0x06000234, 0x000002AC);
-      mem_Write32(0x06000238, 0x000002BC);
-      mem_Write32(0x0600023C, 0x00000350);
-      mem_Write32(0x06000240, 0x32524459);
-      mem_Write32(0x0600024C, 0x00000000);
-      mem_Write32(0x06000268, mem_Read32(0x00001344));
-      mem_Write32(0x0600026C, mem_Read32(0x00001348));
-      mem_Write32(0x0600029C, mem_Read32(0x00001354));
-      mem_Write32(0x060002C4, mem_Read32(0x00001104));
-      mem_Write32(0x060002C8, mem_Read32(0x00001108));
-      mem_Write32(0x060002CC, mem_Read32(0x0000110C));
-      mem_Write32(0x060002D0, mem_Read32(0x00001110));
-      mem_Write32(0x060002D4, mem_Read32(0x00001114));
-      mem_Write32(0x060002D8, mem_Read32(0x00001118));
-      mem_Write32(0x060002DC, mem_Read32(0x0000111C));
-      mem_Write32(0x06000328, 0x000004C8);
-      mem_Write32(0x0600032C, 0x00001800);
+	// Fix some spots in 0x06000210-0x0600032C area
+	mem_Write32(0x06000234, 0x000002AC);
+	mem_Write32(0x06000238, 0x000002BC);
+	mem_Write32(0x0600023C, 0x00000350);
+	mem_Write32(0x06000240, 0x32524459);
+	mem_Write32(0x0600024C, 0x00000000);
+	mem_Write32(0x06000268, mem_Read32(0x00001344));
+	mem_Write32(0x0600026C, mem_Read32(0x00001348));
+	mem_Write32(0x0600029C, mem_Read32(0x00001354));
+	mem_Write32(0x060002C4, mem_Read32(0x00001104));
+	mem_Write32(0x060002C8, mem_Read32(0x00001108));
+	mem_Write32(0x060002CC, mem_Read32(0x0000110C));
+	mem_Write32(0x060002D0, mem_Read32(0x00001110));
+	mem_Write32(0x060002D4, mem_Read32(0x00001114));
+	mem_Write32(0x060002D8, mem_Read32(0x00001118));
+	mem_Write32(0x060002DC, mem_Read32(0x0000111C));
+	mem_Write32(0x06000328, 0x000004C8);
+	mem_Write32(0x0600032C, 0x00001800);
 
-      // Fix SCU interrupts
-      for (i = 0; i < 0x80; i+=4)
-         mem_Write32(0x06000A00+i, 0x0600083C);
-   }
+	// Fix SCU interrupts
+	for (i = 0; i < 0x80; i+=4)
+		mem_Write32(0x06000A00+i, 0x0600083C);
 
    // Set the cpu's, etc. to sane states
 
@@ -760,6 +679,7 @@ void YabauseSpeedySetup(void)
    Cs2Area->satauth = 4;
 
    // Set Master SH2 registers accordingly
+#ifdef USE_SH2_OLD
    SH2GetRegisters(MSH2, &MSH2->regs);
    for (i = 0; i < 15; i++)
       MSH2->regs.R[i] = 0x00000000;
@@ -771,6 +691,18 @@ void YabauseSpeedySetup(void)
    MSH2->regs.MACL = 0x00000000;
    MSH2->regs.PR = 0x00000000;
    SH2SetRegisters(MSH2, &MSH2->regs);
+#else
+	for (i = 0; i < 15; i++) {
+		msh2.r[i] = 0x00000000;
+	}
+	msh2.r[15] = 0x06002000;
+	msh2.sr = 0x00000000;
+	msh2.gbr = 0x00000000;
+	msh2.vbr = 0x06000000;
+	msh2.mach = 0x00000000;
+	msh2.macl = 0x00000000;
+	msh2.pr = 0x00000000;
+#endif
 
    // Set SCU registers to sane states
    ScuRegs->D1AD = ScuRegs->D2AD = 0;
@@ -821,9 +753,7 @@ void YabauseSpeedySetup(void)
    Vdp2Regs->COAG = 0x0200;
    Vdp2Regs->COAB = 0x0200;
    SVI_SetResolution(Vdp2Regs->TVMD);
-#ifdef GEKKO
    yabsys.VBlankLineCount = 224+(Vdp2Regs->TVMD & 0x30);
-#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -902,8 +832,11 @@ int YabauseQuickLoadGame(void)
          lgpartition->numblocks = 0;
       }
 
-      SH2WriteNotify(0x6002000, blocks<<11);
-
+#ifdef USE_SH2_OLD
+		SH2WriteNotify(0x6002000, blocks<<11);
+#else
+		sh2_WriteNotify(0x6002000, blocks<<11);
+#endif
       // Ok, now that we've loaded the ip, now it's time to load the
       // First Program
 
@@ -974,12 +907,17 @@ int YabauseQuickLoadGame(void)
          lgpartition->numblocks = 0;
       }
 
-      SH2WriteNotify(addr, blocks<<11);
-
+#ifdef USE_SH2_OLD
+		SH2WriteNotify(addr, blocks<<11);
       // Now setup SH2 registers to start executing at ip code
       SH2GetRegisters(MSH2, &MSH2->regs);
       MSH2->regs.PC = 0x06002E00;
       SH2SetRegisters(MSH2, &MSH2->regs);
+#else
+	  	msh2.pc = 0x06002E00;
+		sh2_WriteNotify(addr, blocks<<11);
+#endif
+
    }
    else
    {

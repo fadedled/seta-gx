@@ -24,14 +24,41 @@
 #include "sh2core.h"
 #include "sh2int.h"
 #include "sh2idle.h"
-#include "cart.h"
-#include "debug.h"
-#include "error.h"
-#include "memory.h"
-#include "bios.h"
-#include "yabause.h"
+#include "../cart.h"
+#include "../debug.h"
+#include "../error.h"
+#include "../memory.h"
+#include "../yabause.h"
 
 // #define SH2_TRACE  // Uncomment to enable tracing
+
+int SH2InterpreterInit(void);
+void SH2InterpreterDeInit(void);
+void SH2InterpreterReset(SH2_struct *context);
+void FASTCALL SH2InterpreterExec(SH2_struct *context, u32 cycles);
+void SH2InterpreterGetRegisters(SH2_struct *context, sh2regs_struct *regs);
+u32 SH2InterpreterGetGPR(SH2_struct *context, int num);
+u32 SH2InterpreterGetSR(SH2_struct *context);
+u32 SH2InterpreterGetGBR(SH2_struct *context);
+u32 SH2InterpreterGetVBR(SH2_struct *context);
+u32 SH2InterpreterGetMACH(SH2_struct *context);
+u32 SH2InterpreterGetMACL(SH2_struct *context);
+u32 SH2InterpreterGetPR(SH2_struct *context);
+u32 SH2InterpreterGetPC(SH2_struct *context);
+void SH2InterpreterSetRegisters(SH2_struct *context, const sh2regs_struct *regs);
+void SH2InterpreterSetGPR(SH2_struct *context, int num, u32 value);
+void SH2InterpreterSetSR(SH2_struct *context, u32 value);
+void SH2InterpreterSetGBR(SH2_struct *context, u32 value);
+void SH2InterpreterSetVBR(SH2_struct *context, u32 value);
+void SH2InterpreterSetMACH(SH2_struct *context, u32 value);
+void SH2InterpreterSetMACL(SH2_struct *context, u32 value);
+void SH2InterpreterSetPR(SH2_struct *context, u32 value);
+void SH2InterpreterSetPC(SH2_struct *context, u32 value);
+void SH2InterpreterSendInterrupt(SH2_struct *context, u8 level, u8 vector);
+int SH2InterpreterGetInterrupts(SH2_struct *context,
+                                interrupt_struct interrupts[MAX_INTERRUPTS]);
+void SH2InterpreterSetInterrupts(SH2_struct *context, int num_interrupts,
+                                 const interrupt_struct interrupts[MAX_INTERRUPTS]);
 
 
 opcodefunc opcodes[0x10000];
@@ -47,42 +74,6 @@ SH2Interface_struct SH2Interpreter = {
    SH2InterpreterDeInit,
    SH2InterpreterReset,
    SH2InterpreterExec,
-
-   SH2InterpreterGetRegisters,
-   SH2InterpreterGetGPR,
-   SH2InterpreterGetSR,
-   SH2InterpreterGetGBR,
-   SH2InterpreterGetVBR,
-   SH2InterpreterGetMACH,
-   SH2InterpreterGetMACL,
-   SH2InterpreterGetPR,
-   SH2InterpreterGetPC,
-
-   SH2InterpreterSetRegisters,
-   SH2InterpreterSetGPR,
-   SH2InterpreterSetSR,
-   SH2InterpreterSetGBR,
-   SH2InterpreterSetVBR,
-   SH2InterpreterSetMACH,
-   SH2InterpreterSetMACL,
-   SH2InterpreterSetPR,
-   SH2InterpreterSetPC,
-
-   SH2InterpreterSendInterrupt,
-   SH2InterpreterGetInterrupts,
-   SH2InterpreterSetInterrupts,
-
-   NULL  // SH2WriteNotify not used
-};
-
-SH2Interface_struct SH2DebugInterpreter = {
-   SH2CORE_DEBUGINTERPRETER,
-   "SH2 Debugger Interpreter",
-
-   SH2DebugInterpreterInit,
-   SH2InterpreterDeInit,
-   SH2InterpreterReset,
-   SH2DebugInterpreterExec,
 
    SH2InterpreterGetRegisters,
    SH2InterpreterGetGPR,
@@ -154,11 +145,6 @@ static u32 FASTCALL FetchInvalid(UNUSED u32 addr)
 static void FASTCALL sh2_IllegalInst(SH2_struct * sh)
 {
    int vectnum;
-
-   if (yabsys.emulatebios && BiosHandleFunc(sh))
-   {
-		return;
-   }
 
    YabSetError(YAB_ERR_SH2INVALIDOPCODE, sh);
 
@@ -269,7 +255,7 @@ static void FASTCALL SH2y_and(SH2_struct * sh)
 }
 
 //////////////////////////////////////////////////////////////////////////////
-
+//12 inst
 static void FASTCALL SH2andi(SH2_struct * sh)
 {
    sh->regs.R[0] &= INSTRUCTION_CD(sh->instruction);
@@ -945,9 +931,7 @@ static void FASTCALL SH2macl(SH2_struct * sh)
 		: "r" (mem_n), "r" (mem_m)
 	);
 
-	if (sh->regs.SR.part.S) {
-		sh->regs.MACH = (s16) sh->regs.MACH;
-	}
+	sh->regs.MACH = (sh->regs.SR.part.S ? (s16) sh->regs.MACH : sh->regs.MACH);
 #else
 
    u32 RnL,RnH,RmL,RmH,Res0,Res1,Res2;
@@ -2327,12 +2311,6 @@ int SH2InterpreterInit()
    return 0;
 }
 
-int SH2DebugInterpreterInit() {
-
-  SH2InterpreterInit();
-  return 0;
-}
-
 //////////////////////////////////////////////////////////////////////////////
 
 void SH2InterpreterDeInit()
@@ -2385,89 +2363,6 @@ static INLINE void SH2HandleInterrupts(SH2_struct *context)
    }
 }
 
-//////////////////////////////////////////////////////////////////////////////
-
-FASTCALL void SH2DebugInterpreterExec(SH2_struct *context, u32 cycles)
-{
-#ifdef SH2_TRACE
-   /* Avoid accumulating leftover cycles multiple times, since the trace
-    * code automatically adds state->cycles to the cycle accumulator when
-    * printing a trace line */
-   sh2_trace_add_cycles(-(context->cycles));
-#endif
-
-   SH2HandleInterrupts(context);
-
-   while(context->cycles < cycles)
-   {
-#ifdef EMULATEUBC
-      int ubcinterrupt=0, ubcflag=0;
-#endif
-
-
-#ifdef SH2_TRACE
-      sh2_trace(context, context->regs.PC);
-#endif
-
-#ifdef EMULATEUBC
-      if (context->onchip.BBRA & (BBR_CPA_CPU | BBR_IDA_INST | BBR_RWA_READ)) // Break on cpu, instruction, read cycles
-      {
-         if (context->onchip.BARA.all == (context->regs.PC & (~context->onchip.BAMRA.all)))
-         {
-            LOG("Trigger UBC A interrupt: PC = %08X\n", context->regs.PC);
-            if (!(context->onchip.BRCR & BRCR_PCBA))
-            {
-               // Break before instruction fetch
-	           SH2UBCInterrupt(context, BRCR_CMFCA);
-            }
-            else
-            {
-            	// Break after instruction fetch
-               ubcinterrupt=1;
-               ubcflag = BRCR_CMFCA;
-            }
-         }
-      }
-      else if(context->onchip.BBRB & (BBR_CPA_CPU | BBR_IDA_INST | BBR_RWA_READ)) // Break on cpu, instruction, read cycles
-      {
-         if (context->onchip.BARB.all == (context->regs.PC & (~context->onchip.BAMRB.all)))
-         {
-            LOG("Trigger UBC B interrupt: PC = %08X\n", context->regs.PC);
-            if (!(context->onchip.BRCR & BRCR_PCBB))
-            {
-          	   // Break before instruction fetch
-       	       SH2UBCInterrupt(context, BRCR_CMFCB);
-            }
-            else
-            {
-               // Break after instruction fetch
-               ubcinterrupt=1;
-               ubcflag = BRCR_CMFCB;
-            }
-         }
-      }
-#endif
-
-      // Fetch Instruction
-#ifdef EXEC_FROM_CACHE
-      if ((context->regs.PC & 0xC0000000) == 0xC0000000) context->instruction = DataArrayReadWord(context->regs.PC);
-      else
-#endif
-      context->instruction = fetchlist[(context->regs.PC >> 20) & 0x0FF](context->regs.PC);
-
-		// Execute it
-		opcode_arr[(context->instruction >> 12) & 0xF](context);
-
-#ifdef EMULATEUBC
-	  if (ubcinterrupt)
-	     SH2UBCInterrupt(context, ubcflag);
-#endif
-   }
-
-#ifdef SH2_TRACE
-   sh2_trace_add_cycles(context->cycles);
-#endif
-}
 
 //////////////////////////////////////////////////////////////////////////////
 

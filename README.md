@@ -36,12 +36,12 @@ Remapping is planned, but the following is the standard mapping:
 | L           | L         |         | L       |
 | Start       | Start     | +       | +       |
 
-To return to the menu press **Start + Z** on GameCube Controller and **Home** on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it (if you start a game while holding R a FPS counter will show), pressing B/1 will return to the Homebrew Channel.
+To return to the menu press **Start + Z** on GameCube Controller and **Home** on Wii controllers, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it (if you start a game while holding R an FPS counter will show), pressing B/1 will return to the Homebrew Channel.
 
 ## Credits/Special Thanks
 
 - Yabause Team: Original soure code
 - Devmiyax: Updates to Yabause trough Yaba Sanshiro
-- Extrems: Help on GX issues
+- Extrems: Help on GX issues and libogc2
 - emu_kidid & Pcercuei: Their continued work on WiiSX helped inspire this endeavor
 - tueidj: Virtual memory code

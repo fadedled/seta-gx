@@ -1,6 +1,5 @@
 
 #include "sgx.h"
-#include "../vidshared.h"
 #include "../vdp1.h"
 #include "../vdp2.h"
 #include <malloc.h>
@@ -39,6 +38,25 @@ u16 win_tlut[8][16] ATTRIBUTE_ALIGN(32);
 //About 1 Meg of data combined
 u8 *prop_tex;	//Priotiry texture
 u8 *win_tex;	//Window texture
+u8 *image_tex;  //Holds textures for 1st/2nd images and opaque pixels
+u8 *screen_tex; //Holds textures for VDP2 screens
+
+#define VDP2_SCREEN_TEX_NBG0	(screen_tex)
+#define VDP2_SCREEN_TEX_NBG1
+#define VDP2_SCREEN_TEX_NBG2
+#define VDP2_SCREEN_TEX_NBG3
+#define VDP2_SCREEN_TEX_NBG0_ZA
+#define VDP2_SCREEN_TEX_NBG1_ZA
+#define VDP2_SCREEN_TEX_NBG2_ZA
+#define VDP2_SCREEN_TEX_NBG3_ZA
+
+#define VDP2_IMAGE_TEX_OPAQUE		(image_tex + 0)
+#define VDP2_IMAGE_TEX_1ST			(image_tex + (704*512*2))
+#define VDP2_IMAGE_TEX_2ND			(image_tex + (704*512*4))
+#define VDP2_IMAGE_TEX_OPAQUE_PRI	(image_tex + (704*512*6))	//TODO_NECESARY?
+#define VDP2_IMAGE_TEX_TOP_PRI		(image_tex + (704*512*7))
+#define VDP2_IMAGE_TEX_ALPHA		(image_tex + (704*512*8))
+
 
 u8 cram_4bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
 u8 cram_8bpp[PAGE_SIZE] ATTRIBUTE_ALIGN(32);
@@ -66,15 +84,248 @@ static struct CellFormatData {
 	u32 pri; 			/*Background priority*/
 	u32 spec_pri; 		/*Special priority mode*/
 
-	u32 xscroll;		/*X increment*/
-	u32 yscroll; 		/*Y increment*/
+	u32 xscroll;		/*X scroll*/
+	u32 yscroll; 		/*Y scroll*/
+	u32 xinc;			/*X increment*/
+	u32 yinc; 			/*Y increment*/
 	u32 page_mask;		/*page mask*/
 	u32 page_shft;		/*page shift*/
 	u32 plane_mask;		/*plane mask*/
 	u32 xmap_shft;		/*map bit shift for x axis*/
 	u32 ymap_shft;		/*map bit shift for y axis*/
-	u8 *map_addr[16]; 	/* addresses of maps*/
+	u32 *map_addr[16]; 	/* addresses of maps*/
+
+	u32 *ls_table;		/* Line scroll table */
+	u32 *vs_table;		/* Vertical Cell scroll table */
+	u32 scr_ctl;			/* line/cell scroll control */
+
 } cell;
+
+struct {
+	u32 xp;
+	u32 yp;
+	u32 dx;
+	u32 dy;
+
+	u32 kx; // C*(Zst - Pz)
+	u32 ky; // F*(Zst - Pz)
+
+	u32 czp; // C*(Zst - Pz)
+	u32 fzp; // F*(Zst - Pz)
+
+	u32 dxst; // DXst
+	u32 dyst; // DYst
+	u32 xst; // Xst - Px
+	u32 yst; // Yst - Py
+} rot_a, rot_b;
+
+u32 line_scroll_data[256*3];
+//u32 line_scroll_data[256*3];
+
+static u32 __calcRotTable(u32 *rt)
+{
+	rot_a.xst  = *(rt++);
+	rot_a.yst  = *(rt++);
+	u32 z_st  = *(rt++);
+	rot_a.dxst = *(rt++);
+	rot_a.dyst = *(rt++);
+	u32 dx    = *(rt++);
+	u32 dy    = *(rt++);
+	u32 a    = *(rt++);
+	u32 b    = *(rt++);
+	u32 c    = *(rt++);
+	u32 d    = *(rt++);
+	u32 e    = *(rt++);
+	u32 f    = *(rt++);
+
+	//Check fixed point
+	u32 pv = *(rt++);
+	u32 px = pv & 0xFFFF0000;
+	u32 py = pv << 16;
+	u32 pz = *(rt++) & 0xFFFF0000;
+
+	//Check fixed point
+	u32 cv = *(rt++);
+	u32 cx = cv & 0xFFFF0000;
+	u32 cy = cv << 16;
+	u32 cz = *(rt++) & 0xFFFF0000;
+
+	u32 mx = *(rt++);
+	u32 my = *(rt++);
+
+	// Check for normal screen
+	// A = can be anything
+	// either E is zero or DeltaY is zero, we cant have both
+	// B = C = D = F = DeltaXst =  0
+#if 0
+	if ( //(e ^ dy)
+		(b ^ 0) | (c ^ 0) | (d ^ 0) | (f ^ 0) | (rot_a.dxst ^ 0)) {
+		// we can calculate scroll and increments
+		u32 kx = *(rt++);
+		u32 ky = *(rt++);
+
+		x_scroll = fix_mul(kx, fix_mul(a, rot_a.x_st - px)) + fix_mul(a, px - cx) + cx + mx;
+		y_scroll = fix_mul(ky, fix_mul(e, rot_a.y_st - py)) + fix_mul(b, py - cy) + cy + my;
+		x_inc = fix_mul(ky, fix_mul(e, dx));
+		y_inc = fix_mul(ky, fix_mul(e, rot_a.dyst));
+		return 1;
+	}
+
+	//Precalc XY view coord after rotational conversion
+	rot_a.x_st -= px;
+	rot_a.y_st -= py;
+	rot_a.xp = fp_mul(a, px-cy) + fp_mul(b, py-cy) +  fp_mul(c, pz-cz) + cx + mx;
+	rot_a.yp = fp_mul(d, px-cy) + fp_mul(e, py-cy) +  fp_mul(f, pz-cz) + cy + my;
+	rot_a.dx = fp_mul(a, dx) + fp_mul(b, dy);
+	rot_a.dy = fp_mul(d, dx) + fp_mul(e, dy);
+	rot_a.czp = fp_mul(c, z_st-pz);
+	rot_a.fzp = fp_mul(f, z_st-pz);
+
+	rot_a.kx = *(rt++);
+	rot_a.ky = *(rt++);
+
+	u32 kast = *(rt++);
+	u32 dkast = *(rt++);
+	u32 dkax = *(rt++);
+#endif
+	return 0;
+}
+
+
+//Ge
+static void __genScrollTable(u32 *src_data)
+{
+	if (cell.scr_ctl & 0xE) {
+		return;
+	}
+	u32 *dst_data = line_scroll_data;
+	u32 num_lines = 256; //Use display height
+	u32 scx_inc = (cell.scr_ctl >> 1) & 1;
+	u32 scy_inc = (cell.scr_ctl >> 2) & 1;
+	u32 zmx_inc = (cell.scr_ctl >> 3) & 1;
+
+	u32 scx_mask = -(scx_inc);
+	u32 scy_mask = -(scy_inc);
+	u32 zmx_mask = -(zmx_inc);
+	u32 repeat = 1 << ((cell.scr_ctl >> 4) & 3);
+	u32 xval = cell.xscroll;
+	u32 yval = cell.yscroll;
+	while (num_lines) {
+		//Horizontal coords
+		u32 xdat = (((*src_data >> 8) + xval) & scx_mask) | (cell.xscroll & ~scx_mask);
+		src_data += scx_inc;
+		//Vertical coords
+		u32 ydat = (((*src_data >> 8) + yval) & scy_mask) | (cell.yscroll & ~scy_mask);
+		src_data += scy_inc;
+		//Vertical increment
+		u32 sdat = ((*src_data >> 8) & zmx_mask) | (cell.xinc & ~zmx_mask);
+		src_data += zmx_inc;
+		//Store repeating data
+		for (u32 i = 0, ypos = 0; i < repeat; ++i, ypos += cell.yinc) {
+			*(dst_data++) = xdat;
+			*(dst_data++) = ydat + ypos; // increment y coords
+			*(dst_data++) = sdat;
+		}
+		yval += cell.yinc;
+		xval += cell.xinc;
+		num_lines -= repeat;
+	}
+}
+
+
+static void __convert32bpp(u32 *dst, u32 *src, u32 dst_w, u32 dst_h, u32 src_w, u32 offset)
+{
+	u32 *scr_data = line_scroll_data;
+	u32 *d0 = dst;
+	u32 *d1 = dst + 2;
+	u32 *d2 = dst + 4;
+	u32 *d3 = dst + 6;
+
+	u32 *d_r0 = dst + 8;
+	u32 *d_r1 = dst + 10;
+	u32 *d_r2 = dst + 12;
+	u32 *d_r3 = dst + 14;
+
+#if 0 //USE SCROLL
+	u32 *s0 = src;
+	u32 *s1 = s0 + src_w;
+	u32 *s2 = s1 + src_w;
+	u32 *s3 = s2 + src_w;
+
+	u32 src_inc = (src_w - dst_w) + (src_w * 3);
+
+	for (u32 i = 0; i < dst_h; i+=4) {
+		for (u32 k = 0; k < dst_w; k+= 4) {
+			// one tile
+			for (u32 j = 0; j < 2; j++) {
+				u32 v00 = *(s0++); u32 v10 = *(s1++); u32 v20 = *(s2++); u32 v30 = *(s3++);
+				u32 v01 = *(s0++); u32 v11 = *(s1++); u32 v21 = *(s2++); u32 v31 = *(s3++);
+				u32 t0 = v00; u32 t1 = v10; u32 t2 = v20; u32 t3 = v30;
+
+				v00 = (v00 & ~0xFFFF) | ((v01 >> 16) & 0xFFFF); v01 = (v01 & 0xFFFF) | ((t0 << 16) & ~0xFFFF);
+				v10 = (v10 & ~0xFFFF) | ((v11 >> 16) & 0xFFFF); v11 = (v11 & 0xFFFF) | ((t1 << 16) & ~0xFFFF);
+				v20 = (v20 & ~0xFFFF) | ((v21 >> 16) & 0xFFFF); v21 = (v21 & 0xFFFF) | ((t2 << 16) & ~0xFFFF);
+				v30 = (v30 & ~0xFFFF) | ((v31 >> 16) & 0xFFFF); v31 = (v31 & 0xFFFF) | ((t3 << 16) & ~0xFFFF);
+				*(d0++) = v00; *(d_r0++) = v01;
+				*(d1++) = v10; *(d_r1++) = v11;
+				*(d2++) = v20; *(d_r2++) = v21;
+				*(d3++) = v30; *(d_r3++) = v31;
+			}
+			//Move to next tile
+			d0 += 14; d1 += 14; d2 += 14; d3 += 14;
+			d_r0 += 14; d_r1 += 14; d_r2 += 14; d_r3 += 14;
+		}
+		//Move to next 4 lines
+		s0 += src_inc; s1 += src_inc; s2 += src_inc; s3 += src_inc;
+	}
+#else
+	u32 x_inc;
+	u32 *s0 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+	x_inc = *(scr_data++);
+	u32 *s1 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+	x_inc = *(scr_data++);
+	u32 *s2 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+	x_inc = *(scr_data++);
+	u32 *s3 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+	x_inc = *(scr_data++);
+
+	u32 src_inc = (src_w - dst_w) + (src_w * 3);
+
+	for (u32 i = 0; i < dst_h; i+=4) {
+		for (u32 k = 0; k < dst_w; k+= 4) {
+			// one tile
+			for (u32 j = 0; j < 2; j++) {
+				u32 v00 = *(s0++); u32 v10 = *(s1++); u32 v20 = *(s2++); u32 v30 = *(s3++);
+				u32 v01 = *(s0++); u32 v11 = *(s1++); u32 v21 = *(s2++); u32 v31 = *(s3++);
+				u32 t0 = v00; u32 t1 = v10; u32 t2 = v20; u32 t3 = v30;
+
+				v00 = (v00 & ~0xFFFF) | ((v01 >> 16) & 0xFFFF); v01 = (v01 & 0xFFFF) | ((t0 << 16) & ~0xFFFF);
+				v10 = (v10 & ~0xFFFF) | ((v11 >> 16) & 0xFFFF); v11 = (v11 & 0xFFFF) | ((t1 << 16) & ~0xFFFF);
+				v20 = (v20 & ~0xFFFF) | ((v21 >> 16) & 0xFFFF); v21 = (v21 & 0xFFFF) | ((t2 << 16) & ~0xFFFF);
+				v30 = (v30 & ~0xFFFF) | ((v31 >> 16) & 0xFFFF); v31 = (v31 & 0xFFFF) | ((t3 << 16) & ~0xFFFF);
+				*(d0++) = v00; *(d_r0++) = v01;
+				*(d1++) = v10; *(d_r1++) = v11;
+				*(d2++) = v20; *(d_r2++) = v21;
+				*(d3++) = v30; *(d_r3++) = v31;
+			}
+			//Move to next tile
+			d0 += 14; d1 += 14; d2 += 14; d3 += 14;
+			d_r0 += 14; d_r1 += 14; d_r2 += 14; d_r3 += 14;
+		}
+		//Move to next 4 lines
+		//s0 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+		//x_inc = *(scr_data++);
+		//s1 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+		//x_inc = *(scr_data++);
+		//s2 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+		//x_inc = *(scr_data++);
+		//s3 = src + ((*(scr_data++) >> 8) * src_w + (*(scr_data++) >> 8));
+		//x_inc = *(scr_data++);
+	}
+#endif
+	//Flush cache
+	DCFlushRange(dst, dst_w * dst_h * 4);
+}
 
 
 extern u32 *tlut_data;
@@ -84,8 +335,42 @@ void SGX_Vdp2Init(void)
 	//Set initial matrix
 	guMtxIdentity(vdp2mtx);
 	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
-	prop_tex = (u8*) memalign(32, 704*512);
-	win_tex = (u8*) memalign(32, 704*256);
+	prop_tex = (u8*) memalign(32, 704*512); //TODO: This is accounted for in 1st image so remove
+	win_tex = (u8*) memalign(32, 704*256); //TODO: This should be half the size
+	//Sreens (704*256 max) [4 SCROLL]
+	//for each screen: ARGB1555 (2 bytes) & ZA [1/2 byte] (only when per pixel Z or when per pixel A)
+	screen_tex = (u8*) memalign(32, 704*240*4*3);
+	//Images (704*512 max) [1st image, 2nd image]
+	//1st Image: ARGB1555 (2 bytes) + Z (1 byte)
+	//2nd Image: ARGB1555 (2 bytes) + A (1 byte, can be from 1st image or 2nd image)
+	image_tex = (u8*) memalign(32, 704*512*6);
+}
+
+static void __Vdp2CopyBackground(u32 bg_id)
+{
+	switch(bg_id) {
+		case 0: {	//Normal BG 0
+			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
+			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
+			GX_CopyTex(screen_tex + (704*256*2*0), GX_TRUE);
+		} break;
+		case 1: {	//Normal BG 1
+			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
+			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
+			GX_CopyTex(screen_tex + (704*256*2*1), GX_TRUE);
+		} break;
+		case 2: {	//Normal BG 2
+			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
+			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
+			GX_CopyTex(screen_tex + (704*256*2*2), GX_TRUE);
+		} break;
+		case 3: {	//Normal BG 3
+			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
+			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
+			GX_CopyTex(screen_tex + (704*256*2*3), GX_TRUE);
+		} break;
+	}
+	//GX_PixModeSync(); //Not necesary?
 }
 
 
@@ -251,6 +536,7 @@ static void __Vdp2SetPatternData(void)
 
 static void __Vdp2ReadNBG(u32 bg_id)
 {
+	u32 map_offset = 0;
 	switch(bg_id) {
 		case 0: {	//Normal BG 0
 			cell.disp_ctl = Vdp2Regs->BGON;
@@ -260,14 +546,19 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.spec_pri = (Vdp2Regs->SFPRMD >> 0) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN0) << 8) | (((u32)Vdp2Regs->SCXDN0) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN0) << 8) | (((u32)Vdp2Regs->SCYDN0) >> 8);
+			cell.xinc = ((u32)Vdp2Regs->ZMXN0.all) >> 8;
+			cell.yinc = ((u32)Vdp2Regs->ZMYN0.all) >> 8;
 			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x70;
-			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
+			u32 map_shft = 11 + ((((cell.char_ctl << 1) & 2) | ((cell.ptrn_supp >> 15) & 1)) ^ 3);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 0) & 0x7) << 6;
 			cell.pri = ((Vdp2Regs->PRINA & 0x7) << 4) | PRI_NGB0;
-			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[0] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[1] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[2] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[3] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN0 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.scr_ctl = Vdp2Regs->SCRCTL;
+			u32 *scroll_data = (u32*) (Vdp2Ram + ((Vdp2Regs->LSTA0.all) << 1));
+			__genScrollTable(scroll_data);
 			//TODO: add RBG1
 		} break;
 		case 1: {	//Normal BG 1
@@ -278,14 +569,19 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.spec_pri = (Vdp2Regs->SFPRMD >> 2) & 0x3;
 			cell.xscroll = (((u32)Vdp2Regs->SCXIN1) << 8) | (((u32)Vdp2Regs->SCXDN1) >> 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYIN1) << 8) | (((u32)Vdp2Regs->SCYDN1) >> 8);
+			cell.xinc = ((u32)Vdp2Regs->ZMXN1.all) >> 8;
+			cell.yinc = ((u32)Vdp2Regs->ZMYN1.all) >> 8;
 			cell.cram_offset = (Vdp2Regs->CRAOFA) & 0x70;
-			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
+			u32 map_shft = 11 + ((((cell.char_ctl << 1) & 2) | ((cell.ptrn_supp >> 15) & 1)) ^ 3);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 4) & 0x7) << 6;
 			cell.pri = (((Vdp2Regs->PRINA >> 8) & 0x7) << 4) | PRI_NGB1;
-			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[0] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[1] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[2] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[3] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN1 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.scr_ctl = Vdp2Regs->SCRCTL >> 8;
+			u32 *scroll_data = (u32*) (Vdp2Ram + ((Vdp2Regs->LSTA1.all) << 1));
+			__genScrollTable(scroll_data);
 		} break;
 		case 2: {	//Normal BG 2
 			cell.disp_ctl = Vdp2Regs->BGON >> 2;
@@ -296,13 +592,13 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.xscroll = (((u32)Vdp2Regs->SCXN2) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN2) << 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 4) & 0x70;
-			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
+			u32 map_shft = 11 + ((((cell.char_ctl << 1) & 2) | ((cell.ptrn_supp >> 15) & 1)) ^ 3);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 8) & 0x7) << 6;
 			cell.pri = ((Vdp2Regs->PRINB & 0x7) << 4) | PRI_NGB2;
-			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[0] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[1] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[2] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[3] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN2 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
 		} break;
 		case 3: {	//Normal BG 3
 			cell.disp_ctl = Vdp2Regs->BGON >> 3;
@@ -313,26 +609,67 @@ static void __Vdp2ReadNBG(u32 bg_id)
 			cell.xscroll = (((u32)Vdp2Regs->SCXN3) << 8);
 			cell.yscroll = (((u32)Vdp2Regs->SCYN3) << 8);
 			cell.cram_offset = (Vdp2Regs->CRAOFA >> 8) & 0x70;
-			u32 map_shft = 11 + (((cell.char_ctl << 1) & 2) ^ 2) + (((cell.ptrn_supp >> 15) & 1) ^ 1);
+			u32 map_shft = 11 + ((((cell.char_ctl << 1) & 2) | ((cell.ptrn_supp >> 15) & 1)) ^ 3);
 			u32 map_offset = ((((u32)Vdp2Regs->MPOFN) >> 12) & 0x7) << 6;
 			cell.pri = (((Vdp2Regs->PRINB >> 8) & 0x7) << 4) | PRI_NGB3;
-			cell.map_addr[0] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[1] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[2] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
-			cell.map_addr[3] = Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00);
+			cell.map_addr[0] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[1] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[2] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[3] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDN3 >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
 		} break;
 		case 4: {	//Rotation BG
 			cell.disp_ctl = Vdp2Regs->BGON >> 4;
 			cell.char_ctl = (Vdp2Regs->CHCTLB >> 8) & 0x7F;
 			cell.ptrn_supp = Vdp2Regs->PNCR;
+			cell.plane_mask = (Vdp2Regs->PLSZ >> 8) & 0x3; // This is per, Rotation parameter, only A is used, for B: (Vdp2Regs->PLSZ >> 12) & 0x3
+			cell.spec_pri = (Vdp2Regs->SFPRMD >> 8) & 0x3;
+			//TODO: these are set elsewhere
+			cell.xscroll = 0; cell.xinc = 0;
+			cell.yscroll = 0; cell.xinc = 0;
+			cell.cram_offset = (Vdp2Regs->CRAOFA << 4) & 0x70;
+			u32 map_shft = 11 + ((((cell.char_ctl << 1) & 2) | ((cell.ptrn_supp >> 15) & 1)) ^ 3);
+			u32 map_offset = ((((u32)Vdp2Regs->MPOFR) >> 0) & 0x7) << 6; // This is per, Rotation parameter, only A is used, for B: ((((u32)Vdp2Regs->MPOFR) >> 4) & 0x7) << 6
+			cell.pri = (((Vdp2Regs->PRIR >> 0) & 0x7) << 4) | PRI_RGB0;
+			cell.map_addr[0]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[1]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPABRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[2]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[3]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPCDRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[4]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPEFRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[5]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPEFRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[6]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPGHRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[7]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPGHRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[8]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPIJRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[9]  = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPIJRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[10] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPKLRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[11] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPKLRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[12] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPMNRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[13] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPMNRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[14] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPOPRA >> 0) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
+			cell.map_addr[15] = (u32*) (Vdp2Ram + (((map_offset | (((Vdp2Regs->MPOPRA >> 8) & 0x3F) & ~cell.plane_mask)) << map_shft) & 0x7FF00));
 			//TODO: RBG are not drawn yet
 		} break;
 	}
-	//TODO:Check if bitmap is used
+
 	cell.color_fmt = (cell.char_ctl >> 4) & 0x7;
-	if (!(cell.char_ctl & 0x2)) {
+	if (!(cell.char_ctl & 0x2)) { //Is in Cell format
 		cell.char_size = ((cell.char_ctl << 3) & 0x8) + 8;
 		__Vdp2SetPatternData();
+	} else { // Is in Bitmap format
+		u32 bm_palreg = 0;
+		switch(bg_id) {
+			case 0: {	//Normal BG 0
+				bm_palreg = Vdp2Regs->BMPNA;
+			} break;
+			case 1: {	//Normal BG 1
+				bm_palreg = Vdp2Regs->BMPNA >> 8;
+			} break;
+			case 4: {	//Rotation BG
+				bm_palreg = Vdp2Regs->BMPNB;
+			} break;
+		}
+		cell.ptrn_supp = (bm_palreg & 0x7) << 8;
+		cell.map_addr[0] = (u32*) (Vdp2Ram + ((map_offset << 11) & 0x7FF00));
+		//TODO: Get PRI and CC bits
 	}
 }
 
@@ -343,7 +680,83 @@ static void SGX_Vdp2DrawCell(void)
 
 static void SGX_Vdp2DrawBitmap(void)
 {
+	GX_SetCurrentMtx(MTX_IDENTITY);
 
+	//TODO: add scaling and screen dims to the format
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
+	u32 scroll_x = cell.xscroll;
+	u32 scroll_y = cell.yscroll;
+	//GX_SetPointSize(cell.char_size * 6, GX_TO_ONE);
+	u32 bm_mode = 0;
+	u32 bm_wdith = 512 << bm_mode;
+	u32 bm_height = 256;
+	switch (cell.color_fmt) {
+		case 0:{ // 4bpp
+			SGX_BeginVdp2Bitmap(GX_TF_CI4, bm_wdith, bm_height);
+			SGX_BitmapConverterSet(bm_mode, SPRITE_4BPP);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_4bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 1: { // 8bpp
+			SGX_BeginVdp2Bitmap(GX_TF_CI8, bm_wdith, bm_height);
+			SGX_BitmapConverterSet(bm_mode, SPRITE_8BPP);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_8bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 2: { // 16bpp (11 bits used)
+			SGX_BeginVdp2Bitmap(GX_TF_CI14, bm_wdith, bm_height);
+			SGX_BitmapConverterSet(bm_mode, SPRITE_16BPP);
+			SGX_LoadTlut(cram_11bpp, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 3: { // 16bpp (RGBA)
+			SGX_BeginVdp2Bitmap(GX_TF_RGB5A3, bm_wdith, bm_height);
+			SGX_BitmapConverterSet(bm_mode, SPRITE_16BPP);
+		} break;
+		case 4: { // 32bpp (RGBA)
+			//Does nothing
+			SGX_BeginVdp2Bitmap(GX_TF_RGBA8, vdp2_disp_w, vdp2_disp_h);
+		} break;
+	}
+
+	//TODO: Set the correct palette values and texture address
+	u32 pal = ((cell.ptrn_supp) >> 16) & 0x7F;
+	u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(cell.map_addr[0]) >> 5);
+	u32 tlut_addr = 0x98000000 | TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM0 | pal;
+	//Set texture addr, tlut and Z offset from priority value
+	GX_LOAD_BP_REG(tex_maddr);
+	GX_LOAD_BP_REG(tlut_addr);
+	//GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
+	//wgPipe->F32 = (f32) (16777216 - (cell.pri)); //;| ((prcc >> 25) & 0x10)));
+	//GX_LOAD_XF_REGS(0x1025, 1); //Set the Projection registers
+	//wgPipe->F32 = - (0.00000006f * (cell.pri | ((prcc >> 25) & 0x10)));
+	if (cell.color_fmt != 4) {
+		u32 scroll_w = scroll_x + vdp2_disp_w;
+		u32 scroll_h = scroll_y + vdp2_disp_h;
+		GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT1, 4);
+			GX_Position2s16(          0,           0); GX_TexCoord2u16(scroll_x, scroll_y);
+			GX_Position2s16(vdp2_disp_w,           0); GX_TexCoord2u16(scroll_w, scroll_y);
+			GX_Position2s16(          0, vdp2_disp_h); GX_TexCoord2u16(scroll_x, scroll_h);
+			GX_Position2s16(vdp2_disp_w, vdp2_disp_h); GX_TexCoord2u16(scroll_w, scroll_h);
+		GX_End();
+	} else { // 32bpp bitmap
+		u32 bm_offset = (scroll_y * bm_wdith) + scroll_x;
+		//Convert rtexture
+		//__convert32bpp((u32*)screen_tex,(u32*)cell.map_addr[0], vdp2_disp_w, vdp2_disp_h, bm_wdith, 0);
+		//tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(screen_tex) >> 5);
+		//GX_LOAD_BP_REG(tex_maddr);
+
+		GX_SetNumIndStages(0);
+		GX_SetTevDirect(GX_TEVSTAGE0);
+
+		//First pass, create the texture
+		GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT1, 4);
+			GX_Position2s16(          0,           0); GX_TexCoord2u16(          0,           0);
+			GX_Position2s16(vdp2_disp_w,           0); GX_TexCoord2u16(vdp2_disp_w,           0);
+			GX_Position2s16(          0, vdp2_disp_h); GX_TexCoord2u16(          0, vdp2_disp_h);
+			GX_Position2s16(vdp2_disp_w, vdp2_disp_h); GX_TexCoord2u16(vdp2_disp_w, vdp2_disp_h);
+		GX_End();
+	}
 }
 
 /*Draws a simple Cell background:
@@ -357,15 +770,18 @@ static void SGX_Vdp2DrawBitmap(void)
  * No line scroll
  * No vertical cell scroll function
  */
+#define USE_POINTS 1
+
 static void SGX_Vdp2DrawCellSimple(void)
 {
 	guMtxIdentity(vdp2mtx);
-	guMtxScale(vdp2mtx, cell.char_size, cell.char_size, 0.0f);
 	u32 char_ofs_mask = (cell.char_size << 8) - 1;
 	//TODO: When scaling we must leave only integer values if we dont
 	//want to worry with artifacts
-	vdp2mtx[0][3] = -(((f32)((cell.xscroll & char_ofs_mask) >> 8)));
-	vdp2mtx[1][3] = -(((f32)((cell.yscroll & char_ofs_mask) >> 8)));
+	vdp2mtx[0][0] = vdp2mtx[1][1] = cell.char_size;
+	vdp2mtx[2][2] = -1.0f;
+	vdp2mtx[0][3] = -(((f32)((cell.xscroll & char_ofs_mask) >> 8))) + (cell.char_size >> 1);
+	vdp2mtx[1][3] = -(((f32)((cell.yscroll & char_ofs_mask) >> 8))) + (cell.char_size >> 1);
 	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
 	GX_SetCurrentMtx(MTX_VDP2_POS_BG);
 
@@ -377,7 +793,120 @@ static void SGX_Vdp2DrawCellSimple(void)
 	u32 y_max = (vdp2_disp_h / cell.char_size) + 1;
 
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, cell.char_size, cell.char_size);
-	//GX_SetPointSize(cell.char_size * 6, GX_TO_ONE);
+#if USE_POINTS
+	GX_SetPointSize(cell.char_size * 6, GX_TO_ONE);
+#endif
+
+	switch (cell.color_fmt) {
+		case 0:{ // 4bpp
+			SGX_BeginVdp2Scroll(GX_TF_CI4, cell.char_size);
+			GX_SetNumIndStages(0);
+			GX_SetTevDirect(GX_TEVSTAGE0);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_4bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 1: { // 8bpp
+			SGX_BeginVdp2Scroll(GX_TF_CI8, cell.char_size);
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_8BPP);
+			u8 *cram_tlut = (cell.disp_ctl & 0x100 ? cram_11bpp : cram_8bpp);
+			SGX_LoadTlut(cram_tlut, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 2: { // 16bpp (11 bits used)
+			SGX_BeginVdp2Scroll(GX_TF_CI14, cell.char_size);
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_16BPP);
+			SGX_LoadTlut(cram_11bpp, TLUT_SIZE_2K | TLUT_INDX_CRAM0);
+		} break;
+		case 3: { // 16bpp (RGBA)
+			SGX_CellConverterSet(cell.char_size >> 4, SPRITE_16BPP);
+			SGX_BeginVdp2Scroll(GX_TF_RGB5A3, cell.char_size);
+		} break;
+		case 4: { // 32bpp (RGBA)
+			SGX_BeginVdp2Scroll(GX_TF_RGBA8, cell.char_size);
+		} break;
+	}
+
+	for (u32 j = 0; j < y_max; ++j) {
+		u32 y = j + y_tile;
+		u32 yaddr = ((y & cell.page_mask) | ((y & (cell.page_mask+1)) << 1)) << cell.page_shft;
+		u32 ymap = ((y >> cell.ymap_shft) & 2);
+		for (u32 i = 0; i < x_max; ++i) {
+			u32 x = i + x_tile;
+			//Get pattern data
+			u32 xaddr = ((x & cell.page_mask) | ((x & (cell.page_mask+1)) << cell.page_shft));
+			u32 addr = (yaddr | xaddr) & cell.plane_mask;
+			u32 map = ymap | ((x >> cell.xmap_shft) & 1);
+
+#if 1
+			u32 bpp = (cell.ptrn_supp >> 15) & 1;
+			//u32 ptrn = *((u32*) (cell.map_addr[map] + ((addr & ~bpp) << 2))) >> ((bpp & ~addr) << 4);
+			u32 ptrn = cell.map_addr[map][addr & ~bpp] >> ((bpp & ~addr) << 4);
+#else
+			u32 ptrn;
+			if (cell.ptrn_supp & 0x8000) {
+				ptrn = *((u16*) (cell.map_addr[map] + (addr << 1)));
+			} else {
+				ptrn = *((u32*) (cell.map_addr[map] + (addr << 2)));
+			}
+#endif
+			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
+			flip = ((flip << 8) & 0x100) | (flip >> 1);
+			u32 prcc = (ptrn + cell.ptrn_supp) & cell.ptrn_mask;
+			u32 pal = ((((ptrn << cell.ptrn_pal_shft) & cell.ptrn_mask) + cell.ptrn_supp) >> 16) & 0x7F;
+			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
+			u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(Vdp2Ram + chr) >> 5);
+			u32 tlut_addr = 0x98000000 | TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM0 | pal;
+			//u32 vert = (((i & 0xFF) << 24) | ((j & 0xFF) << 16));
+			u32 vert = (((i & 0xFF) << 8) | ((j & 0xFF) << 0));
+
+			//Set texture addr, tlut and Z offset from priority value
+			GX_LOAD_BP_REG(tex_maddr);
+			GX_LOAD_BP_REG(tlut_addr);
+			//GX_LOAD_XF_REGS(0x101C, 1); //Set the Viewport Z
+			//wgPipe->F32 = (f32) (16777216 - (cell.pri | ((prcc >> 25) & 0x10)));
+			u32 pri = cell.pri | ((prcc >> 25) & 0x10);
+			u32 val = (((chr >> 5) & 0x7F) << 8) | ((chr >> (5+8)) & 0x7F);
+#if	USE_POINTS
+			// X:8 Y:8 Z:8 T:16
+			GX_Begin(GX_POINTS, GX_VTXFMT5, 1);
+				wgPipe->U16 = vert;
+				wgPipe->U8  = pri;
+				wgPipe->U16 = flip;
+			GX_End();
+#else
+			GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT5, 4);
+			//GX_Begin(GX_POINTS, GX_VTXFMT5, 1);
+			//wgPipe->U8 = GX_QUADS | GX_VTXFMT5;
+			//wgPipe->U16 = 4;
+				wgPipe->U32 = vert + flip;
+				wgPipe->U32 = vert + (0x01000100 ^ flip);
+				wgPipe->U32 = vert + (0x00010001 ^ flip);
+				wgPipe->U32 = vert + (0x01010101 ^ flip);
+			GX_End();
+#endif
+		}
+	}
+}
+
+/*
+ * Draws a complex Cell background that adds LineScroll and Vertical cell scroll
+ */
+static void SGX_Vdp2DrawCellLineScroll(void)
+{
+	guMtxIdentity(vdp2mtx);
+	//guMtxScale(vdp2mtx, cell.char_size, cell.char_size, 0.0f);
+	//u32 char_ofs_mask = (cell.char_size << 8) - 1;
+	//TODO: When scaling we must leave only integer values if we dont
+	//want to worry with artifacts
+	//vdp2mtx[0][3] = -(((f32)((cell.xscroll & char_ofs_mask) >> 8))) + 4;
+	//vdp2mtx[1][3] = -(((f32)((cell.yscroll & char_ofs_mask) >> 8))) + 4;
+	GX_LoadPosMtxImm(vdp2mtx, MTX_VDP2_POS_BG);
+	GX_SetCurrentMtx(MTX_VDP2_POS_BG);
+
+	//TODO: add scaling and screen dims to the format
+
+	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
+	//only 1 pixel line (test)
+	GX_SetLineWidth(6, GX_TO_ONE);
 
 	switch (cell.color_fmt) {
 		case 0:{ // 4bpp
@@ -408,23 +937,39 @@ static void SGX_Vdp2DrawCellSimple(void)
 	}
 
 
-	for (u32 j = 0; j < y_max; ++j) {
-		u32 y = j + y_tile;
-		u32 yaddr = ((y & cell.page_mask) | ((y & (cell.page_mask+1)) << 1)) << cell.page_shft;
-		u32 ymap = ((y >> cell.ymap_shft) & 2);
+	//TODO: USe char_size 8->3, 16->4
+	const u32 char_size = 8 + (3 + (cell.char_size >> 4));
+	//TODO: Dont use vdp2_disp_h when rendering to texture, this is for initial test
+	u32 *scr_data = line_scroll_data;
+	for (u32 j = 0; j < vdp2_disp_h; ++j) {
+		u32 x_scroll = *(scr_data++);
+		u32 y_scroll = *(scr_data++);
+		u32 x_inc = *(scr_data++);
+		u32 x_max = (vdp2_disp_w / (u32) x_inc) + 1;
+		//TODO: Set the projection matrix for Y and X coord position and scale
+		SGX_SetLineScroll(x_scroll, x_inc, j);
 		for (u32 i = 0; i < x_max; ++i) {
-			u32 x = i + x_tile;
-			//Get pattern data
-			u32 xaddr = ((x & cell.page_mask) | ((x & (cell.page_mask+1)) << cell.page_shft));
-			u32 addr = (yaddr | xaddr) & cell.plane_mask;
-			u32 map = ymap | ((x >> cell.xmap_shft) & 1);
+			u32 y = y_scroll >> char_size;
+			u32 x = x_scroll >> char_size;
 
+			//Get pattern data
+			u32 yaddr = ((y & cell.page_mask) | ((y & (cell.page_mask+1)) << 1) | (x & (cell.page_mask+1))) << cell.page_shft;
+			u32 xaddr = x & cell.page_mask;
+			u32 addr = (yaddr | xaddr) & cell.plane_mask;
+			u32 map = ((y >> cell.ymap_shft) & 2) | ((x >> cell.xmap_shft) & 1);
+
+#if 0
+			u32 bpp = (cell.ptrn_supp >> 15);
+			u32 ptrn = *((u32*) (cell.map_addr[map] + (addr << (bpp + 1)))) >> (bpp << 4);
+#else
 			u32 ptrn;
 			if (cell.ptrn_supp & 0x8000) {
 				ptrn = *((u16*) (cell.map_addr[map] + (addr << 1)));
 			} else {
 				ptrn = *((u32*) (cell.map_addr[map] + (addr << 2)));
 			}
+#endif
+
 			u32 flip = (ptrn >> cell.ptrn_flip_shft) & 0x3;
 			flip = ((flip << 8) & 0x100) | (flip >> 1);
 			u32 prcc = (ptrn + cell.ptrn_supp) & cell.ptrn_mask;
@@ -432,7 +977,7 @@ static void SGX_Vdp2DrawCellSimple(void)
 			u32 chr = ((((ptrn << cell.ptrn_chr_shft) & cell.ptrn_mask) + cell.ptrn_supp) << 5) & 0x7FFE0;
 			u32 tex_maddr = 0x94000000 | (MEM_VIRTUAL_TO_PHYSICAL(Vdp2Ram + chr) >> 5);
 			u32 tlut_addr = 0x98000000 | TLUT_FMT_RGB5A3 | TLUT_INDX_CRAM0 | pal;
-			u32 vert = (((i & 0xFF) << 24) | ((j & 0xFF) << 16));
+			u32 vert = (i & 0xFF) << 24;
 
 			//Set texture addr, tlut and Z offset from priority value
 			GX_LOAD_BP_REG(tex_maddr);
@@ -442,18 +987,14 @@ static void SGX_Vdp2DrawCellSimple(void)
 			//GX_LOAD_XF_REGS(0x1025, 1); //Set the Projection registers
 			//wgPipe->F32 = - (0.00000006f * (cell.pri | ((prcc >> 25) & 0x10)));
 
-
-			GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT5, 4);
-			//GX_Begin(GX_POINTS, GX_VTXFMT5, 1);
-			//wgPipe->U8 = GX_QUADS | GX_VTXFMT5;
-			//wgPipe->U16 = 4;
-				wgPipe->U32 = vert ^ flip;
+			// TODO: Use another type of vertex format
+			GX_Begin(GX_LINES, GX_VTXFMT5, 2);
+				wgPipe->U32 = vert + flip;
 				wgPipe->U32 = vert + (0x01000100 ^ flip);
-				wgPipe->U32 = vert + (0x00010001 ^ flip);
-				wgPipe->U32 = vert + (0x01010101 ^ flip);
 			GX_End();
 		}
 	}
+	SVI_ResetViewport();
 }
 
 static void __SGX_DrawWindow(u32 win_ctl, u16 *win_pos)
@@ -611,7 +1152,23 @@ void SGX_Vdp2GenCRAM(void) {
 void SGX_Vdp2Draw(void)
 {
 	GX_SetScissor(0, 0, vdp2_disp_w, vdp2_disp_h);
-	//Check for enabled screens
+	// Check for enabled screens and create bit mask
+	// stores screen bits as
+
+	/*
+		1.Draw all scroll screens and store
+		2.Draw Top image normally and obtain highest priority
+		3.draw all screens again in Order below highest priority
+		5. add line screen
+		4. draw top image over the result
+		Create an array of 48 values,
+		each value is a screen in the following repeating order:
+		NBG3 -> NBG2 -> NBG1 -> NBG0 -> RBG3 -> SPR
+		For each scroll screen if special priority is happening then
+		move from one repeating pattern to it's next value, if
+		while moving we see another screen tthat must be shown then
+	*/
+	u32 screen_bits = 0;
 	u32 scr_pri = 0;
 	u32 scr_enable = 0;
 	// If NBG0 16M mode is enabled, don't draw
@@ -722,7 +1279,6 @@ void SGX_Vdp2Draw(void)
 	//Copy z-buffer as priority and apply Color offset and shadow
 	__Vdp2DrawColorOffset();
 	//Copy the screens to texture...
-	SVI_CopyFrame();
 }
 
 

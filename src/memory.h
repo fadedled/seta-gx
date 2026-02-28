@@ -23,7 +23,6 @@
 
 #include <stdlib.h>
 #include "core.h"
-//#include "sh2core.h"
 
 /* Type 1 Memory, faster for byte (8 bits) accesses */
 
@@ -270,13 +269,21 @@ void FASTCALL mem_Write16(u32 addr, u16 val);
 void FASTCALL mem_Write32(u32 addr, u32 val);
 */
 
-
+#ifdef USE_SH2_OLD
 u8 FASTCALL mem_Read8(u32 addr);
 u16 FASTCALL mem_Read16(u32 addr);
 u32 FASTCALL mem_Read32(u32 addr);
 void FASTCALL mem_Write8(u32 addr, u8 val);
 void FASTCALL mem_Write16(u32 addr, u16 val);
 void FASTCALL mem_Write32(u32 addr, u32 val);
+#else
+#define mem_Read8(addr)		(mem_read8_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
+#define mem_Read16(addr)	(mem_read16_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
+#define mem_Read32(addr)	(mem_read32_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
+#define mem_Write8(addr, val)	(mem_write8_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
+#define mem_Write16(addr, val)	(mem_write16_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
+#define mem_Write32(addr, val)	(mem_write32_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
+#endif
 
 u8 FASTCALL mem_ReadNoCache8(u32 addr);
 u16 FASTCALL mem_ReadNoCache16(u32 addr);
@@ -346,6 +353,7 @@ extern u8 *SoundRam;
 
 int LoadBios(const char *filename);
 int LoadBackupRam(const char *filename);
+int SaveBackupRam(const char *filename);
 void FormatBackupRam(void *mem, u32 size);
 u32 getMemClock(u32 addr);
 

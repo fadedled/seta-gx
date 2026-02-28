@@ -45,7 +45,11 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include "scu.h"
 #include "debug.h"
 #include "memory.h"
-#include "sh2core.h"
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
 #include "yabause.h"
 #include <inttypes.h>
 
@@ -396,20 +400,25 @@ static void writeloadimdest(u8 num, u32 val)
 //Half-Done
 void dsp_dma01(scudspregs_struct *sc, u32 inst)
 {
+	u32 i;
 	u32 imm = ((inst & 0xFF));
 	u8  sel = ((inst >> 8) & 0x03);
-	//u8  addr = sc->CT[sel];
-	u32 i;
+	u32 *md = sc->MD[sel];
+	u32 ct = sc->CT[sel];// & 0x3F;
 
 	const u32 mode = (inst >> 15) & 0x7;
-	const u32 add = (1 << (mode & 0x2)) &~1;
+	const u32 add = (1 << (mode & 0x2)) & ~1;
 
-	for (i = 0; i < imm ; i++) {
-		sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)]((sc->RA0M << 2));
-		sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
-		sc->RA0M += (add >> 2);
+	u32 ra0m = sc->RA0M << 2;
+
+	for (i = 0; i < imm ; ++i) {
+		md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
+		++ct;
+		ra0m += add;   //sc->RA0M += (add >> 2);
 	}
 
+	sc->RA0M = ra0m >> 2;
+	sc->CT[sel] = ct & 0x3F;
     sc->ProgControlPort.part.T0 = 0;
     sc->RA0 = sc->RA0M;
 }
@@ -419,43 +428,46 @@ void dsp_dma_write_d0bus(scudspregs_struct *sc, int sel, int add, int count)
 {
 	int i;
 	u32 Adr = (sc->WA0M << 2) & 0x0FFFFFFF;
+	u32 *md = sc->MD[sel];
+	u32 ct = sc->CT[sel]; // & 0x3F;
 
 	// A-BUS?
 	if (Adr >= 0x02000000 && Adr < 0x05A00000) {
 		if (add > 1) add = 1;
 		WriteFunc32 write32_func = mem_write32_arr[MEM_GET_FUNC_ADDR(Adr)];
-		for (i = 0; i < count; i++) {
-			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
+		for (i = 0; i < count; ++i) {
+			u32 Val = md[ct & 0x3F];
 			Adr = (sc->WA0M << 2);
 			write32_func(Adr, Val);
-			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
+			++ct;
 			sc->WA0M += add;
 		}
 	} // B-BUS?
 	else if (Adr >= 0x05A00000 && Adr < 0x06000000){
-		if (add == 0) add = 1;
+		if (add == 0) add = 1 << 2;
 		WriteFunc16 write16_func = mem_write16_arr[MEM_GET_FUNC_ADDR(Adr)];
-		for (i = 0; i < count; i++) {
-			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
+		for (i = 0; i < count; ++i) {
+			u32 Val = md[ct & 0x3F];
 			write16_func(Adr, (Val>>16));
 			write16_func(Adr+2, Val);
-			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
-			Adr += (add << 2);
+			++ct;
+			Adr += add;
 		}
-		sc->WA0M = sc->WA0M + ((add*count));
+		sc->WA0M = sc->WA0M + ((add >> 2) * count);
 	} // CPU-BUS
 	else {
 		add >>= 1;
 		if (add == 0) add = 1;
-		for (i = 0; i < count; i++) {
-			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
+		for (i = 0; i < count; ++i) {
+			u32 Val = md[ct & 0x3F];
 			Adr = (sc->WA0M << 2);
 			T2WriteLong(wram, (Adr & 0xFFFFC) | 0x100000, Val);
-			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
+			++ct;
 			sc->WA0M += add;
 		}
 	}
 
+	sc->CT[sel] = ct & 0x3F;
 	sc->WA0 = sc->WA0M;
 	sc->ProgControlPort.part.T0 = 0;
 }
@@ -474,35 +486,52 @@ void dsp_dma02(scudspregs_struct *sc, u32 inst)
 //DONE
 void dsp_dma03(scudspregs_struct *sc, u32 inst)
 {
-	u32 Counter = sc->dsp_dma_size;
+	u32 count = sc->dsp_dma_size;
 	u32 i;
-	int sel;
-
-	sel = (inst >> 8) & 0x7;
+	int sel = (inst >> 8) & 0x7;
 	int index = 0;
+	u32 *md = sc->MD[sel];
+	u32 ct = sc->CT[sel];// & 0x3F;
 
 	const u32 mode = (inst >> 15) & 0x7;
-	const u32 add = (1 << (mode & 0x2)) &~1;
+	const u32 add = (1 << (mode & 0x2)) &~1; //XXX: These make no sense
 
 	u32 abus_check = ((sc->RA0M << 2) & 0x0FF00000);
+	u32 ra0m = sc->RA0M << 2;
 
-	for (i = 0; i < Counter; i++) {
+#if 0
+	for (i = 0; i < count; i++) {
 		if (sel == 0x04) {
-			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
-			index++;
+			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
+			++index;
 		}
 		else {
-			sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
-			sc->CT[sel]++;
-			sc->CT[sel] &= 0x3F;
+			        md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
+			++ct;
 		}
-		sc->RA0M += (add >> 2);
+		ra0m += add;
 	}
+#else
+	if (sel == 0x04) {
+		for (i = 0; i < count; i++) {
+			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
+			++index;
+			ra0m += add;
+		}
+	} else {
+		for (i = 0; i < count; i++) {
+			md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
+			++ct;
+			ra0m += add;
+		}
+	}
+#endif
 
+	sc->CT[sel] = ct & 0x3F;
+	sc->RA0M += (ra0m >> 2);
 	if (!(abus_check >= 0x02000000 && abus_check < 0x05900000)){
 		sc->RA0 = sc->RA0M;
 	}
-
     sc->ProgControlPort.part.T0 = 0;
 }
 
@@ -652,12 +681,18 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
           if (dma->TransferNumber <= 0 ) {
-            SH2WriteNotify(start, dma->WriteAddress - start);
+#ifdef USE_SH2_OLD
+			SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
             return;
           }
         }
+#ifdef USE_SH2_OLD
         SH2WriteNotify(start, dma->WriteAddress - start);
-      }
+#endif
+	}
       else {
         u32 start = dma->WriteAddress;
         while ( *time > 0) {
@@ -670,12 +705,20 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
           dma->ReadAddress += dma->ReadAdd;
           dma->TransferNumber -= 4;
           if (dma->TransferNumber <= 0) {
+#ifdef USE_SH2_OLD
             SH2WriteNotify(start, dma->WriteAddress - start);
-            return;
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
           }
         }
-        SH2WriteNotify(start, dma->WriteAddress - start);
-      }
+#ifdef USE_SH2_OLD
+		SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+		sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+	}
     }
     else {
       // Fill in 32-bit units (always aligned).
@@ -689,8 +732,12 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
           if (dma->TransferNumber <= 0) {
+#ifdef USE_SH2_OLD
             SH2WriteNotify(start, dma->WriteAddress - start);
-            return;
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
           }
         }
       }
@@ -703,14 +750,22 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
           dma->WriteAddress += dma->WriteAdd;
           dma->TransferNumber -= 4;
           if (dma->TransferNumber <= 0) {
+#ifdef USE_SH2_OLD
             SH2WriteNotify(start, dma->WriteAddress - start);
-            return;
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
           }
         }
       }
       // Inform the SH-2 core in case it was a write to main RAM.
-      SH2WriteNotify(start, dma->WriteAddress - start);
-    }
+#ifdef USE_SH2_OLD
+	  SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+	sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+	}
 
   } else {
     // DMA copy
@@ -727,12 +782,20 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
         dma->ReadAddress += 2;
         dma->TransferNumber -= 2;
         if (dma->TransferNumber <= 0) {
-          SH2WriteNotify(start, dma->WriteAddress - start);
-          return;
+#ifdef USE_SH2_OLD
+			SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
         }
       }
-      SH2WriteNotify(start, dma->WriteAddress - start);
-    }
+#ifdef USE_SH2_OLD
+	  SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+		sh2_WriteNotify(start, dma->WriteAddress - start);
+ #endif
+	}
     else if (((dma->ReadAddress & 0x1FFFFFFF) >= 0x5A00000 && (dma->ReadAddress & 0x1FFFFFFF) < 0x5FF0000)) {
       u32 start = dma->WriteAddress;
       while ( *time > 0) {
@@ -743,12 +806,20 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
         dma->ReadAddress += 2;
         dma->TransferNumber -= 2;
         if (dma->TransferNumber <= 0) {
-          SH2WriteNotify(start, dma->WriteAddress - start);
-          return;
+#ifdef USE_SH2_OLD
+			SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
         }
       }
-      SH2WriteNotify(start, dma->WriteAddress - start);
-    }
+#ifdef USE_SH2_OLD
+	  SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+		sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+	}
     else {
       //u32 counter = 0;
       u32 start = dma->WriteAddress;
@@ -760,12 +831,20 @@ void SucDmaExec(scudmainfo_struct * dma, int * time ) {
         dma->WriteAddress += dma->WriteAdd;
         dma->TransferNumber -= 4;
         if (dma->TransferNumber <= 0) {
-          SH2WriteNotify(start, dma->WriteAddress - start);
-          return;
+#ifdef USE_SH2_OLD
+			SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+			sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
+			return;
         }
       }
       /* Inform the SH-2 core in case it was a write to main RAM */
-      SH2WriteNotify(start, dma->WriteAddress - start);
+#ifdef USE_SH2_OLD
+	  SH2WriteNotify(start, dma->WriteAddress - start);
+#else
+		sh2_WriteNotify(start, dma->WriteAddress - start);
+#endif
     }
 
   }  // Fill / copy
@@ -1067,8 +1146,15 @@ void ScuExec(u32 timing) {
 
                break;
             case 0x02: // Load Immediate Commands
-               if ((instruction >> 25) & 1)
-               {
+				if ((instruction >> 25) & 1) {
+					//Translate the prog control port to bits and check the conditional load
+					u32 pcp = (ScuDsp->ProgControlPort.all >> 20) & 0xF;
+					pcp = (pcp & 0x8) | ((pcp >> 1) & 0x3) | ((pcp << 2) & 0x4);
+					u32 cond = !(pcp & (instruction >> 19) & 0xF) ^ ((instruction >> 24) & 0x1);
+					if (cond) {
+						writeloadimdest((instruction >> 26) & 0xF, (instruction & 0x7FFFF) | (-(instruction & 0x40000)));
+					}
+#if 0
                   switch ((instruction >> 19) & 0x3F) {
                      case 0x01: // MVI Imm,[d]NZ
                         if (!ScuDsp->ProgControlPort.part.Z)
@@ -1112,9 +1198,8 @@ void ScuExec(u32 timing) {
                         break;
                      default: break;
                   }
-               }
-               else
-               {
+#endif
+				} else {
                   // MVI Imm,[d]
                   int value = (instruction & 0x1FFFFFF) | (-(instruction & 0x1000000));
                   writeloadimdest((instruction >> 26) & 0xF, value);
@@ -1191,6 +1276,18 @@ void ScuExec(u32 timing) {
                     if (ScuDsp->jmpaddr != 0xffffffff) {
                       break;
                     }
+					//Translate the prog control port to bits and check the conditional load
+					u32 pcp = (ScuDsp->ProgControlPort.all >> 20) & 0xF;
+					pcp = (pcp & 0x8) | ((pcp >> 1) & 0x3) | ((pcp << 2) & 0x4);
+					u32 cond = !(pcp & (instruction >> 19) & 0xF) ^ ((instruction >> 24) & 0x1);
+					if (((instruction >> 19) & 0x7F) == 0x00) { // JMP Imm
+						ScuDsp->jmpaddr = instruction & 0xFF;
+						ScuDsp->delayed = 0;
+					} else if (cond) { // JMP Imm with cond
+						ScuDsp->jmpaddr = instruction & 0xFF;
+						ScuDsp->delayed = 0;
+					}
+#if 0
                      switch ((instruction >> 19) & 0x7F) {
                         case 0x00: // JMP Imm
                            ScuDsp->jmpaddr = instruction & 0xFF;
@@ -1280,6 +1377,7 @@ void ScuExec(u32 timing) {
                            LOG("scu\t: Unknown JMP instruction not implemented\n");
                            break;
                      }
+#endif
                      break;
                   case 0x0E: // Loop bottom Commands
                      if (instruction & 0x8000000)
@@ -1757,12 +1855,12 @@ void FASTCALL ScuWriteLong(u32 addr, u32 val) {
          break;
       case 0xA0:
          ScuRegs->IMS = val;
-         LOG("IMS = %X PC=%X frame=%d:%d", val, CurrentSH2->regs.PC, yabsys.frame_count,yabsys.LineCount);
+         //LOG("IMS = %X PC=%X frame=%d:%d", val, CurrentSH2->regs.PC, yabsys.frame_count,yabsys.LineCount);
          ScuTestInterruptMask();
          break;
       case 0xA4: {
         u32 after = ScuRegs->IST & val;
-        LOG("IST = from %X to %X PC=%X frame=%d:%d", ScuRegs->IST, after, CurrentSH2->regs.PC, yabsys.frame_count, yabsys.LineCount);
+        //LOG("IST = from %X to %X PC=%X frame=%d:%d", ScuRegs->IST, after, CurrentSH2->regs.PC, yabsys.frame_count, yabsys.LineCount);
         ScuRemoveInterruptByCPU(ScuRegs->IST, after);
         ScuRegs->IST = after;
         ScuTestInterruptMask();
@@ -1835,13 +1933,24 @@ void ScuTestInterruptMask()
          if (!(ScuRegs->IMS & 0x8000)) {
 
            const u8 vector = ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].vector;
-           SH2SendInterrupt(MSH2, vector, ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].level);
-
+#ifdef USE_SH2_OLD
+		   SH2SendInterrupt(MSH2, vector, ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].level);
+#else
+			sh2_SetInterrupt(&msh2, vector, ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].level);
+#endif
            if (yabsys.IsSSH2Running) {
              if (vector == 0x42)
-               SH2SendInterrupt(SSH2, 0x41, 1);
+#ifdef USE_SH2_OLD
+				 SH2SendInterrupt(SSH2, 0x41, 1);
+#else
+			sh2_SetInterrupt(&ssh2, 0x41, 1);
+#endif
              if (vector == 0x40)
-               SH2SendInterrupt(SSH2, 0x43, 2);
+#ifdef USE_SH2_OLD
+				 SH2SendInterrupt(SSH2, 0x43, 2);
+#else
+			sh2_SetInterrupt(&ssh2, 0x40, 2);
+#endif
            }
 
            ScuRegs->IST &= ~ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].statusbit;
@@ -1866,13 +1975,24 @@ void ScuTestInterruptMask()
          const u8 vector = ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].vector;
          LOG("%s(%0X) IST=%08X delay at frame %d:%d", ScuGetVectorString(vector), vector, ScuRegs->IST, yabsys.frame_count, yabsys.LineCount);
 
+#ifdef USE_SH2_OLD
          SH2SendInterrupt(MSH2, vector, ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].level);
-
+#else
+			sh2_SetInterrupt(&msh2, vector, ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].level);
+#endif
          if (yabsys.IsSSH2Running) {
            if (vector == 0x42)
-             SH2SendInterrupt(SSH2, 0x41, 1);
-           if (vector == 0x40)
-             SH2SendInterrupt(SSH2, 0x43, 2);
+#ifdef USE_SH2_OLD
+		   SH2SendInterrupt(SSH2, 0x41, 1);
+#else
+			sh2_SetInterrupt(&ssh2, 0x41, 1);
+#endif
+		   if (vector == 0x40)
+#ifdef USE_SH2_OLD
+		   SH2SendInterrupt(SSH2, 0x43, 2);
+#else
+			sh2_SetInterrupt(&ssh2, 0x43, 2);
+#endif
          }
 
          ScuRegs->IST &= ~ScuRegs->interrupts[ScuRegs->NumberOfInterrupts - 1 - i].statusbit;
@@ -1959,7 +2079,11 @@ static INLINE void SendInterrupt(u8 vector, u8 level, u16 mask, u32 statusbit) {
     if (ScuRegs->AIACK){
       ScuRegs->AIACK = 0;
       if (!(ScuRegs->IMS & 0x8000)){
+#ifdef USE_SH2_OLD
         SH2SendInterrupt(MSH2, vector, level);
+#else
+			sh2_SetInterrupt(&msh2, vector, level);
+#endif
       }
     }
   }else if (!(ScuRegs->IMS & mask)){
@@ -1967,12 +2091,24 @@ static INLINE void SendInterrupt(u8 vector, u8 level, u16 mask, u32 statusbit) {
     ScuRegs->IST |= statusbit;
     //if (vector != 0x41) LOG("INT %d", vector);
     LOG("%s(%x) IMS=%08X at frame %d:%d", ScuGetVectorString(vector), vector, ScuRegs->IMS, yabsys.frame_count, yabsys.LineCount);
-    SH2SendInterrupt(MSH2, vector, level);
+#ifdef USE_SH2_OLD
+	SH2SendInterrupt(MSH2, vector, level);
+#else
+		sh2_SetInterrupt(&msh2, vector, level);
+#endif
     if (yabsys.IsSSH2Running) {
       if (vector == 0x42)
-        SH2SendInterrupt(SSH2, 0x41, 1);
+#ifdef USE_SH2_OLD
+	  SH2SendInterrupt(SSH2, 0x41, 1);
+#else
+		sh2_SetInterrupt(&ssh2, 0x41, 1);
+#endif
       if (vector == 0x40)
-        SH2SendInterrupt(SSH2, 0x43, 2);
+#ifdef USE_SH2_OLD
+	  SH2SendInterrupt(SSH2, 0x43, 2);
+#else
+		sh2_SetInterrupt(&ssh2, 0x43, 2);
+#endif
     }
   }
   else

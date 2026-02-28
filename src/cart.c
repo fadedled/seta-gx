@@ -9,7 +9,7 @@ WriteFunc32 cs0_write32;
 ReadFunc8 cs0_read8;
 ReadFunc16 cs0_read16;
 ReadFunc32 cs0_read32;
-
+u32* (*cs0_getPCAddr)(u32 pc);
 Cartridge cart;
 
 
@@ -21,6 +21,8 @@ static u32 cs0_NoneRead32(u32 addr) { return 0xFFFFFFFF;}
 static void cs0_NoneWrite8(u32 addr, u8 val)   {}
 static void cs0_NoneWrite16(u32 addr, u16 val) {}
 static void cs0_NoneWrite32(u32 addr, u32 val) {}
+
+static u32* cs0_NoneRamGetPCAddr(u32 pc) {return NULL;}
 
 
 /*1MB RAM RW functions*/
@@ -81,6 +83,16 @@ static void cs0_1MBRamWrite32(u32 addr, u32 val)
 	}
 }
 
+static u32* cs0_1MBRamGetPCAddr(u32 pc)
+{
+	u32 mask = (1 << ((pc >> 20) & 0x1F)) & 0x50;
+	pc = (pc & 0x7FFFF) | (pc & 0x200000) >> 2;
+	if (mask) {
+		return (u32*)(cart.data + pc);
+	}
+	return NULL;
+}
+
 
 /*4MB RAM RW functions*/
 static u8 cs0_4MBRamRead8(u32 addr)
@@ -134,6 +146,15 @@ static void cs0_4MBRamWrite32(u32 addr, u32 val)
 	}
 }
 
+static u32* cs0_4MBRamGetPCAddr(u32 pc)
+{
+	u32 mask = (1 << ((pc >> 20) & 0x1F)) & 0xF0;
+	if (mask) {
+		return (u32*)(cart.data + pc);
+	}
+	return NULL;
+}
+
 
 /*2MB ROM RW functions*/
 static u8 cs0_RomRead8(u32 addr)
@@ -166,6 +187,11 @@ static void cs0_RomWrite32(u32 addr, u32 val)
 	*((u32*)(cart.data + (addr & 0x1FFFFF))) = val;
 }
 
+static u32* cs0_RomGetPCAddr(u32 pc)
+{
+	return (u32*)(cart.data + (pc & 0x1FFFFF));
+}
+
 
 /*CS1 area RW functions (This is used for determining CS0 cart type)*/
 u8 cs1_Read8(u32 addr)
@@ -187,7 +213,6 @@ void cs1_Write8(u32 addr, u8 val)   {/*Does nothing*/}
 void cs1_Write16(u32 addr, u16 val) {/*Does nothing*/}
 void cs1_Write32(u32 addr, u32 val) {/*Does nothing*/}
 
-
 //=================================
 // Cartridge area functions
 //=================================
@@ -203,6 +228,7 @@ u32 cart_Init(u32 type, const char * filename)
 	cs0_read8   = cs0_NoneRead8;
 	cs0_read16  = cs0_NoneRead16;
 	cs0_read32  = cs0_NoneRead32;
+	cs0_getPCAddr = cs0_NoneRamGetPCAddr;
 
 	switch(type) {
 		/*1MB RAM Cartridge*/
@@ -218,6 +244,7 @@ u32 cart_Init(u32 type, const char * filename)
 			cs0_read8   = cs0_1MBRamRead8;
 			cs0_read16  = cs0_1MBRamRead16;
 			cs0_read32  = cs0_1MBRamRead32;
+			cs0_getPCAddr = cs0_1MBRamGetPCAddr;
 		} break;
 		/*4MB RAM Cartridge*/
 		case CART_TYPE_RAM4MB: {
@@ -232,6 +259,7 @@ u32 cart_Init(u32 type, const char * filename)
 			cs0_read8   = cs0_4MBRamRead8;
 			cs0_read16  = cs0_4MBRamRead16;
 			cs0_read32  = cs0_4MBRamRead32;
+			cs0_getPCAddr = cs0_4MBRamGetPCAddr;
 		} break;
 		/*2MB ROM Cartridge*/
 		case CART_TYPE_ROM2MB: {
@@ -248,6 +276,7 @@ u32 cart_Init(u32 type, const char * filename)
 			cs0_read8   = cs0_RomRead8;
 			cs0_read16  = cs0_RomRead16;
 			cs0_read32  = cs0_RomRead32;
+			cs0_getPCAddr = cs0_RomGetPCAddr;
 		} break;
 	}
 

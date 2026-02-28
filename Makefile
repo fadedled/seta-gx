@@ -24,32 +24,30 @@ TARGET		:=	seta-gx
 BUILD		:=	build
 SOURCES		:=	src \
 			src/osd \
-			src/sgx 
-#			src/sh2/mame
-			
+			src/sgx \
+			src/sh2old \
+			src/sh2 \
+			src/sh2/drc
+
 DATA		:=	#res
-INCLUDES	:=	
+INCLUDES	:=
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-DDEFINES= -DUSE_WIIGX -DWIICONVERTASM 
-#DDEFINES+= -Dmain=SDL_main
+DDEFINES= -DUSE_WIIGX -DWIICONVERTASM
 DDEFINES+= -DHW_RVL
-DDEFINES+= -DDRC_SH2
 DDEFINES+= -DEXEC_FROM_CACHE
 DDEFINES+= -DOPTIMIZED_DMA
-DDEFINES+= -DHAVE_Q68
-DDEFINES+= -DQ68_DISABLE_ADDRESS_ERROR
 DDEFINES+= -DUSE_SCSP2
 DDEFINES+= -DSCSP_PLUGIN
-DDEFINES+= -DWORDS_BIGENDIAN
 DDEFINES+= -DAUTOLOADPLUGIN
 DDEFINES+= -DHAVE_STRCASECMP
+#DDEFINES+= -DUSE_SH2_OLD
 
-VDEFINES=-DPACKAGE=\"saturn-gx\" -DVERSION=\"r2926\" -DWIIVERSION=\"ver.\ 1.0\"  -DREENTRANT_SYSCALLS_PROVIDED
+VDEFINES=-DPACKAGE=\"seta-gx\" -DVERSION=\"r2926\" -DWIIVERSION=\"ver.\ 1.0\"  -DREENTRANT_SYSCALLS_PROVIDED
 
-MACHDEP = -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float -fsigned-char -ffast-math -funroll-loops -fauto-inc-dec -finline-functions #-fomit-frame-pointer
+MACHDEP = -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float -fsigned-char -ffast-math -funroll-loops -fauto-inc-dec -finline-functions #-fomit-frame-pointer -flto
 
 #This is only for profiling with gperf
 MACHDEP += #-fomit-frame-pointer
@@ -69,7 +67,7 @@ LIBS	:= -laesnd -lfat -lwiiuse -lbte -logc -lchdr -llzma -lzstd -lm -lz
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) 
+LIBDIRS	:= $(PORTLIBS)
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -83,7 +81,7 @@ export OUTPUT	:=	$(CURDIR)/$(TARGET)
 export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 					$(foreach dir,$(DATA),$(CURDIR)/$(dir)) \
 					$(foreach dir,$(TEXTURES),$(CURDIR)/$(dir))
-					
+
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
 #---------------------------------------------------------------------------------
@@ -142,7 +140,7 @@ $(BUILD):
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD) $(OUTPUT).elf $(OUTPUT).dol
-	
+
 #---------------------------------------------------------------------------------
 run:
 	wiiload $(TARGET).dol
@@ -170,23 +168,23 @@ $(OFILES_SOURCES) : $(HFILES)
 	$(bin2o)
 
 c68k/c68kexec.o:
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c c68k/c68kexec.c -o $@ 
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c c68k/c68kexec.c -o $@
 
 
-m68kops.o: 
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kops.c -o $@ 
-	
-m68kcpu.o: 
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kcpu.c -o $@ 
+m68kops.o:
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kops.c -o $@
 
-m68kopac.o: 
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopac.c -o $@ 
+m68kcpu.o:
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kcpu.c -o $@
 
-m68kopdm.o: 
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopdm.c -o $@ 
-	
-m68kopnz.o: 
-	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopnz.c -o $@ 
+m68kopac.o:
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopac.c -o $@
+
+m68kopdm.o:
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopdm.c -o $@
+
+m68kopnz.o:
+	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopnz.c -o $@
 
 
 

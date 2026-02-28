@@ -27,6 +27,14 @@
 
 #define GUI_XY(x, y)		((x & 0xFFFF) << 16 | (y & 0xFFFF))
 
+
+enum ReturnValue {
+	GUI_RET_NONE,
+	GUI_RET_SELECT,
+	GUI_RET_EXIT
+};
+
+
 extern GXTexObj gui_tobj;
 extern GXTexRegion gui_treg;
 
@@ -35,14 +43,6 @@ typedef struct String_t {
 	char *data;
 } String;
 
-typedef struct GuiElem_t {
-	u32 type;
-	u32 color;
-	u16 x;
-	u16 y;
-	u32 len;
-	void *data;	//NECESARY?
-} GuiElem;
 
 typedef struct GuiLabel_t {
 	u32 color;
@@ -75,7 +75,7 @@ void gui_Init(void);
 void gui_Draw(GuiItems *items);
 void gui_SetMessage(String msg, u32 color);
 
-u32 gui_AnimSet(GuiAnim *anim, GuiElem *elems);
+//u32 gui_AnimSet(GuiAnim *anim, GuiElem *elems);
 
 
 

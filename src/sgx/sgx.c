@@ -1,6 +1,5 @@
 
 #include "sgx.h"
-#include "../vidshared.h"
 #include "../vdp1.h"
 #include "../vdp2.h"
 #include "../osd/gui.h"
@@ -241,6 +240,19 @@ void SGX_SetZOffset(u32 offset)
 	//wgPipe->F32 = - (0.00000006f * offset);
 }
 
+void SGX_SetLineScroll(f32 hor_scroll, f32 hor_inc, u32 line)
+{
+	f32 x_scale = hor_inc * 0.001953125f; // hor_scroll/(2*256)
+	f32 x_off = (hor_scroll * 0.00390625f) + x_scale + 342.0f;
+	f32 y_off = (240.0f + 342.0f) + ((f32) line);
+	GX_LOAD_XF_REGS(0x101A, 1); //Set Viewport values
+	wgPipe->F32 = x_scale;
+
+	GX_LOAD_XF_REGS(0x101D, 2); //Set Viewport values
+	wgPipe->F32 = x_off;
+	wgPipe->F32 = y_off;
+}
+
 
 void SGX_SetVtxOffset(f32 x, f32 y)
 {
@@ -417,6 +429,26 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
 	//Modifiable values
 	u32 tex_maddr = 0x94000000;
 	u32 tex_size = 0x88000000 | (fmt << 20) | (((sz-1) & 0x3FFu) << 10) | ((sz-1) & 0x3FFu);
+
+	GX_LOAD_BP_REG(tex_filt);
+	GX_LOAD_BP_REG(tex_lod);
+	GX_LOAD_BP_REG(tex_size);
+	GX_LOAD_BP_REG(tmem_even);
+	GX_LOAD_BP_REG(tmem_odd);
+	GX_LOAD_BP_REG(tex_maddr);
+}
+
+
+void SGX_BeginVdp2Bitmap(u32 fmt, u32 bm_wdith, u32 bm_height)
+{
+	u32 tmem_even = 0x8C000000 | 0x100000 | 0x20000;	// 128k cache
+	u32 tmem_odd = (fmt == GX_TF_RGBA8 ? 0x90000000 | 0xC0000 | 0x18000 : 0x90000000);	//No odd tmem cache
+
+	u32 tex_filt = (fmt == GX_TF_RGBA8 ? 0x80000000 : 0x8000000A); //Wrap s/t = mirror if it uses another format than RGBA8
+	u32 tex_lod = 0x84000000;
+	//Modifiable values
+	u32 tex_maddr = 0x94000000;
+	u32 tex_size = 0x88000000 | (fmt << 20) | (((bm_height-1) & 0x3FFu) << 10) | ((bm_wdith-1) & 0x3FFu);
 
 	GX_LOAD_BP_REG(tex_filt);
 	GX_LOAD_BP_REG(tex_lod);

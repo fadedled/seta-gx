@@ -22,10 +22,13 @@
 #include "peripheral.h"
 #include <ogcsys.h>
 #include <wiiuse/wpad.h>
+//#include <joy.h>
 
 PerPad perpad[PER_PADMAX];
 
 PerData per_data;
+//PADStatus status_gc[PAD_CHANMAX];
+//JOYStatus status_64[JOY_CHANMAX];
 
 //XXX: this is for gamepad configuration
 //static u8 gcpad_bitoffsets[16] = { 0, 0, 0, 0, 0, 0, 0, GC_BIT_A, GC_BIT_B, GC_BIT_Z2, GC_BIT_Y, GC_BIT_X, GC_BIT_Z };
@@ -35,10 +38,99 @@ PerData per_data;
 
 void per_Init(void)
 {
+	//JOY_Init(status_64, status_gc);
 	PAD_Init();
 	WPAD_Init();
 	per_data.ids[0] = PER_ID_DIGITAL;
 }
+
+
+/*
+
+	u32 port_stat[2] = {PER_STAT_NONE, PER_STAT_NONE};
+	u32 per_num = 0;
+
+	//Reset ports
+	per_data.data_sent = 0;
+	per_data.data_size = 2;
+	per_data.data[0] = PER_STAT_NONE;	//Port 1
+	per_data.data[1] = PER_STAT_NONE;	//Port 2
+	per_data.port2_offset = 1;
+
+	//Fill with controllers from gc ports
+	u32 exit_code = __per_ScanPorts(&per_num);
+
+
+	u32 pad_types[PAD_CHANMAX];
+	u32 connected = 0;
+	u32 exit_code = 0;
+
+	//Read the N64 and GC controllers
+	JOY_Read(status_64, status_gc);
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		if (status_64[i].err == PAD_ERR_NONE) {
+			pad_types[i] = PAD_TYPE_N64PAD;
+			connected |= 1 << i;
+		} else if (status_gc[i].err == PAD_ERR_NONE) {
+			pad_types[i] = PAD_TYPE_GCPAD;
+			connected |= 1 << i;
+		}
+	}
+
+	//Add pads
+	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		if ((connected >> i) & 1) {
+			PerPad *per = &perpad[*per_num];
+			per->type = pad_types[i];
+			if (per->type == PAD_TYPE_GCPAD) {
+				per->y = status_gc[i].stickY;
+				per->x = status_gc[i].stickX;
+				per->prev_btn = per->btn;
+				per->btn = status_gc[i].button;
+				per->sx = status_gc[i].substickX;
+				per->sy = status_gc[i].substickY;
+				per_GCToSat(*per_num, &exit_code);
+			} else {
+				per->y = status_64[i].stickY;
+				per->x = status_64[i].stickX;
+				per->prev_btn = per->btn;
+				per->btn = status_64[i].button;
+				per_N64ToSat(*per_num, &exit_code);
+			}
+			*per_num = *per_num + 1;
+		}
+	}
+*/
+
+
+static void per_N64ToSat(u32 indx, u32 *exit_code)
+{
+	//s8 axis_x = perpad[indx].x;
+	//s8 axis_y = perpad[indx].y;
+	//TODO: only do this when using the ANALOGUE controller
+	u32 btns = perpad[indx].btn;
+	//TODO: UNCOMMENT
+	//*exit_code |= (btns & (JOY_TRG_R | JOY_TRG_L | JOY_TRG_Z)) == (JOY_TRG_R | JOY_TRG_L | JOY_TRG_Z);
+
+	//N64 controller is basically a Saturn controller, no need for remap
+	u32 sat_btns =
+	(((btns >> N64_BIT_CD) & 1)    << PAD_DI_BIT_B) |
+	(((btns >> N64_BIT_A) & 1)     << PAD_DI_BIT_A) |
+	(((btns >> N64_BIT_CR) & 1)    << PAD_DI_BIT_C) |
+	(((btns >> N64_BIT_STR) & 1)   << PAD_DI_BIT_STR) |
+	(((btns >> N64_BIT_UP) & 1)    << PAD_DI_BIT_UP) |
+	(((btns >> N64_BIT_DOWN) & 1)  << PAD_DI_BIT_DOWN) |
+	(((btns >> N64_BIT_LEFT) & 1)  << PAD_DI_BIT_LEFT) |
+	(((btns >> N64_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT) |
+	(((btns >> N64_BIT_L) & 1)     << PAD_DI_BIT_L) |
+	(((btns >> N64_BIT_B) & 1)     << PAD_DI_BIT_X) |
+	(((btns >> N64_BIT_CL) & 1)    << PAD_DI_BIT_Y) |
+	(((btns >> N64_BIT_CU) & 1)    << PAD_DI_BIT_Z) |
+	(((btns >> N64_BIT_R) & 1)     << PAD_DI_BIT_R) |
+	0x300;	//First 2 bits must be 0
+	perpad[indx].btn = sat_btns;
+}
+
 
 static void per_GCToSat(u32 indx, u32 *exit_code)
 {
@@ -101,7 +193,9 @@ static void per_ClassicToSat(u32 indx, u32 *exit_code)
 	s8 axis_x = perpad[indx].x;
 	s8 axis_y = perpad[indx].y;
 	//TODO: only do this when using the ANALOGUE controller
-	u32 btns = perpad[indx].btn | CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
+
+	u32 btns = perpad[indx].btn;
+	btns |= CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
 	*exit_code |= (btns & WPAD_CLASSIC_BUTTON_HOME);
 
 	//TODO: get the user defined bits for the buttons
@@ -126,7 +220,6 @@ static void per_ClassicToSat(u32 indx, u32 *exit_code)
 
 u32 per_updatePads()
 {
-	PADStatus padstatus[PAD_CHANMAX];
 	u32 port_stat[2] = {PER_STAT_NONE, PER_STAT_NONE};
 	u32 per_num = 0;
 
@@ -170,7 +263,11 @@ u32 per_updatePads()
 				per_WiiToSat(per_num, &exit_code);
 				++per_num;
 			} else if (exp_type == WPAD_EXP_CLASSIC) { //Classic controller used
-				perpad[per_num].type = PAD_TYPE_CLASSIC;
+				if (wpad->exp.classic.type == 2) { //Wii U Pro pad
+					perpad[per_num].type = PAD_TYPE_WIIUPRO;
+				} else { //Normal Classic controller
+					perpad[per_num].type = PAD_TYPE_CLASSIC;
+				}
 				perpad[per_num].x = (s16) (wpad->exp.classic.ljs.pos.x);
 				perpad[per_num].y = (s16) (wpad->exp.classic.ljs.pos.y);
 				perpad[per_num].prev_btn = perpad[per_num].btn;

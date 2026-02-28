@@ -27,7 +27,11 @@
 #include "peripheral.h"
 #include "scsp.h"
 #include "scu.h"
-#include "sh2core.h"
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
 #include "vdp1.h"
 #include "vdp2.h"
 #include "yabause.h"
@@ -39,10 +43,8 @@ int intback_wait_for_line = 0;
 u8 bustmp = 0;
 #endif
 
-#ifdef GEKKO
 int smpcperipheraltiming = 1000;
 int smpcothertiming = 1050;
-#endif
 
 u8 smpc_regs[0x80];
 
@@ -145,7 +147,11 @@ void SmpcCKCHG(u32 clk_type) {
    SmpcInternalVars->dotsel = clk_type;
 
    // Send NMI
+#ifdef USE_SH2_OLD
    SH2NMI(MSH2);
+#else
+	sh2_NMI(&msh2);
+#endif
 }
 
 int totalseconds;
@@ -351,7 +357,11 @@ void SmpcResetButton(void) {
 	if (SmpcInternalVars->resd)
 		return;
 
+#ifdef USE_SH2_OLD
 	SH2SendInterrupt(MSH2, 0xB, 16);
+#else
+	sh2_SetInterrupt(&msh2, 0xB, 16);
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -416,7 +426,11 @@ void SmpcExec(s32 t) {
 				SMPC_REG_OREG(31) = 0x17;
                break;
             case 0x18: //NMIREQ
+#ifdef USE_SH2_OLD
                	SH2SendInterrupt(MSH2, 0xB, 16);
+#else
+				sh2_SetInterrupt(&msh2, 0xB, 16);
+#endif
 				SMPC_REG_OREG(31) = 0x18;
 				break;
             case 0x19: //RESENAB

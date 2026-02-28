@@ -19,10 +19,14 @@
 typedef struct Cartridge_t {
 	u32 type;
 	u32 id;
+	u32 data_mask;
 	u8 *data;
 } Cartridge;
 
 extern Cartridge cart;
+
+#define CART_MASK(addr)
+#define CART_MASK(addr)
 
 extern WriteFunc8  cs0_write8;
 extern WriteFunc16 cs0_write16;
@@ -30,6 +34,8 @@ extern WriteFunc32 cs0_write32;
 extern ReadFunc8   cs0_read8;
 extern ReadFunc16  cs0_read16;
 extern ReadFunc32  cs0_read32;
+
+extern u32* (*cs0_getPCAddr)(u32 pc);
 
 u8   cs1_Read8(u32 addr);
 u16  cs1_Read16(u32 addr);

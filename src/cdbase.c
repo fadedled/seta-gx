@@ -365,16 +365,6 @@ static FILE* OpenFile(char* buffer, const char* cue) {
    int tmp;
    FILE *ret_file = NULL;
 
-#if defined(ANDROID)
-  if (strstr(cue, "/proc/self/fd/") == cue) {
-     char * fdname = GetFileDescriptorPath(buffer);
-     if( fdname == NULL ){
-      YabSetError(YAB_ERR_FILENOTFOUND, buffer);
-      return -1;
-     }
-     ret_file = fopen(fdname, "rb");
-  }else{
-#endif
    // Now go and open up the image file, figure out its size, etc.
    if ((ret_file = fopen(buffer, "rb")) == NULL)
    {
@@ -412,9 +402,6 @@ static FILE* OpenFile(char* buffer, const char* cue) {
          YabSetError(YAB_ERR_FILENOTFOUND, buffer);
       }
    }
-#if defined(ANDROID)
-  }
-#endif
    return ret_file;
 }
 
@@ -536,18 +523,6 @@ static int LoadBinCue(const char *cuefilename, FILE *iso_file)
 
 
   // check if File deskmode or not
-#if defined(ANDROID)
-  if (strstr(cuefilename, "/proc/self/fd/") == cuefilename) {
-     char * fdname = GetFileDescriptorPath(temp_buffer);
-     if( fdname == NULL ){
-      YabSetError(YAB_ERR_FILENOTFOUND, temp_buffer);
-      free(temp_buffer);
-      return -1;
-     }
-
-     bin_file = fopen(fdname, "rb");
-  }else{
-#endif
   // Now go and open up the image file, figure out its size, etc.
   if ((bin_file = fopen(temp_buffer, "rb")) == NULL)
   {
@@ -605,9 +580,6 @@ static int LoadBinCue(const char *cuefilename, FILE *iso_file)
       return -1;
     }
   }
-#if defined(ANDROID)
-  }
-#endif
 
   fseek(bin_file, 0, SEEK_END);
   file_size = ftell(bin_file);
@@ -877,9 +849,6 @@ void BuildTOC()
    isoTOC[101] = (isoTOC[session->track_num - 1] & 0xFF000000) | session->fad_end;
 }
 
-#if (defined(IOS) || defined(ANDROID))
-#define stricmp strcasecmp
-#endif
 //////////////////////////////////////////////////////////////////////////////
 
 static int ISOCDInit(const char * iso) {

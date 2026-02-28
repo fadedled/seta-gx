@@ -56,9 +56,6 @@ typedef struct
 #define VIDEOFORMATTYPE_NTSC    0
 #define VIDEOFORMATTYPE_PAL     1
 
-#ifndef NO_CLI
-void print_usage(const char *program_name);
-#endif
 
 void YabauseChangeTiming(int freqtype);
 int YabauseInit(yabauseinit_struct *init);
@@ -98,7 +95,6 @@ typedef struct {
 	u8 IsSSH2Running;
 	u64 OneFrameTime;
 	u64 tickfreq;
-	int emulatebios;
 	int usequickload;
 } yabsys_struct;
 

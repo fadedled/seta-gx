@@ -20,7 +20,7 @@
 #include "sh2core.h"
 #include "sh2idle.h"
 #include "sh2int.h"
-#include "memory.h"
+#include "../memory.h"
 
 #define MAX_CYCLE_CHECK 14
 // idle loops greater than MAX_CYCLE_CHECK instructions will not be detected.
@@ -665,3 +665,37 @@ void markerExec( SH2_struct *sh, u16 nMark ) {
   }
 }
 */
+
+#if 0
+void sh2_idleCheck(SH2 *sh, u32 cycles)
+{
+
+}
+
+void sh2_idleParse(SH2 *sh, u32 cycles)
+{
+	// called when <context> is in idle state : check whether we are still idle
+	while(1) {
+		u32 PC = sh->pc;
+		u16 *inst_addr = sh2_GetPCAddr(sh->pc);
+		u32 inst = *inst_addr;
+		if ( INSTRUCTION_A(inst)==8 ) {
+			switch( INSTRUCTION_B(inst) ) {
+				case 13: //SH2bts
+				case 9:  //SH2bt
+					if ( !SH2_SR_T(sh->sr) ) SH2_FLAG_CLR(sh, SH2_FLAG_IDLE);
+					else sh->;
+					opcode_arr[(context->instruction >> 12) & 0xF](context);
+					return;
+				case 15: //SH2bfs
+				case 11: //SH2bf
+				if ( SH2_SR_T(sh->sr) ) SH2_FLAG_CLR(sh, SH2_FLAG_IDLE);
+				else DROP_IDLE;
+				opcode_arr[(context->instruction >> 12) & 0xF](context);
+				return;
+			}
+		}
+		opcode_arr[(context->instruction >> 12) & 0xF](context);
+	}
+}
+	#endif

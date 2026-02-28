@@ -49,7 +49,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include "scsp.h"
 #include "scu.h"
 #include "smpc.h"
-#include "yui.h"
+#include "yabause.h"
 
 #define CDB_HIRQ_CMOK      0x0001
 #define CDB_HIRQ_DRDY      0x0002
@@ -875,33 +875,6 @@ void Cs2Reset(void) {
 
 }
 
-
-void Cs2ForceOpenTray(){
-	if (Cs2Area->cdi){
-		Cs2Area->cdi->SetStatus(CDCORE_OPEN);
-		Cs2Reset();
-	}
-};
-
-int Cs2ForceCloseTray( int coreid, const char * cdpath ){
-
-  int ret = 0;
-   if ((ret = Cs2ChangeCDCore(coreid, cdpath)) != 0)
-      return ret;
-
-  Cs2Reset();
-
-  if (yabsys.emulatebios)
-  {
-	  if (YabauseQuickLoadGame() != 0)
-	  {
-		  YabSetError(YAB_ERR_CANNOTINIT, "Game");
-		  return -2;
-	  }
-  }
-  Cs2Area->cdi->ReadTOC(Cs2Area->TOC);
-  return 0;
-};
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -4046,96 +4019,93 @@ char * Cs2GetCurrentGmaecode(){
 
 //////////////////////////////////////////////////////////////////////////////
 u8 Cs2GetIP(int autoregion) {
-   partition_struct * gripartition;
-   u8 ret = 0;
+	partition_struct * gripartition;
+	u8 ret = 0;
 
-   Cs2Area->outconcddev = Cs2Area->filter + 0;
-   Cs2Area->outconcddevnum = 0;
+	Cs2Area->outconcddev = Cs2Area->filter + 0;
+	Cs2Area->outconcddevnum = 0;
 
-   // read in lba 0/FAD 150
-   if ((gripartition = Cs2ReadUnFilteredSector(150)) != NULL)
-   {
-	   int i;
-      unsigned char *buf=(unsigned char*)gripartition->block[gripartition->numblocks - 1]->data;
+	// read in lba 0/FAD 150
+	if ((gripartition = Cs2ReadUnFilteredSector(150)) != NULL) {
+		int i;
+		u8 *buf = (u8*) gripartition->block[gripartition->numblocks - 1]->data;
+		// Make sure we're dealing with a saturn game
+		if (memcmp(buf, "SEGA SEGASATURN", 15) == 0) {
+#if 0
+			memcpy(cdip->system, buf, 16);
+			cdip->system[16]='\0';
+			memcpy(cdip->company, buf+0x10, 16);
+			cdip->company[16]='\0';
 
-      // Make sure we're dealing with a saturn game
-      if (memcmp(buf, "SEGA SEGASATURN", 15) == 0)
-      {
-         memcpy(cdip->system, buf, 16);
-         cdip->system[16]='\0';
-         memcpy(cdip->company, buf+0x10, 16);
-         cdip->company[16]='\0';
+			char tmp[11];
+			memcpy(tmp, buf+0x20, 0x0A);
+			tmp[10]='\0';
+			sscanf(tmp, "%s", cdip->itemnum);
 
-         char tmp[11];
-         memcpy(tmp, buf+0x20, 0x0A);
-         tmp[10]='\0';
-         sscanf(tmp, "%s", cdip->itemnum);
+			// make gameid as u64
+			cdip->gameid = 0;
+			for (i = 0; i < 8; i++){
+				cdip->gameid |= ((u64)cdip->itemnum[i]) << (i * 8);
+			}
+			memcpy(cdip->version, buf+0x2A, 6);
+			cdip->version[6]='\0';
+			sprintf(cdip->date, "%c%c/%c%c/%c%c%c%c", buf[0x34], buf[0x35], buf[0x36], buf[0x37], buf[0x30], buf[0x31], buf[0x32], buf[0x33]);
+			sscanf((const char*) buf + 0x38, "%s", cdip->cdinfo);
+			sscanf((const char*) buf + 0x40, "%s", cdip->region);
+			sscanf((const char*) buf + 0x50, "%s", cdip->peripheral);
+			memcpy(cdip->gamename, buf+0x60, 112);
+			cdip->gamename[112]='\0';
+			memcpy(&cdip->ipsize, buf+0xE0, sizeof(u32));
+			memcpy(&cdip->msh2stack, buf+0xE8, sizeof(u32));
+			memcpy(&cdip->ssh2stack, buf+0xEC, sizeof(u32));
+			memcpy(&cdip->firstprogaddr, buf+0xF0, sizeof(u32));
+			memcpy(&cdip->firstprogsize, buf+0xF4, sizeof(u32));
+#else
+			memcpy(cdip, buf, sizeof(ip_struct));
+#endif
+			if (autoregion) {
+				// Read first available region, that'll be what we'll use
+				switch (cdip->region[0]) {
+				case 'J':
+							ret = 1;
+							break;
+				case 'T':
+							ret = 2;
+							break;
+				case 'U':
+							ret = 4;
+							break;
+				case 'B':
+							ret = 5;
+							break;
+				case 'K':
+							ret = 6;
+							break;
+				case 'A':
+							ret = 10;
+							break;
+				case 'E':
+							ret = 12;
+							break;
+				case 'L':
+							ret = 13;
+							break;
+				default: break;
+				}
+			}
+		}
 
-		 // make gameid as u64
-		 cdip->gameid = 0;
-		 for (i = 0; i < 8; i++){
-			 cdip->gameid |= ((u64)cdip->itemnum[i]) << (i * 8);
-		 }
-         memcpy(cdip->version, buf+0x2A, 6);
-         cdip->version[6]='\0';
-         sprintf(cdip->date, "%c%c/%c%c/%c%c%c%c", buf[0x34], buf[0x35], buf[0x36], buf[0x37], buf[0x30], buf[0x31], buf[0x32], buf[0x33]);
-         sscanf((const char*) buf + 0x38, "%s", cdip->cdinfo);
-         sscanf((const char*) buf + 0x40, "%s", cdip->region);
-         sscanf((const char*) buf + 0x50, "%s", cdip->peripheral);
-         memcpy(cdip->gamename, buf+0x60, 112);
-         cdip->gamename[112]='\0';
-         memcpy(&cdip->ipsize, buf+0xE0, sizeof(u32));
-         memcpy(&cdip->msh2stack, buf+0xE8, sizeof(u32));
-         memcpy(&cdip->ssh2stack, buf+0xEC, sizeof(u32));
-         memcpy(&cdip->firstprogaddr, buf+0xF0, sizeof(u32));
-         memcpy(&cdip->firstprogsize, buf+0xF4, sizeof(u32));
+		// Free Block
+		gripartition->size -= gripartition->block[gripartition->numblocks - 1]->size;
+		Cs2FreeBlock(gripartition->block[gripartition->numblocks - 1]);
+		gripartition->block[gripartition->numblocks - 1] = NULL;
+		gripartition->blocknum[gripartition->numblocks - 1] = 0xFF;
 
-         if (autoregion)
-         {
-            // Read first available region, that'll be what we'll use
-            switch (cdip->region[0])
-            {
-               case 'J':
-                         ret = 1;
-                         break;
-               case 'T':
-                         ret = 2;
-                         break;
-               case 'U':
-                         ret = 4;
-                         break;
-               case 'B':
-                         ret = 5;
-                         break;
-               case 'K':
-                         ret = 6;
-                         break;
-               case 'A':
-                         ret = 0xA;
-                         break;
-               case 'E':
-                         ret = 0xC;
-                         break;
-               case 'L':
-                         ret = 0xD;
-                         break;
-               default: break;
-            }
-         }
-      }
-
-      // Free Block
-      gripartition->size -= gripartition->block[gripartition->numblocks - 1]->size;
-      Cs2FreeBlock(gripartition->block[gripartition->numblocks - 1]);
-      gripartition->block[gripartition->numblocks - 1] = NULL;
-      gripartition->blocknum[gripartition->numblocks - 1] = 0xFF;
-
-      // Sort remaining blocks
-      Cs2SortBlocks(gripartition);
-      gripartition->numblocks -= 1;
-   }
-
-   return ret;
+		// Sort remaining blocks
+		Cs2SortBlocks(gripartition);
+		gripartition->numblocks -= 1;
+	}
+	return ret;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -4148,6 +4118,9 @@ u8 Cs2GetRegionID(void)
 
 u32 Cs2GetMasterStackAdress(){ if (cdip) return cdip->msh2stack; else return 0x6002000; }
 u32 Cs2GetSlaveStackAdress(){ if (cdip) return cdip->ssh2stack; else return 0x6001000; }
-u64 Cs2GetGameId(){ if (cdip) return cdip->gameid; else return 0x00; }
+
+u64 Cs2GetGameId(){
+	return *((u64*)cdip->itemnum);
+}
 
 //////////////////////////////////////////////////////////////////////////////

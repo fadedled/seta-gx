@@ -3,7 +3,7 @@
 #include "gui.h"
 #include "../peripheral.h"
 #include "../sgx/sgx.h"
-
+#include <gccore.h>
 
 GXTexObj gui_tobj;
 GXTexRegion gui_treg;
@@ -15,6 +15,9 @@ extern u8 menu_tex_4bpp_data[];
 /*System texture dimensions*/
 #define GUI_SYSTEX_W	256
 #define GUI_SYSTEX_H	64
+
+#if 0
+
 
 #define CURSOR_COLOR_A	0xa3d9
 #define CURSOR_COLOR_B	0x4c0b
@@ -55,6 +58,11 @@ const u32 gui_palette[] = {
 	0x404040ff, 0xa0b0a0ff, 0x00d0d090, 0xFFFFFFFF, 0x0,
 };
 
+static inline void gui_DrawOptions(GuiElem *elem)
+{
+
+
+}
 
 
 static inline void gui_DrawLabel(GuiLabel *elem)
@@ -63,6 +71,10 @@ static inline void gui_DrawLabel(GuiLabel *elem)
 
 }
 
+
+static inline void gui_DrawImage(GuiElem *elems)
+{
+}
 
 void gui_DrawString(u32 x, u32 y, u32 w, String str)
 {
@@ -461,4 +473,250 @@ void gui_Draw(GuiItems *items)
 	}
 
 	GX_SetLineWidth(1 << 2, 0);
+}
+
+
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// New Implementation
+//===================================================00
+#include "gui.h"
+
+struct GuiState {
+	GuiMenu menu;
+
+	//Cursor of list
+	u32 cursor;
+
+	//Current viewport
+	u32 x;
+	u32 y;
+	u32 w;
+	u32 h;
+
+} gui;
+
+
+
+void gui_SetMessage(String msg, u32 color)
+{
+	//gui_msg = msg;
+	//gui_msg_color = color;
+	//gui_msg_set = 0;
+}
+
+void gui_Init(void)
+{
+	GX_InitTexObj(&gui_tobj, menu_tex_4bpp_data, GUI_SYSTEX_W, GUI_SYSTEX_H, GX_TF_I4, GX_CLAMP, GX_CLAMP, GX_FALSE);
+	GX_InitTexObjLOD(&gui_tobj, GX_NEAR, GX_NEAR, 0, 0, 0, GX_DISABLE, GX_DISABLE, GX_ANISO_1);
+	GX_InitTexPreloadRegion(&gui_treg, 0x90000 + 0x16000, (GUI_SYSTEX_W * GUI_SYSTEX_H) >> 1, 0, GX_TEXCACHE_NONE);
+	GX_PreloadEntireTexture(&gui_tobj, &gui_treg);
+}
+
+// Draws a String inside the width
+static void __gui_DrawString(String str, u32 x, u32 y, u32 w)
+{
+	u32 len = str.len;
+	u8 *data = (u8*) str.data;
+	if (!data) {
+		return;
+	}
+	u32 x_reset = x;
+	GX_Begin(GX_POINTS, GX_VTXFMT4, len-1);
+	/*not while m_ptr, must use index for this because of circular buffering*/
+	while (len) {
+		//Find the first blank space or untill the width is filled
+		u32 line_fill = 0;
+		u32 last_white = -1;
+		while (data[line_fill] != '\0' && line_fill < w) {
+			if (data[line_fill] != ' ') {
+				last_white = line_fill;
+			}
+			line_fill++;
+		}
+		//Print up untill the last white value
+		line_fill = (last_white == -1 ? last_white : w);
+
+		while (--line_fill) {
+			//XXX: Use a texCoordGen for this.
+			u32 chr_x = (*data & 0x1F) << 1;
+			u32 chr_y = (*data >> 5) & 0x3;
+			GX_Position2u16(x, y);
+			//XXX: Use the foreground color
+			GX_Color1u16(0xFFFF);
+			GX_TexCoord2u8(chr_x, chr_y);
+			x += 6;
+			++data;
+			--len;
+		}
+		y += 8;
+		x = x_reset;
+	}
+	GX_End();
+}
+
+static void __gui_DrawRect(u32 x, u32 y, u32 w, u32 h)
+{
+	GX_Begin(GX_QUADS, GX_VTXFMT4, 4);
+	GX_Position2u16(x, y); 					// Top Left
+	GX_Color1u16(0x8888); GX_TexCoord2u8(0, 0);
+	GX_Position2u16(x + w, y);			// Top Right
+	GX_Color1u16(0x8888); GX_TexCoord2u8(0, 0);
+	GX_Position2u16(x + w, y + h);	// Bottom Right
+	GX_Color1u16(0x8888); GX_TexCoord2u8(0, 0);
+	GX_Position2u16(x, y + h);			// Bottom Left
+	GX_Color1u16(0x8888); GX_TexCoord2u8(0, 0);
+	GX_End();
+}
+
+#if 0
+
+static void __gui_DrawItemElem(GuiElem *elem, u32 count)
+{
+	for (u32 i = 0; i < count; ++i) {
+		gui.x = elem->x; gui.y = elem->y;
+		gui.w = elem->w; gui.h = elem->h;
+		switch (elem->type) {
+			case GUIELEM_LABEL: {
+				__gui_DrawString(elem->label.text);
+			} break;
+			case GUIELEM_TOGGLE: {
+				__gui_DrawString(elem->toggle.text);
+			} break;
+			case GUIELEM_IMAGE: {
+
+			} break;
+			case GUIELEM_CUSTOM: {
+
+			} break;
+		}
+		++elem:
+	}
+}
+
+
+static void __gui_DrawElem(GuiElem *elem)
+{
+	gui.x = elem->x; gui.y = elem->y;
+	gui.w = elem->w; gui.h = elem->h;
+	switch (elem->type) {
+		case GUIELEM_RECT: {
+			if (GUI_ALPHA(elem->bg_color)) {
+				__gui_DrawRect(void);
+			}
+		} break;
+		case GUIELEM_LABEL: {
+			__gui_DrawString(elem->label.text);
+		} break;
+		case GUIELEM_TOGGLE: {
+			__gui_DrawString(elem->toggle.text);
+		} break;
+		case GUIELEM_LIST: {
+			u32 count = elem->list.count;
+			u32 sel = elem->list.selected;
+			GuiElem *elems = elem->list.elems;
+
+			u32 y = 0;
+			for (u32 i = 0; i < count; ++i) {
+			}
+
+			for (u32 i = 0; i < count; ++i) {
+				__gui_DrawItemElem(elem->x, elem->y + y, elems, elem->flags);
+				elems++;
+			}
+		} break;
+		case GUIELEM_TABLE: {
+
+		} break;
+		case GUIELEM_IMAGE: {
+
+		} break;
+
+/* 		case GUIELEM_CUSTOM: {
+
+		} break; */
+	}
+}
+#endif
+void gui_SetMenu(GuiMenu menu)
+{
+	gui.menu = menu;
+
+	//TODO: Convert menu to an easy to render structure.
+}
+
+
+void gui_DrawMenu(void)
+{
+	//gui.menu
+	//Implement a stack
+	GuiElem stack[128];
+	//__gui_UpdateMenu();
+}
+
+void gui_Error(String msg)
+{
+	/* Loop error and set up last selected menu */
+	GuiElem menu = {.type = GUIELEM_RECT, .bg_color = 0xFFFFFFFF};
+
+	gui_SetMenu(&menu);
+
+	u32 done = 1;
+	while(done) {
+
+	}
+
+}
+
+void gui_Test(void)
+{
+	GX_SetLineWidth(2 << 2, 0);
+	/*Reserve GX_VTXFMT7 for OSD & GUI*/
+	GX_SetScissor(0, 0, 640, 480);
+	GX_SetCurrentMtx(MTX_IDENTITY_2X);
+	GX_ClearVtxDesc();
+	GX_SetVtxDesc(GX_VA_POS, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_CLR0, GX_DIRECT);
+	GX_SetVtxDesc(GX_VA_TEX0, GX_DIRECT);
+
+	GX_SetNumChans(1);
+	GX_SetNumTexGens(1);
+	GX_SetNumTevStages(1);
+
+	GX_SetBlendMode(GX_BM_NONE, GX_BL_SRCALPHA, GX_BL_INVSRCALPHA, GX_LO_NOOP);
+	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_RASC);
+	GX_SetTevAlphaOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
+	GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_KONST);
+
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP_NULL, GX_COLOR0);
+	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
+	GX_LoadTexObjPreloaded(&gui_tobj, &gui_treg, GX_TEXMAP0);
+
+	//Only if alpha is checked
+	GX_SetNumIndStages(0);
+	GX_SetTevDirect(GX_TEVSTAGE0);
+	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1);
+
+
+	//__gui_DrawRect(12, 32, 24, 44);
+	//__gui_DrawRect(120, 42, 60, 56);
+	String str = {sizeof("hi this is a test string"), "hi this is a test string"};
+	__gui_DrawString(str, 128, 42, 128);
 }

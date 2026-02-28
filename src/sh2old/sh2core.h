@@ -21,8 +21,9 @@
 #ifndef SH2CORE_H
 #define SH2CORE_H
 
-#include "core.h"
-#include "memory.h"
+#include "../core.h"
+#include "../memory.h"
+
 
 #define SH2CORE_DEFAULT     -1
 #define MAX_INTERRUPTS 50
@@ -334,13 +335,11 @@ void SH2PowerOn(SH2_struct *context);
 void FASTCALL SH2Exec(SH2_struct *context, u32 cycles);
 void SH2SendInterrupt(SH2_struct *context, u8 vector, u8 level);
 void SH2NMI(SH2_struct *context);
-void SH2Step(SH2_struct *context);
+//void SH2Step(SH2_struct *context);
 void SH2GetRegisters(SH2_struct *context, sh2regs_struct * r);
 void SH2SetRegisters(SH2_struct *context, sh2regs_struct * r);
 void SH2WriteNotify(u32 start, u32 length);
 
-void DMAExec(void);
-void DMATransfer(u32 *CHCR, u32 *SAR, u32 *DAR, u32 *TCR, u32 *VCRDMA);
 
 u8 FASTCALL OnchipReadByte(u32 addr);
 u16 FASTCALL OnchipReadWord(u32 addr);
@@ -361,5 +360,7 @@ void FASTCALL DataArrayWriteLong(u32 addr, u32 val);
 
 void FASTCALL MSH2InputCaptureWriteWord(u32 addr, u16 data);
 void FASTCALL SSH2InputCaptureWriteWord(u32 addr, u16 data);
+
+
 
 #endif

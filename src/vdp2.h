@@ -296,11 +296,5 @@ void FASTCALL   Vdp2WriteWord(u32, u16);
 void FASTCALL   Vdp2WriteLong(u32, u32);
 
 
-void ToggleNBG0(void);
-void ToggleNBG1(void);
-void ToggleNBG2(void);
-void ToggleNBG3(void);
-void ToggleRBG0(void);
-
 
 #endif

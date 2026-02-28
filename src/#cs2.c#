@@ -49,8 +49,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include "scsp.h"
 #include "scu.h"
 #include "smpc.h"
-#include "yui.h"
- 
+
 #define CDB_HIRQ_CMOK      0x0001
 #define CDB_HIRQ_DRDY      0x0002
 #define CDB_HIRQ_CSCT      0x0004
@@ -891,14 +890,6 @@ int Cs2ForceCloseTray( int coreid, const char * cdpath ){
 
   Cs2Reset();
 
-  if (yabsys.emulatebios)
-  {
-	  if (YabauseQuickLoadGame() != 0)
-	  {
-		  YabSetError(YAB_ERR_CANNOTINIT, "Game");
-		  return -2;
-	  }
-  }
   Cs2Area->cdi->ReadTOC(Cs2Area->TOC);
   return 0;
 };

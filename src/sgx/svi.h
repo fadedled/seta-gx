@@ -12,5 +12,6 @@ void SVI_SwapBuffers(u32 wait_vsync);
 void SVI_SetResolution(u32 tvmd);
 void SVI_CopyFrame(void);
 void SVI_ClearFrame(void);
+void SVI_ResetViewport(void);
 
 #endif //__SVI_H__

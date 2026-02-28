@@ -33,6 +33,8 @@
 //#include <di/di.h>
 #include "osd/osd.h"
 #include "osd/gui.h"
+#include "gui/gui.h"
+#include "sgx/svi.h"
 
 #include "cart.h"
 #include "cs2.h"
@@ -40,18 +42,15 @@
 #include "m68kcore.h"
 #include "peripheral.h"
 #include "vdp2.h"
-#include "yui.h"
-#include "memory.h"
+#include "scsp.h"
 
-extern u8 num_button_WII[9];
-extern u8 num_button_CLA[9];
-extern u8 num_button_GCC[9];
+#include "memory.h"
 
 /* Wii includes */
 //#include "syswii.h"
 
 
-int YuiExec(void);
+int CoreExec(void);
 
 void InitMenu(void);
 void Check_Bios_Exist(void);
@@ -67,8 +66,8 @@ void print_settinglist(void);
 /* Constants */
 
 static int IsPal = 0;
-volatile int done=0;
-volatile int resetemu=0;
+volatile int exec_emu = 0;
+volatile int reset_emu = 0;
 int running=1;
 
 #ifdef AUTOLOADPLUGIN
@@ -78,12 +77,6 @@ u8 returnhomebrew = 0;
 //#define TITLE_ID(x,y) (((u64)(x) << 32) | (y))
 char Exit_Dol_File[1024];
 #endif
-
-SH2Interface_struct *SH2CoreList[] = {
-&SH2Interpreter,
-&SH2DebugInterpreter,
-NULL
-};
 
 PerInterface_struct *PERCoreList[] = {
 &PERDummy,
@@ -107,14 +100,13 @@ NULL
 
 
 //XXX: Change the directory.
-char games_dir[64];
-char saves_dir[64];
-char carts_dir[512];
+char games_dir[128];
+char saves_dir[128];
+char carts_dir[128];
 static char biospath[32];
 char prev_itemnum[512];
 static char buppath[512];
 char settingpath[512];
-static char bupfilename[512]="/bkram.bin";
 static char isofilename[512]="";
 
 enum MessageId {
@@ -216,12 +208,12 @@ void fat_remount()
 
 void reset()
 {
-   resetemu=1;
+   reset_emu = 1;
 }
 
 void powerdown()
 {
-	done = 1;
+	exec_emu = 1;
 	//SYS_ResetSystem(SYS_POWEROFF, 0, 0);  //Shutdown wii
 	//SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0); // Goto wii menu
 }
@@ -313,7 +305,7 @@ void menu_Init(void)
 }
 
 
-void menu_Handle(void)
+u32 menu_Handle(void)
 {
 	u32 buttons;
 	per_updatePads();
@@ -323,8 +315,9 @@ void menu_Handle(void)
 	if (perpad[0].type == PAD_TYPE_GCPAD) {
 		btn_a = PAD_DI_B;
 		btn_b = PAD_DI_A;
-	} else if (perpad[0].type == PAD_TYPE_NONE) {
-		return;
+	} else if (perpad[0].type == PAD_TYPE_N64PAD){
+		btn_a = PAD_DI_A;
+		btn_b = PAD_DI_X;
 	}
 
 	if(buttons & PAD_DI_DOWN) {
@@ -355,17 +348,15 @@ void menu_Handle(void)
 	}
 	else if (buttons & btn_a) {	//Uses the C button as A button
 		if (filename_items.count && filename_items.cursor < filename_items.count) {
+			//Hold R to turn on FPS counter
 			if (PER_BUTTONS_HELD(0) & PAD_DI_R) {
 				yabsys.flags |= SYS_FLAGS_SHOW_FPS;
 			} else {
 				yabsys.flags &= ~SYS_FLAGS_SHOW_FPS;
 			}
-			strcpy(isofilename, games_dir);
-			strcat(isofilename, "/");
-			strcat(isofilename, filename_items.item[filename_items.cursor].data);
-			YuiExec();
-			SVI_SetResolution(0x80D2);
-			//iso_loaded = 1;
+			//Set up file name
+			sprintf(isofilename, "%s/%s", games_dir, filename_items.item[filename_items.cursor].data);
+			return GUI_RET_SELECT;
 		}
 	}
 	else if (buttons & btn_b) {	//Uses the B button as B button
@@ -374,7 +365,11 @@ void menu_Handle(void)
 		exit(0);
 		//SYS_ResetSystem(SYS_SHUTDOWN, 0, 0);
 	}
-	//gui_menu_boxes[MENU_BOX_SELECT].color_bg = (((gui_menu_boxes[MENU_BOX_SELECT].color_bg) + 0x040802) & 0x7F7F7F00) | 0xAA;
+
+	gui_Draw(&filename_items);
+	SVI_CopyFrame();
+	SVI_SwapBuffers(1);
+	return GUI_RET_NONE;
 }
 
 int ResetSettings(void)
@@ -394,34 +389,6 @@ int ResetSettings(void)
    declinenum = 15;
    dividenumclock = 1;
    threadingscsp2on = 0;
-// buttons
-   num_button_WII[0] = 3;
-   num_button_WII[1] = 1;
-   num_button_WII[2] = 0;
-   num_button_WII[3] = 4;
-   num_button_WII[4] = 2;
-   num_button_WII[5] = 6;
-   num_button_WII[6] = 6;
-   num_button_WII[7] = 6;
-   num_button_WII[8] = 5;
-   num_button_CLA[0] = 3;
-   num_button_CLA[1] = 1;
-   num_button_CLA[2] = 0;
-   num_button_CLA[3] = 2;
-   num_button_CLA[4] = 9;
-   num_button_CLA[5] = 8;
-   num_button_CLA[6] = 7;
-   num_button_CLA[7] = 6;
-   num_button_CLA[8] = 5;
-   num_button_GCC[0] = 3;
-   num_button_GCC[1] = 1;
-   num_button_GCC[2] = 0;
-   num_button_GCC[3] = 2;
-   num_button_GCC[4] = 8;
-   num_button_GCC[5] = 5;
-   num_button_GCC[6] = 7;
-   num_button_GCC[7] = 6;
-   num_button_GCC[8] = 4;
 
    SetMenuItem();
 
@@ -430,28 +397,45 @@ int ResetSettings(void)
 }
 
 
+//Usage
+// sega-gx <game_filepath> <*saves_folder>
 int main(int argc, char **argv)
 {
+	u32 gui_value = GUI_RET_NONE;
 	char *device_path = NULL;
 	L2Enhance();
 	SYS_SetResetCallback(reset);
 	SYS_SetPowerCallback(powerdown);
 
+
 	usleep(500000);
 
-	//XXX: change the mount code... just check once...
-	//fatInitDefault();
-	if(fatMountSimple("sd", &__io_wiisd)) {
-		device_path = "sd:/";
-	} else if (fatMountSimple("usb", &__io_usbstorage)){
-		device_path = "usb:/";
+	//Autoload the gamefile
+	if (argc > 2) {
+		gui_value = GUI_RET_SELECT;
+		strcpy(isofilename, argv[1]);
+
+		if (isofilename[0] == 's' && fatMountSimple("sd", &__io_wiisd)) { // sd
+			device_path = "sd:/";
+			//XXX: Check if this is correct
+		} else if (fatMountSimple("usb", &__io_usbstorage)) {
+			device_path = "usb:/";
+		}
 	} else {
-		//Device not found notice
+		if(fatMountSimple("sd", &__io_wiisd)) {
+			device_path = "sd:/";
+		} else if (fatMountSimple("usb", &__io_usbstorage)){
+			device_path = "usb:/";
+		} else {
+			//Device not found notice
+		}
+		//Only load gamelist
+		sprintf(games_dir, "%s%s", device_path, "vgames/Saturn");
+		games_LoadList();
 	}
 
 	//Copy the routes
 	sprintf(biospath, "%s%s", device_path, "apps/SetaGX/bios.bin");
-	sprintf(games_dir, "%s%s", device_path, "vgames/Saturn");
 	sprintf(saves_dir, "%s%s", device_path, "saves/Saturn");
 
 	bioswith = 1;			//bioswith
@@ -472,12 +456,27 @@ int main(int argc, char **argv)
 	threadingscsp2on = 0; //threadingscsp2on	//No threading
 
 	SVI_Init();
-
 	mem_allocate();
 	snd_Init();
 	menu_Init();
-	games_LoadList();
 	per_Init();
+
+	#ifdef TEST_GUI
+	while(1) {
+		per_updatePads();
+		u32 buttons = PER_BUTTONS_DOWN(0);
+		u32 btn_a = PAD_DI_C;
+		if (buttons & btn_a) {
+			return 0;
+		}
+		gui_Test();
+		SVI_CopyFrame();
+		SVI_SwapBuffers(1);
+	}
+	return 0;
+	#else
+	gui_Init();
+	#endif
 
 	osd_ProfAddCounter(PROF_SH2M, "SH2M");
 	osd_ProfAddCounter(PROF_SH2S, "SH2S");
@@ -488,22 +487,20 @@ int main(int argc, char **argv)
 	osd_ProfAddCounter(PROF_VDP1, "VDP1");
 	osd_ProfAddCounter(PROF_VDP2, "VDP2");
 	osd_ProfAddCounter(PROF_CDB, "CDB");
-
-	CON_EnableBarnacle(EXI_CHANNEL_0, EXI_DEVICE_1);
-	printf("what is this number? %d\n", 42);
+	sprintf(isofilename, "%s/%s", games_dir, filename_items.item[filename_items.cursor].data);
 
 	while(1) {
-		menu_Handle();
-		gui_Draw(&filename_items);
-		SVI_CopyFrame();
-		SVI_SwapBuffers(1);
+		if (gui_value == GUI_RET_SELECT) {
+			CoreExec();
+		}
+		gui_value = menu_Handle();
 	}
 
 	return 0;
 }
 
 
-int YuiExec()
+int CoreExec()
 {
 	yabauseinit_struct yinit;
 	int ret;
@@ -515,7 +512,7 @@ int YuiExec()
 
 	memset(&yinit, 0, sizeof(yabauseinit_struct));
 	//yinit.percoretype = PERCORE_WIICLASSIC;
-	yinit.sh2coretype = SH2CORE_INTERPRETER;
+	yinit.sh2coretype = 0;
 	yinit.vidcoretype = videodriverselect;
 	yinit.scspcoretype = scspdriverselect;
 	yinit.sndcoretype = sounddriverselect;
@@ -532,7 +529,6 @@ int YuiExec()
 	}
 	yinit.cdpath = isofilename;
 	strcpy(buppath, saves_dir);
-	strcat(buppath, bupfilename);
 	yinit.buppath = buppath;
 	yinit.mpegpath = NULL;
 	yinit.cartpath = NULL;
@@ -544,18 +540,21 @@ int YuiExec()
 
 	// Hijack the fps display
 	//VIDSoft.OnScreenDebugMessage = OnScreenDebugMessage;
-	done = 0;
-	if ((ret = YabauseInit(&yinit)) == 0)
-	{
+	exec_emu = 0;
+
+	VIDEO_SetBlack(1);
+	SVI_SetResolution(0x00D2);
+	VIDEO_WaitVSync();
+
+	if ((ret = YabauseInit(&yinit)) == 0) {
 		ScspSetFrameAccurate(1);
 		YabauseSetDecilineMode(1);
+		VIDEO_SetBlack(0);
 
-
-      while(!done)
-      {
+		while(!exec_emu) {
 			u32 result = 0;
 			if (per_updatePads()) {
-				done = 1;
+				exec_emu = 1;
 				result = 0;
 			} else {
 				char msg[128] = {0};
@@ -563,31 +562,31 @@ int YuiExec()
 				osd_MsgAdd(20, 28, 0xFFFFFFFF, msg);
 				result = YabauseExec();
 			}
-		//XXX: recover memory used...
-         if (result != 0){
-            return -1;
+			//XXX: recover memory used...
+			if (result != 0) {
+				return -1;
+			}
+			if (reset_emu) {
+				YabauseReset();
+				reset_emu = 0;
+				SYS_SetResetCallback(reset);
+			}
 		}
-         if (resetemu)
-         {
-            YabauseReset();
-            resetemu = 0;
-            SYS_SetResetCallback(reset);
-         }
-      }
-      if(strlen(cdip->itemnum)!=0)
-         strcpy(prev_itemnum, cdip->itemnum);
-      YabauseDeInit();
+		VIDEO_SetBlack(1);
+		if(strlen(cdip->itemnum)!=0) {
+			strcpy(prev_itemnum, cdip->itemnum);
+		}
+		YabauseDeInit();
 #ifdef AUTOLOADPLUGIN
-      if(autoload) autoload=0;
+		if(autoload)
+			autoload=0;
 #endif
-      done=0;
-      resetemu=0;
-   }
-   else
-   {
-      while(!done)
-         VIDEO_WaitVSync();
-   }
+		exec_emu=0;
+		reset_emu=0;
+	}
+	SVI_SetResolution(0x80D2);
+	VIDEO_SetBlack(0);
+	VIDEO_WaitVSync();
 	wait_for_sync = 1;
 	return 0;
 }
@@ -602,5 +601,3 @@ void YuiErrorMsg(const char *string)
       printf("%s\n", string);
    }
 }
-
-

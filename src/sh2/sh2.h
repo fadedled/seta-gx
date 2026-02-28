@@ -1,12 +1,49 @@
 
 
+#ifndef __SH2_H__
+#define __SH2_H__
+
+#include <gccore.h>
+#include "../memory.h"
 
 //===================================
 // SH2 Flags
 //===================================
-#define SH2_FLAG_SLAVE		0x01
-#define SH2_FLAG_IDLE		0x02
-#define SH2_FLAG_SLEEPING	0x04
+#define SH2_FLAG_SLAVE				0x8000
+#define SH2_FLAG_IDLE				0x02
+#define SH2_FLAG_SLEEPING			0x04
+#define SH2_FLAG_SET(sh, flag)		((sh)->flags |=  (flag))
+#define SH2_FLAG_CLR(sh, flag)		((sh)->flags &= ~(flag))
+
+
+//===================================
+// SH2 SR register
+//===================================
+#define SH2_SR_T(sr)	((sr) & 1)
+#define SH2_SR_S(sr)	(((sr) >> 1) & 1)
+#define SH2_SR_I(sr)	(((sr) >> 4) & 0xF)
+#define SH2_SR_M(sr)	(((sr) >> 5) & 1)
+#define SH2_SR_Q(sr)	(((sr) >> 6) & 1)
+
+#define SH2_SR_T_BIT	(0x01)
+#define SH2_SR_S_BIT	(0x02)
+#define SH2_SR_I_BITS	(0xF0)
+#define SH2_SR_M_BIT	(0x100)
+#define SH2_SR_Q_BIT	(0x200)
+
+#define SH2_SR_SET_T(sr, t)		(((sr) & ~SH2_SR_T_BIT) | (t))
+#define SH2_SR_SET_I(sr, i)		(((sr) & ~SH2_SR_I_BITS) | (((i) << 4) & SH2_SR_I_BITS))
+#define SH2_SR_SET_Q(sr, q)		(((sr) & ~SH2_SR_Q_BIT) | ((q) << 5))
+#define SH2_SR_SET_M(sr, m)		(((sr) & ~SH2_SR_M_BIT) | ((m) << 6))
+
+//===================================
+// SH2 Interrupt
+//===================================
+#define SH2_INTERRUPT_NMI				(((0x1F) << 8) | (0xB))
+#define SH2_INTERRUPT(vec, level)		(((level) << 8) | (vec))
+#define SH2_INTERRUPT_VEC(ir)			((ir) & 0x7F)
+#define SH2_INTERRUPT_LEVEL(ir)			((ir) >> 8)
+
 
 //===================================
 // On-Chip peripheral modules (Addresses 0xFFFFFE00 - 0xFFFFFFFF)
@@ -71,7 +108,7 @@
 #define OC_VCRDMA0		0x1A0
 #define OC_VCRDMA1		0x1A8
 #define OC_DMAOR		0x1B0
-#define OC_BCR1			0x1E0
+#define OC_BCR1			0x1E0 //Real BCR1 is in 0x1E2-0x1E3
 #define OC_BCR2			0x1E4
 #define OC_WCR			0x1E8
 #define OC_MCR			0x1EC
@@ -79,6 +116,95 @@
 #define OC_RTCNT		0x1F4
 #define OC_RTCOR		0x1F8
 
+#define MAX_INTERRUPTS 	64 	//TODO: CHECK THIS
+
+#define EXT_IMM8(imm)		((imm & 0xFF) | -(imm & 0x80u))
+#define EXT_IMM12(imm)		((imm & 0xFFF) | -(imm & 0x800u))
 
 
+typedef struct SH2_tag
+{
+	//
+	u32 r[16];
+	u32 pc;
+	u32 pr;
+	u32 mach;
+	u32 macl;
+	u32 gbr;
+	u32 vbr;
+	u32 sr;
 
+	u32 delay_slot;
+	s32 cycles; //There are no negative cycles, this is for underflow reasons
+	u32 flags;
+
+	u32 frc_leftover;
+	u32 wdt_leftover;
+	u32 wdt_shift;
+	//u32 frc_shift; // ((OC_TRC & 3) << 1) + 3
+
+	//u32 wdt_cntl; // isenable (OC_WTCSR & 0x20), isinterval (~OC_WTCSR & 0x40)
+	//XXX: Interrupt stuff
+	u16 irq[MAX_INTERRUPTS];
+	u32 irq_count;
+
+	u32 address_arr[0x100];		/*Address Array*/
+	u8 on_chip[0x200];			/*On-chip peripheral modules*/
+	u8 cache[0x1000];			/*Data Cache Array*/
+} SH2;
+
+
+extern SH2 msh2;
+extern SH2 ssh2;
+
+void sh2_Init();
+void sh2_Deinit();
+void sh2_Reset(SH2 *sh);
+void sh2_PowerOn(SH2 *sh);
+void sh2_Exec(SH2 *sh, u32 cycles);
+void sh2_Step(SH2 *sh);
+void sh2_SendInterrupt(SH2 *sh, u32 vec, u32 level);
+void sh2_NMI(SH2 *sh);
+void sh2_SetRegs(SH2 *sh, u32 *regs[32]);
+void sh2_GetRegs(SH2 *sh, u32 *regs[32]);
+void sh2_WriteNotify(u32 start, u32 len); //Notifies a write for dynarec code cache
+
+void sh2_DMAExec(SH2 *sh);
+void sh2_DMATransfer(SH2 *sh, u32 *chcr, u32 *sar, u32 *dar, u32 *tcr, u32 *vcrdma); //?
+
+//Read/Write functions
+u8   sh2_Read8(u32 addr);
+u16  sh2_Read16(u32 addr);
+u32  sh2_Read32(u32 addr);
+void sh2_Write8(u32 addr, u8 val);
+void sh2_Write16(u32 addr, u16 val);
+void sh2_Write32(u32 addr, u32 val);
+
+#if 0
+//On-chip
+u8   sh2_OnchipRead8(u32 addr);
+u16  sh2_OnchipRead16(u32 addr);
+u32  sh2_OnchipRead32(u32 addr);
+void sh2_OnchipWrite8(u32 addr, u8 val);
+void sh2_OnchipWrite16(u32 addr, u16 val);
+void sh2_OnchipWrite32(u32 addr, u32 val);
+
+//Address Array
+u32  sh2_AddressArrayRead32(u32 addr);
+void sh2_AddressArrayWrite32(u32 addr, u32 val);
+
+//Data Array
+u8   sh2_DataArrayRead8(u32 addr);
+u16  sh2_DataArrayRead16(u32 addr);
+u32  sh2_DataArrayRead32(u32 addr);
+void sh2_DataArrayWrite8(u32 addr, u8 val);
+void sh2_DataArrayWrite16(u32 addr, u16 val);
+void sh2_DataArrayWrite32(u32 addr, u32 val);
+#endif
+
+//Input Capture
+void sh2_MSH2InputCaptureWrite16(u32 addr, u16 data);
+void sh2_SSH2InputCaptureWrite16(u32 addr, u16 data);
+
+
+#endif /* __SH2_H__ */

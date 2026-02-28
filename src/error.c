@@ -22,8 +22,12 @@
 #include <string.h>
 #include <stdarg.h>
 #include "error.h"
-#include "yui.h"
 
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
 //////////////////////////////////////////////////////////////////////////////
 
 static void AllocAmendPrintString(const char *string1, const char *string2)
@@ -34,7 +38,7 @@ static void AllocAmendPrintString(const char *string1, const char *string2)
       return;
 
    sprintf(string, "%s%s\n", string1, string2);
-   YuiErrorMsg(string);
+   //YuiErrorMsg(string);
 
    free(string);
 }
@@ -44,7 +48,6 @@ static void AllocAmendPrintString(const char *string1, const char *string2)
 void YabSetError(int type, const void *extra)
 {
    char tempstr[512];
-   SH2_struct *sh;
 
    switch (type)
    {
@@ -52,7 +55,7 @@ void YabSetError(int type, const void *extra)
          AllocAmendPrintString("File not found: ", extra);
          break;
       case YAB_ERR_MEMORYALLOC:
-         YuiErrorMsg("Error allocating memory\n");
+         //YuiErrorMsg("Error allocating memory\n");
          break;
       case YAB_ERR_FILEREAD:
          AllocAmendPrintString("Error reading file: ", extra);
@@ -64,6 +67,8 @@ void YabSetError(int type, const void *extra)
          AllocAmendPrintString("Cannot initialize ", extra);
          break;
       case YAB_ERR_SH2INVALIDOPCODE:
+#ifdef USE_SH2_OLD
+		SH2_struct *sh;
          sh = (SH2_struct *)extra;
          SH2GetRegisters(sh, &sh->regs);
          sprintf(tempstr, "%s SH2 invalid opcode\n\n"
@@ -91,23 +96,24 @@ void YabSetError(int type, const void *extra)
                           (long)sh->regs.R[9], (long)sh->regs.PR,
                           (long)sh->regs.R[10], (long)sh->regs.PC,
                           (long)sh->regs.R[11]);
-         YuiErrorMsg(tempstr);
+         //YuiErrorMsg(tempstr);
+#endif
          break;
       case YAB_ERR_SH2READ:
-         YuiErrorMsg("SH2 read error\n"); // fix me
+         //YuiErrorMsg("SH2 read error\n"); // fix me
          break;
       case YAB_ERR_SH2WRITE:
-         YuiErrorMsg("SH2 write error\n"); // fix me
+         //YuiErrorMsg("SH2 write error\n"); // fix me
          break;
       case YAB_ERR_SDL:
          AllocAmendPrintString("SDL Error: ", extra);
          break;
       case YAB_ERR_OTHER:
-         YuiErrorMsg((char *)extra);
+         //YuiErrorMsg((char *)extra);
          break;
       case YAB_ERR_UNKNOWN:
       default:
-         YuiErrorMsg("Unknown error occurred\n");
+         //YuiErrorMsg("Unknown error occurred\n");
          break;
    }
 }
@@ -129,7 +135,7 @@ void YabErrorMsg(const char * format, ...) {
     vsprintf(buffer, format, l);
     va_end(l);
 
-    YuiErrorMsg(buffer);
+    //YuiErrorMsg(buffer);
     free(buffer);
 }
 

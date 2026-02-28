@@ -31,26 +31,66 @@ void *gp_fifo;
 u8 *fb_scale_tex ATTRIBUTE_ALIGN(32);		/*Texture for scaling x axis fb*/
 
 
+u32 tvmd_curr = 0;
+
+static void __svi_PretraceCB(u32 ret_count)
+{
+	// Set vertical and horizontal Resolution
+	u32 width = SS_DISP_WIDTH + ((tvmd_curr & 1) << 5);
+	u32 height = SS_DISP_HEIGHT + (((tvmd_curr & 0x30) > 0) << 4);
+	u32 vdp2_x_hires = ((tvmd_curr >> 1) & 1);
+	u32 vdp2_interlace = ((tvmd_curr & 0xC0) == 0xC0);
+	vdp2_disp_w = width << vdp2_x_hires;
+	vdp2_disp_h = height << vdp2_interlace;
+	vdp1_fb_w = width;
+	vdp1_fb_h = height;
+	scale_mtx = MTX_TEX_SCALED_N + ((1-vdp2_x_hires) << 1);
+	vert_offset = ((((tvmd_curr & 0x30) == 0) << 3));
+	tvmode = (tvmd_curr & 3);
+
+	//TODO: DONT CHANGE THIS, ONLY CLEAR TO BLACK
+	const u32 xfb_size = 704 * 480 * VI_DISPLAY_PIX_SZ;
+	__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
+	__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
+	GX_SetDispCopyYScale((f32)(2 - vdp2_interlace));	//scale the XFB copy if not interlaced
+	GX_Flush();
+
+	rmode->fbWidth = width << 1; //rmode->fbWidth = 704;
+	rmode->viWidth = 704;
+	rmode->viHeight = rmode->xfbHeight = height << 1;
+	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) / 2;
+	rmode->viYOrigin = (VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
+	//rmode->viYOrigin = vert_offset;
+	//rmode->viHeight = height << 1;
+	//rmode->viYOrigin = 4;//(VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
+	VIDEO_Configure(rmode);
+	VIDEO_Flush();
+	VIDEO_SetPreRetraceCallback(NULL);
+}
+
+
 void SVI_Init(void)
 {
 	VIDEO_Init();
 	rmode = VIDEO_GetPreferredMode(NULL);
 
-	Mtx GXmodelView2D;
 	Mtx44 perspective;
-	u16 w = VIDEO_PadFramebufferWidth(704);
-	u16 h = 512;
-	u32 xfb_size = w * h * VI_DISPLAY_PIX_SZ;
+	const u16 w = VIDEO_PadFramebufferWidth(704);
+	const u16 h = 480;
+	const u32 xfb_size = w * h * VI_DISPLAY_PIX_SZ;
 	//Allocate framebuffers
 	xfb[0] = MEM_K0_TO_K1(memalign(32, xfb_size));
 	xfb[1] = MEM_K0_TO_K1(memalign(32, xfb_size));
-	fb_scale_tex = (u8*) memalign(32, 704*512*2);
+	fb_scale_tex = (u8*) memalign(32, 704*480*2);
 
 	__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
 	__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
 
-	rmode->viWidth = rmode->fbWidth = 704;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - 704)/2;
+	rmode->fbWidth = 704;
+	rmode->viWidth = 704;
+	rmode->viHeight = rmode->xfbHeight = SS_DISP_HEIGHT << 1;
+	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) / 2;
+	rmode->viYOrigin = (VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
 	VIDEO_SetBlack(1);
 	VIDEO_Configure(rmode);
 	VIDEO_Flush();
@@ -92,7 +132,7 @@ void SVI_Init(void)
 	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XYZ,  GX_F32, 1);
 
 	//VDP2 vertex format
-	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XYZ,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 
 	//GUI vertex format
@@ -112,7 +152,8 @@ void SVI_Init(void)
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_SetCurrentMtx(MTX_IDENTITY);
 
-	guOrtho(perspective, 0, 480.0, 0, 640.0, 0, 1.0);
+	//TODO: Check that the values are stored correctly.
+	guOrtho(perspective, 0, 480.0, 0.0, 640.0, 0.0, GX_MAX_Z24+1);
 	GX_LoadProjectionMtx(perspective, GX_ORTHOGRAPHIC);
 
 	GX_SetViewport(0, 0, 640, 480, 0.0f, 1.0f);
@@ -137,48 +178,31 @@ void SVI_Init(void)
 	VIDEO_WaitVSync();
 }
 
-u32 prev_tvmd = 0;
+void SVI_ResetViewport(void)
+{
+	//GX_SetViewport(0, 0, 640, 480, 0.0f, 256.0f);
+}
 
 void SVI_SetResolution(u32 tvmd)
 {
-	if (prev_tvmd == tvmd) {
-		return;
+	//Only change the resolution when the mode has changed
+	if (tvmd_curr != tvmd) {
+		tvmd_curr = tvmd;
+		VIDEO_SetPreRetraceCallback(__svi_PretraceCB);
 	}
-	prev_tvmd = tvmd;
-	// Set vertical and horizontal Resolution
-	u32 width = SS_DISP_WIDTH + ((tvmd & 1) << 5);
-	u32 height = SS_DISP_HEIGHT + (((tvmd & 0x30) > 0) << 5);
-	u32 vdp2_x_hires = ((tvmd >> 1) & 1);
-	u32 vdp2_interlace = ((tvmd & 0xC0) == 0xC0);
-	vdp2_disp_w = width << vdp2_x_hires;
-	vdp2_disp_h = height << vdp2_interlace;
-	vdp1_fb_w = width;
-	vdp1_fb_h = height;
-	scale_mtx = MTX_TEX_SCALED_N + ((1-vdp2_x_hires) << 1);
-	vert_offset = ((((tvmd & 0x30) == 0) << 3));
-	tvmode = (tvmd & 3);
-
-	//TODO: DONT CHANGE THIS, ONLY CLEAR TO BLACK
-	u32 xfb_size = 704 * 512 * VI_DISPLAY_PIX_SZ;
-	__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
-	__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
-
-	GX_SetDispCopyYScale((f32)(2 - vdp2_interlace));	//scale the XFB copy if not interlaced
-	GX_Flush();
 }
 
 void SVI_CopyXFB(u32 x, u32 y)
 {
 	GX_SetDispCopyYScale(1.0);	//scale the XFB copy if not interlaced
 	GX_CopyDisp(xfb[fbsel] + (y * 704) + x, GX_TRUE);
-	GX_DrawDone();
 	GX_SetDispCopyYScale((f32)(2 - (vdp2_disp_h > 352)));	//scale the XFB copy if not interlaced
 }
 
 
 void SVI_CopyFrame(void)
 {
-	GX_SetCopyClear((GXColor) {0x00, 0x00, 0x00, 0x00}, 0);
+
 	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
 	GX_SetVtxDesc(GX_VA_POS,  GX_DIRECT);
@@ -194,7 +218,7 @@ void SVI_CopyFrame(void)
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
 	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP6, GX_COLORNULL);
 
-	GX_SetZMode(GX_DISABLE, GX_GREATER, GX_TRUE);
+	GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetTevColorOp(GX_TEVSTAGE0, GX_TEV_ADD, GX_TB_ZERO, GX_CS_SCALE_1, GX_TRUE, GX_TEVPREV);
@@ -221,9 +245,10 @@ void SVI_CopyFrame(void)
 			GX_Position2s16(w, h);
 			GX_End();
 
-			GX_SetDispCopySrc(0, 0, w, h);
-			GX_SetDispCopyDst(704, h);
-			GX_CopyDisp(xfb[fbsel] + (vert_offset * 704) + 32, GX_TRUE);
+			GX_SetDispCopySrc(0, 0, w, 240);
+			GX_SetDispCopyDst(w, 480);
+			GX_DrawDone();
+			GX_CopyDisp(xfb[fbsel], GX_TRUE);
 		} break;
 		case TVMODE_B_ST: {
 			GX_SetTexCopySrc(0, 0, vdp2_disp_w, vdp2_disp_h);
@@ -241,9 +266,10 @@ void SVI_CopyFrame(void)
 				GX_Position2s16(w, h);
 			GX_End();
 
-			GX_SetDispCopySrc(0, 0, w, h);
-			GX_SetDispCopyDst(704, h);
-			GX_CopyDisp(xfb[fbsel] + (vert_offset * 704), GX_TRUE);
+			GX_SetDispCopySrc(0, 0, w, 240);
+			GX_SetDispCopyDst(704, 480);
+			GX_DrawDone();
+			GX_CopyDisp(xfb[fbsel], GX_TRUE);
 
 			GX_SetCurrentMtx(MTX_MOVED_640);
 			GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT4, 4);
@@ -252,35 +278,36 @@ void SVI_CopyFrame(void)
 			GX_Position2s16(w, h);
 			GX_Position2s16(w+64, h);
 			GX_End();
-			GX_SetDispCopySrc(0, 0, 64, h);
-			GX_CopyDisp(xfb[fbsel] + (vert_offset * 704) + w, GX_TRUE);
+			GX_SetDispCopySrc(0, 0, 64, 240);
+			GX_DrawDone();
+			GX_CopyDisp(xfb[fbsel] + w, GX_TRUE);
 		} break;
 		case TVMODE_A_HI: {
 			GX_SetDispCopySrc(0, 0, 640, vdp2_disp_h);
-			GX_SetDispCopyDst(704, vdp2_disp_h);
-			GX_CopyDisp(xfb[fbsel] + (vert_offset * 704) + 32, GX_TRUE);
+			GX_SetDispCopyDst(640, vdp2_disp_h);
+			GX_DrawDone();
+			GX_CopyDisp(xfb[fbsel], GX_TRUE);
 		} break;
 		case TVMODE_B_HI: {
 			GX_SetDispCopySrc(0, 0, 640, vdp2_disp_h);
 			GX_SetDispCopyDst(704, vdp2_disp_h);
-			GX_CopyDisp(xfb[fbsel] + (vert_offset * 704), GX_TRUE);
+			GX_DrawDone();
+			GX_CopyDisp(xfb[fbsel], GX_TRUE);
 		} break;
 	}
-	GX_DrawDone();
 }
 
 
 void SVI_ClearFrame(void)
 {
 	//Copy black
-	GX_SetCopyClear((GXColor){0, 0, 0, 0}, 0);
 	GX_SetDispCopySrc(0, 0, 640, vdp2_disp_h);
-	GX_SetDispCopyDst(704, vdp2_disp_h);
+	GX_SetDispCopyDst(rmode->fbWidth, vdp2_disp_h);
 	GX_CopyDisp(xfb[fbsel], GX_TRUE);
-	GX_SetDispCopySrc(0, 0, 64, vdp2_disp_h);
-	GX_CopyDisp(xfb[fbsel]+640, GX_TRUE);
-	GX_DrawDone();
-
+	if (rmode->fbWidth == 704) {
+		GX_SetDispCopySrc(0, 0, 64, vdp2_disp_h);
+		GX_CopyDisp(xfb[fbsel]+640, GX_TRUE);
+	}
 }
 
 void SVI_SwapBuffers(u32 wait_vsync)

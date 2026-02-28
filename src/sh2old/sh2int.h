@@ -1,4 +1,5 @@
-/*  Copyright 2005 Theo Berkau
+/*  Copyright 2003-2005 Guillaume Duhamel
+    Copyright 2004-2005 Theo Berkau
 
     This file is part of Yabause.
 
@@ -17,10 +18,27 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-#ifndef SH2IDLE_H
-#define SH2IDLE_H
+#ifndef SH2INT_H
+#define SH2INT_H
 
-void FASTCALL SH2idleCheck(SH2_struct *context, u32 cycles);
-void FASTCALL SH2idleParse(SH2_struct *context, u32 cycles);
+#define SH2CORE_INTERPRETER             0
+#define SH2CORE_DEBUGINTERPRETER        1
+
+#define INSTRUCTION_A(x) ((x & 0xF000) >> 12)
+#define INSTRUCTION_B(x) ((x & 0x0F00) >> 8)
+#define INSTRUCTION_C(x) ((x & 0x00F0) >> 4)
+#define INSTRUCTION_D(x) (x & 0x000F)
+#define INSTRUCTION_CD(x) (x & 0x00FF)
+#define INSTRUCTION_BCD(x) (x & 0x0FFF)
+
+extern SH2Interface_struct SH2Interpreter;
+
+typedef u32 (FASTCALL *fetchfunc)(u32);
+extern fetchfunc fetchlist[0x100];
+
+typedef void (FASTCALL *opcodefunc)(SH2_struct *);
+extern opcodefunc opcode_arr[16];
+opcodefunc FASTCALL decode(u16 instruction);
+
 
 #endif

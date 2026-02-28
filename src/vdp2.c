@@ -24,9 +24,13 @@
 #include "vdp2.h"
 #include "debug.h"
 #include "scu.h"
-#include "sh2core.h"
+#ifdef USE_SH2_OLD
+	#include "sh2old/sh2core.h"
+#else
+	#include "sh2/sh2.h"
+#endif
+
 #include "vdp1.h"
-#include "yui.h"
 #include "yabause.h"
 #include "osd/osd.h"
 #include <ogc/lwp_watchdog.h>
@@ -146,9 +150,10 @@ void FASTCALL Vdp2ColorRamWriteWord(u32 addr, u16 val) {
 	//	val = TO_RGB4A3(val);
 	//}
 	//SGX_ColorRamDirty(addr >> 5);
-	if (Vdp2Internal.ColorMode == 0 ) {
-		T2WriteWord(Vdp2ColorRam, addr | 0x800, val);
-	}
+	//if (Vdp2Internal.ColorMode == 0 ) {
+	//	T2WriteWord(Vdp2ColorRam, addr | 0x800, val);
+	//}
+	//NOTE: We ignore Mirror?
 	T2WriteWord(Vdp2ColorRam, addr, val);
 }
 
@@ -159,10 +164,11 @@ void FASTCALL Vdp2ColorRamWriteLong(u32 addr, u32 val) {
 	//XXX: this hack should not be done in mode 2...
 	//val |= 0x80008000;
 	//SGX_ColorRamDirty(addr >> 5);
+	//NOTE: We ignore Mirror?
 	T2WriteLong(Vdp2ColorRam, addr, val);
-   	if (Vdp2Internal.ColorMode == 0 ) {
-		T2WriteLong(Vdp2ColorRam, addr | 0x800, val);
-	}
+   	//if (Vdp2Internal.ColorMode == 0 ) {
+	//	T2WriteLong(Vdp2ColorRam, addr | 0x800, val);
+	//}
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -275,6 +281,23 @@ void Vdp2Reset(void) {
 }
 
 //////////////////////////////////////////////////////////////////////////////
+
+static void FPSDisplay(void)
+{
+	static int fpsframecount = 0;
+	static u64 fpsticks;
+	osd_FPSDraw(fps);
+	fpsframecount++;
+
+	if(YabauseGetTicks() >= fpsticks + yabsys.tickfreq) {
+		fps = fpsframecount;
+		fpsframecount = 0;
+		fpsticks = YabauseGetTicks();
+	}
+}
+
+
+//////////////////////////////////////////////////////////////////////////////
 //HALF-DONE
 void Vdp2VBlankIN(void) {
    //XXX: Check that this is fine
@@ -284,20 +307,41 @@ void Vdp2VBlankIN(void) {
 
    //if (yabsys.IsSSH2Running)
     //  SH2SendInterrupt(SSH2, 0x43, 0x6);
+	u32 cycles_start;
+	GX_InvalidateTexAll();
+
+	//If there where changes in resolution then apply them
+	SVI_SetResolution(Vdp2Regs->TVMD);
+
+	if (Vdp2Regs->TVMD & 0x8000) {
+		DCFlushRange(Vdp2Ram, 0x80000);
+		DCFlushRange(Vdp2ColorRam, 0x1000);
+
+		cycles_start = gettime();
+		SGX_Vdp2GenCRAM();
+		SGX_Vdp2Draw();
+		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
+	} else { // Will not render this frame
+		SVI_ClearFrame();
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
 void Vdp2HBlankIN(void) {
-   /* I'm not 100% sure about this, but it seems that when using manual change
-   we should swap framebuffers in the "next field" and thus, clear the CEF...
-   now we're lying a little here as we're not swapping the framebuffers. */
-   if (Vdp1External.manualchange) Vdp1Regs->EDSR >>= 1;
-   Vdp2Regs->TVSTAT |= 0x0004;
-   ScuSendHBlankIN();
+	/* I'm not 100% sure about this, but it seems that when using manual change
+	we should swap framebuffers in the "next field" and thus, clear the CEF...
+	now we're lying a little here as we're not swapping the framebuffers. */
+	if (Vdp1External.manualchange) Vdp1Regs->EDSR >>= 1;
+	Vdp2Regs->TVSTAT |= 0x0004;
+	ScuSendHBlankIN();
 
-   if (yabsys.IsSSH2Running)
-      SH2SendInterrupt(SSH2, 0x41, 0x2);
+	if (yabsys.IsSSH2Running)
+#ifdef USE_SH2_OLD
+		SH2SendInterrupt(SSH2, 0x41, 0x2);
+#else
+		sh2_SetInterrupt(&ssh2, 0x41, 0x2);
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -315,22 +359,6 @@ void Vdp2HBlankOUT(void) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void FPSDisplay(void)
-{
-	static int fpsframecount = 0;
-	static u64 fpsticks;
-	osd_FPSDraw(fps);
-	fpsframecount++;
-
-	if(YabauseGetTicks() >= fpsticks + yabsys.tickfreq) {
-		fps = fpsframecount;
-		fpsframecount = 0;
-		fpsticks = YabauseGetTicks();
-	}
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 static u64 current_ticks = 0;
 static u32 prev_tvmd = 0;
 
@@ -338,6 +366,7 @@ void Vdp2VBlankOUT(void)
 {
 	Vdp2Regs->TVSTAT = (Vdp2Regs->TVSTAT & ~0x0008) | 0x0002;
 	u32 cycles_start;
+#if 0
 
 	//VIDSoftVdp2DrawStart();
 	//SGX_InvalidateVRAM();
@@ -368,13 +397,27 @@ void Vdp2VBlankOUT(void)
 	if (yabsys.flags & SYS_FLAGS_SHOW_FPS) {
 		FPSDisplay();
 	}
-#if 0
+#if 1
 	osd_ProfDraw();
 #endif
+#endif
+	if (Vdp2Regs->TVMD & 0x8000) {
+		SVI_CopyFrame(); // Finished drawing VDP2
+		cycles_start = gettime();
+		Vdp1Draw();
+		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+	} else {
+		Vdp1NoDraw();	//Do nothing
+	}
+	if (yabsys.flags & SYS_FLAGS_SHOW_FPS) {
+		FPSDisplay();
+	}
+	#if 1
+		osd_ProfDraw();
+	#endif
 	SGX_Vdp1SwapFramebuffer();
-	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
-
 	//XXX: Limit FPS.. we can do better than this
+	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
 	current_ticks = gettime();
 
 	/* this should be done after a frame change or a plot trigger */
@@ -429,10 +472,8 @@ u16 FASTCALL Vdp2ReadWord(u32 addr) {
          return Vdp2Regs->HCNT;
       case 0x00A:
          return Vdp2Regs->VCNT;
-#ifdef GEKKO
       case 0x00E:
          return Vdp2Regs->RAMCTL;
-#endif
       default:
       {
          LOG("Unhandled VDP2 word read: %08X\n", addr);
@@ -488,7 +529,7 @@ void FASTCALL Vdp2WriteWord(u32 addr, u16 val) {
          return;
       case 0x00E:
          Vdp2Regs->RAMCTL = val;
-         Vdp2Internal.ColorMode = (val >> 12) & 0x3;
+   		//Vdp2Internal.ColorMode = (val >> 12) & 0x3;
          return;
       case 0x010:
          Vdp2Regs->CYCA0L = val;

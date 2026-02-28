@@ -142,11 +142,9 @@ typedef struct
    s32 cor;
    s32 cog;
    s32 cob;
-#ifdef GEKKO
    u32 oldpixel;
    int colorcalcmode;
    int docolorcalcenable;
-#endif
 
    float coordincx, coordincy;
    void FASTCALL (* PlaneAddr)(void *, int);

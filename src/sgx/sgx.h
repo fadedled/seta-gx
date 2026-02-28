@@ -7,7 +7,6 @@
 
 #define	VTXFMT_FLAT_TEX			GX_VTXFMT2
 #define	VTXFMT_GOUR_TEX			GX_VTXFMT3
-#define	VTXFMT_COLOR			GX_VTXFMT5
 
 #define TLUT_INDX(type, pos)	((GX_TLUT_2K << 10) | (((pos) + (type) + 0x200) & 0x3ff))
 
@@ -57,6 +56,7 @@
 #define MTX_TEX_SCALED_X	42	// For scaled axis aligned textures (Vdp1 fb or display scaling)
 #define MTX_TEX_SCALED_Y	44	// For scaled axis aligned textures (Vdp1 fb or display scaling)
 #define MTX_TEX_SCALED_XY	46	// For scaled axis aligned textures (Vdp1 fb or display scaling)
+#define MTX_TEX_IDENT_PLUS1	48	// Identity adding 1 pixel in x axis
 
 //=========================
 
@@ -75,6 +75,7 @@
 #define SPRITE_4BPP			0
 #define SPRITE_8BPP			1
 #define SPRITE_16BPP		2
+#define SPRITE_32BPP		3
 
 
 #define TEXPRE_TYPE_4BPP	(1<<15)
@@ -161,13 +162,16 @@ void SGX_SetOtherTex(u32 mapid, void *img_addr, u32 fmt, u32 w, u32 h, u32 tlut)
 void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align);
 void SGX_EndVdp1(void);
 void SGX_BeginVdp2Scroll(u32 fmt, u32 sz);
+void SGX_BeginVdp2Bitmap(u32 fmt, u32 bm_wdith, u32 bm_height);
 void SGX_SetVdp2Texture(void *img_addr, u32 tlut);
 void SGX_LoadTlut(void *data_addr, u32 tlut);
 void SGX_SetZOffset(u32 offset);
 
 void SGX_CellConverterInit(void);
 void SGX_CellConverterSet(u32 cellsize, u32 bpp_id);
+u32 SGX_BitmapConverterSet(u32 width, u32 bpp_id);
 void SGX_SetVtxOffset(f32 x, f32 y);
+
 
 void SGX_DrawScroll(void);
 void SGX_DrawBitmap(void);
@@ -200,6 +204,7 @@ void SGX_Vdp1LocalCoord(void);
 void SGX_Vdp2Init(void);
 void SGX_Vdp2Draw(void);
 void SGX_Vdp2Postprocess(void);
+void SGX_SetLineScroll(f32 hor_scroll, f32 hor_inc, u32 line);
 
 /*
  * Here we have a serious attempt at replacing all GX functions that use shadow regs

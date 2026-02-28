@@ -21,19 +21,25 @@
 // SH2 Shared Code
 #include <stdlib.h>
 #include "sh2core.h"
-#include "debug.h"
-#include "memory.h"
-#include "yabause.h"
+#include "sh2int.h"
+#include "../debug.h"
+#include "../memory.h"
+#include "../yabause.h"
 
 SH2_struct *MSH2=NULL;
 SH2_struct *SSH2=NULL;
 SH2_struct *CurrentSH2;
 SH2Interface_struct *SH2Core=NULL;
-extern SH2Interface_struct *SH2CoreList[];
+SH2Interface_struct *SH2CoreList[] = {
+	&SH2Interpreter,
+	NULL
+};
 
 void OnchipReset(SH2_struct *context);
 void FRTExec(u32 cycles);
 void WDTExec(u32 cycles);
+void DMAExec(void);
+void DMATransfer(u32 *CHCR, u32 *SAR, u32 *DAR, u32 *TCR, u32 *VCRDMA);
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -713,7 +719,6 @@ void FASTCALL OnchipWriteWord(u32 addr, u16 val) {
       case 0x128:
          CurrentSH2->onchip.DVCR = val & 0x3;
          return;
-#ifdef GEKKO
       case 0x140:
          CurrentSH2->onchip.BARA.part.H = val;
          return;
@@ -752,7 +757,6 @@ void FASTCALL OnchipWriteWord(u32 addr, u16 val) {
       case 0x168:
          CurrentSH2->onchip.BBRB = val & 0xFF;
          return;
-#endif
       case 0x148:
          CurrentSH2->onchip.BBRA = val & 0xFF;
          return;
