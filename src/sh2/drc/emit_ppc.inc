@@ -83,6 +83,8 @@
 #define PPCC_MULLW(rD, rA, rB)				EMIT(0x7C0001D6 | ((rD) << 21) | ((rA) << 16) | ((rB) << 11))
 #define PPCC_MULHW(rD, rA, rB)				EMIT(0x7C000096 | ((rD) << 21) | ((rA) << 16) | ((rB) << 11))
 #define PPCC_MULHWU(rD, rA, rB)				EMIT(0x7C000016 | ((rD) << 21) | ((rA) << 16) | ((rB) << 11))
+#define PPCC_DIVW(rD, rA, rB)				EMIT(0x7C0003D6 | ((rD) << 21) | ((rA) << 16) | ((rB) << 11))
+#define PPCC_DIVWU(rD, rA, rB)				EMIT(0x7C000396 | ((rD) << 21) | ((rA) << 16) | ((rB) << 11))
 #define PPCC_AND(rD, rA, rB)				EMIT(0x7C000038 | ((rA) << 21) | ((rD) << 16) | ((rB) << 11))
 #define PPCC_ANDp(rD, rA, rB)				EMIT(0x7C000039 | ((rA) << 21) | ((rD) << 16) | ((rB) << 11))
 #define PPCC_ANDI(rD, rA, imm)				EMIT(0x70000000 | ((rA) << 21) | ((rD) << 16) | ((imm) & 0xFFFF))

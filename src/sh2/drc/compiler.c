@@ -2,14 +2,97 @@
 
 #include "emit_ppc.inc"
 #include "../sh2.h"
+#include "compiler.h"
 #include "ogc/pad.h"
 #include "ogc/video.h"
+#include <malloc.h>
 #include <stdlib.h>
 
 
 #define MAX_BLOCK_INST	1024			/* NOTE: change this value eventually */
-#define BLOCK_ARR_SIZE	2048			//TODO:x16?
+#define BLOCK_ARR_SIZE	4096*2			//TODO:x16?
 #define DRC_CODE_SIZE	1024*1024		/* 4Mb of instructions */
+
+/*Instruction metadata
+ * we can get an instruction and store its metadata with information
+ * useful for future optimizations:
+ * like [T bit used in the future (1bit)][Opcode decodification (8 bits)][is delay slot (1bit)][store regs used (2 bits)][used regs (1 bit)]
+ * (more can be added later)*/
+
+//Define all instruction flag codes to store metadata
+#define IFC_T_USED				(0x0100)				/* If the T bit generated is used by any subsequent instruction */
+#define IFC_ILGL_BRANCH			(0x0200)				/* Instruction is a branch in a delay slot (which is illegal slot) */
+#define IFC_IS_DELAY			(0x0400)				/* Instruction is a delay slot instruction */
+#define IFC_RLS(rls)			((rls) << 12)			/* If RN needs to be stored */
+#define IFC_RLS_GET(ifc)		(((ifc) >> 12) & 0xF)	/* If RN needs to be stored */
+
+enum RegisterLoadStoreCode {
+	RLS_NONE,
+	RLS_L0,		/* R0 needs to be loaded */
+	RLS_L15,	/* R15 needs to be loaded */
+	RLS_LN,		/* Rn needs to be loaded */
+	RLS_LNM,	/* Rn and Rm need to be loaded */
+	RLS_LM0,	/* Rm and R0 need to be loaded */
+	RLS_LNM0,	/* Rn, Rm and R0 need to be loaded */
+	RLS_LM_S0,	/* Rm needs to be loaded and R0 is stored (and loaded) */
+	RLS_LM_SN,	/* Rm needs to be loaded and Rn is stored (and loaded) */
+	RLS_LM0_SN,	/* Rm and R0 need to be loaded and Rn is stored (and loaded) */
+	RLS_S0,		/* R0 needs to be stored (and loaded) */
+	RLS_S15,	/* R15 needs to be stored (and loaded) */
+	RLS_SN,		/* Rn needs to be stored (and loaded) */
+	RLS_SNM,	/* Rn and Rm need to be stored (and loaded) */
+};
+
+
+enum InstFlagCode {
+	IFC_ILLEGAL,
+	//Algebraic/Logical
+	IFC_ADD,   IFC_ADDI,   IFC_ADDC,  IFC_ADDV,
+	IFC_SUB,   IFC_SUBC,   IFC_SUBV,  IFC_AND,
+	IFC_ANDI,  IFC_ANDM,   IFC_OR,    IFC_ORI,
+	IFC_ORM,   IFC_XOR,    IFC_XORI,  IFC_XORM,
+	IFC_ROTCL, IFC_ROTCR,  IFC_ROTL,  IFC_ROTR,
+	IFC_SHAL,  IFC_SHAR,   IFC_SHLL,  IFC_SHLL2,
+	IFC_SHLL8, IFC_SHLL16, IFC_SHLR,  IFC_SHLR2,
+	IFC_SHLR8, IFC_SHLR16, IFC_NOT,   IFC_NEG,
+	IFC_NEGC,  IFC_DT,     IFC_EXTSB, IFC_EXTSW,
+	IFC_EXTUB, IFC_EXTUW,
+	//Mult and Division
+	IFC_DIV0S, IFC_DIV0U,  IFC_DIV1,  IFC_DMULS,
+	IFC_DMULU, IFC_MACL,   IFC_MACW,  IFC_MULL,
+	IFC_MULS,  IFC_MULU,
+	//Set and Clear
+	IFC_CLRMAC, IFC_CLRT, IFC_SETT,
+	//Compare
+	IFC_CMPEQ, IFC_CMPGE, IFC_CMPGT,  IFC_CMPHI,
+	IFC_CMPHS, IFC_CMPPL, IFC_CMPPZ,  IFC_CMPSTR,
+	IFC_CMPIM,
+	//Load and Store
+	IFC_LDCSR,   IFC_LDCGBR,   IFC_LDCVBR,   IFC_LDCMSR,
+	IFC_LDCMGBR, IFC_LDCMVBR,  IFC_LDSMACH,  IFC_LDSMACL,
+	IFC_LDSPR,   IFC_LDSMMACH, IFC_LDSMMACL, IFC_LDSMPR,
+	IFC_STCSR,   IFC_STCGBR,   IFC_STCVBR,   IFC_STCMSR,
+	IFC_STCMGBR, IFC_STCMVBR,  IFC_STSMACH,  IFC_STSMACL,
+	IFC_STSPR,   IFC_STSMMACH, IFC_STSMMACL, IFC_STSMPR,
+	//Move Data
+	IFC_MOV,    IFC_MOVBS,  IFC_MOVWS,  IFC_MOVLS,
+	IFC_MOVBL,  IFC_MOVWL,  IFC_MOVLL,  IFC_MOVBM,
+	IFC_MOVWM,  IFC_MOVLM,  IFC_MOVBP,  IFC_MOVWP,
+	IFC_MOVLP,  IFC_MOVBS0, IFC_MOVWS0, IFC_MOVLS0,
+	IFC_MOVBL0, IFC_MOVWL0, IFC_MOVLL0, IFC_MOVI,
+	IFC_MOVWI,  IFC_MOVLI,  IFC_MOVBLG, IFC_MOVWLG,
+	IFC_MOVLLG, IFC_MOVBSG, IFC_MOVWSG, IFC_MOVLSG,
+	IFC_MOVBS4, IFC_MOVWS4, IFC_MOVLS4, IFC_MOVBL4,
+	IFC_MOVWL4, IFC_MOVLL4, IFC_MOVA,   IFC_MOVT,
+	//Branch and Jumps
+	IFC_BF,  IFC_BFS,  IFC_BRA, IFC_BRAF,
+	IFC_BSR, IFC_BSRF, IFC_BT,  IFC_BTS,
+	IFC_JMP, IFC_JSR,  IFC_RTE, IFC_RTS,
+	//Other
+	IFC_NOP,  IFC_SLEEP, IFC_SWAPB, IFC_SWAPW,
+	IFC_TAS,  IFC_TRAPA, IFC_TST,   IFC_TSTI,
+	IFC_TSTM, IFC_XTRCT
+};
 
 typedef void (*DrcCode)(void *shctx);
 
@@ -18,15 +101,20 @@ typedef struct Block_t {
 
 	u32 ret_addr; 		/* If return is a constant address (hashed) */
 	u32 start_addr; 	/* Address of original code */
-	u32 sh2_len;		/* Number of original code instructions */
+	u32 sh2_len;		/* Number of original code instructions //UNUSED*/
 	u32 ppc_len;		/* Number of native code instructions */
+	//TODO: this can be returned by the block
 	u32 cycle_count;	/* Number of base block cycles */
+	//u32 flags;		//Ends in sleep or if return address is constant
 } Block;
 
 extern SH2 *sh_ctx;
 
-u32 drc_code[DRC_CODE_SIZE] ATTRIBUTE_ALIGN(32);
-Block drc_blocks[BLOCK_ARR_SIZE] ATTRIBUTE_ALIGN(32);
+//u32 drc_code[DRC_CODE_SIZE] ATTRIBUTE_ALIGN(32);
+//Block drc_blocks[BLOCK_ARR_SIZE] ATTRIBUTE_ALIGN(32);
+u32 *drc_code;
+Block *drc_blocks;
+u32 ifc_array[4*1024] ATTRIBUTE_ALIGN(32);	//8k instructions
 u32 drc_blocks_size = 0;
 
 u32 drc_code_pos = 0;
@@ -49,7 +137,7 @@ u32 __GetDrcHash(s32 key)
 	key = key + (key << 1);
 	key = key ^ (key >> 6);
 #else
-	key >>= 6; // Terrible implementation
+	//key >>= 6; // Terrible implementation
 #endif
 	return (key >> 2);
 }
@@ -57,22 +145,21 @@ u32 __GetDrcHash(s32 key)
 
 Block* HashGet(u32 key, u32 *found)
 {
-	key &= 0x07FFFFFF;
-	u32 i = __GetDrcHash(key) & (BLOCK_ARR_SIZE - 1);
+	u32 i = __GetDrcHash(key & 0x07FFFFFF) & (BLOCK_ARR_SIZE - 1);
 	u32 count = 0;
+	//No more blocks can be generated, start over
+	if (drc_blocks_size == BLOCK_ARR_SIZE - 1) {
+		HashClearAll();
+	}
 	while (drc_blocks[i].start_addr != -1) {
-		//No more blocks can be generated
-		if (count == BLOCK_ARR_SIZE - 1) {
-			return NULL;
-		}
 		// do linear probing
 		if (drc_blocks[i].start_addr == key) {
 			*found = 1;
 			return &drc_blocks[i];
 		}
 		i = (i + 1) & (BLOCK_ARR_SIZE - 1);
-		++count;
 	}
+	drc_blocks_size++;
 	*found = 0;
 	return &drc_blocks[i];
 }
@@ -104,23 +191,13 @@ void HashClearAll(void)
 #define imm 					(_jit_opcode)
 #define disp 					(_jit_opcode)
 
-#define PPCE_LDREG(i) \
-	if (!GP_R(i)) { \
-		GP_R(i) = reg_curr--; \
-		PPCE_LOAD(GP_R(i), r[i]); \
-	}
-
-#define PPCE_STREG(i) \
-	stregs = 1<<(i);
-
-
 
 #define SH2JIT_ADD			/* ADD Rm,Rn  0011nnnnmmmm1100 */ \
 	PPCC_ADD(rn, rn, rm);
 
 
 #define SH2JIT_ADDI			/* ADD #imm,Rn  0111nnnniiiiiiii */ \
-	PPCC_ADDI(rn, rn, EXT_IMM8(imm));
+	if((imm & 0xff) != 0) {PPCC_ADDI(rn, rn, EXT_IMM8(imm));}
 
 
 #define SH2JIT_ADDC			/* ADDC Rm,Rn  0011nnnnmmmm1110 */ \
@@ -313,17 +390,19 @@ void HashClearAll(void)
 
 
 
+u32 mult = 0;
 /*Mult and Division*/
 #define SH2JIT_DIV0S /* DIV0S Rm,Rn  0010nnnnmmmm0111 */ \
 	PPCC_XOR(GP_TMP, rn, rm);					/*Q ^ M*/ \
 	PPCC_RLWIMI(GP_SR, rn, 8+1, 31-8, 31-8);	/*Store MSB of Rn as Q bit*/ \
 	PPCC_RLWIMI(GP_SR, rm, 9+1, 31-9, 31-9);	/*Store MSB of Rm as M bit*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31);		/*Store Q ^ M as T bit*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31);		/*Store Q ^ M as T bit*/ \
 //NOTE: Is this optimal?
 
 
 #define SH2JIT_DIV0U /* DIV0U  0000000000011001 */ \
 	PPCC_ANDI(GP_SR, GP_SR, 0xFCFE);
+
 
 //NOTE: This accurate but can be optimized if no immediate calculation is needed
 #define SH2JIT_DIV1 /* DIV1 Rm,Rn  0011nnnnmmmm0100 */ \
@@ -339,22 +418,15 @@ void HashClearAll(void)
 	PPCC_SUBF(GP_TMP2, rm, GP_TMP2);			 \
 	/* MSB ^= carry(Rn += tmp2) */				 \
 	PPCC_ADDCp(rn, GP_TMP2, rn);				 \
-	PPCC_MFXER(GP_TMP2); 						/*Load XER[CA] to TMP2 (Reuse) */ \
+	PPCC_MFXER(GP_TMP2); 						/* Load XER[CA] to TMP2 (Reuse) */ \
 	PPCC_RLWIMI(GP_TMP2, GP_TMP2, 3, 31, 31);	 \
 	PPCC_XOR(GP_TMP, GP_TMP, GP_TMP2);			 \
 	/* Q = M ^ MSB */							 \
 	PPCC_XOR(3, 3, GP_TMP);						 \
-	PPCC_RLWIMI(GP_SR, 3, 8, 31-8, 31-8);		/*Store Q bit*/ \
+	PPCC_RLWIMI(GP_SR, 3, 8, 31-8, 31-8);		/* Store Q bit*/ \
 	/* T = !MSB */								 \
 	PPCC_NOR(GP_TMP, GP_TMP, GP_TMP);			 \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 0, 31, 31);		/*Store T bit*/
-
-
-#define JIT_DMULS 					/* DMULS.L Rm,Rn  0011nnnnmmmm1101 */ \
-	PPCC_MULHW(GP_MACH, rn, rm); 	/*Multiply for signed high word*/ \
-	PPCC_MULLW(GP_MACL, rn, rm); 	/*Multiply for low word*/ \
-	PPCE_SAVE(GP_MACH, mach);		\
-	PPCE_SAVE(GP_MACL, macl);		\
+	PPCC_RLWIMI(GP_SR, GP_TMP, 0, 31, 31);		/* Store T bit*/ \
 
 
 #define SH2JIT_DMULS 				/* DMULS.L Rm,Rn  0011nnnnmmmm1101 */ \
@@ -386,12 +458,13 @@ void HashClearAll(void)
 	PPCE_LOAD(GP_MACL, macl);		\
 	PPCC_ADDCp(GP_MACL, GP_MACL, 3); 			/* macl += lw */ \
 	PPCC_ADDEO(GP_MACH, GP_MACH, 4); 			/* mach += hw + carry */ \
-	PPCC_RLWINM(GP_STMP, GP_SR, 15, 15, 15); 	/* saturate if S bit == 1 */ \
-	PPCC_AND(GP_STMP, GP_MACH, GP_STMP); 		/* MACH & -(MACH & 0x0s00) */ \
-	PPCC_NEG(GP_STMP, GP_STMP);					\
-	PPCC_AND(GP_MACH, GP_MACH, GP_STMP);		\
-	PPCE_SAVE(GP_MACH, mach);		\
-	PPCE_SAVE(GP_MACL, macl);		\
+	PPCC_RLWINM(GP_TMP, GP_SR, 15, 15, 15); 	/* saturate if S bit == 1 */ \
+	PPCC_NEG(GP_TMP, GP_TMP);					/*Mask from S bit (active when T=1)*/ \
+	PPCC_AND(GP_TMP, GP_TMP, GP_MACH);			/*Mask off offset */ \
+	PPCC_EXTSH(GP_TMP, GP_TMP); 				/* MACH & -(MACH & 0x0s00) */ \
+	PPCC_OR(GP_MACH, GP_MACH, GP_TMP);			\
+	PPCE_SAVE(GP_MACH, mach);					\
+	PPCE_SAVE(GP_MACL, macl);					\
 
 
 #define SH2JIT_MACW /* MAC.W @Rm+,@Rn+  0100nnnnmmmm1111 */ \
@@ -416,22 +489,22 @@ void HashClearAll(void)
 
 
 #define SH2JIT_MULL			/* MUL.L Rm,Rn  0000nnnnmmmm0111 */ \
-	PPCC_MULLW(GP_MACL, rn, rm);				 \
-	PPCE_SAVE(GP_MACL, macl);					 \
+	PPCC_MULLW(GP_TMP, rn, rm);				 \
+	PPCE_SAVE(GP_TMP, macl);					 \
 
 
 #define SH2JIT_MULS			/* MULS Rm,Rn  0010nnnnmmmm1111 */ \
-	PPCC_EXTSH(GP_TMP, rn);				/* (s16) Rn  */ \
-	PPCC_EXTSH(GP_TMP2, rm);					/* (s16) Rm  */ \
-	PPCC_MULLW(GP_MACL, GP_TMP, GP_TMP2);	/* Rn * Rm -> MACL */ \
-	PPCE_SAVE(GP_MACL, macl);					 \
+	PPCC_EXTSH(GP_TMP, rn);					/* (s16) Rn  */ \
+	PPCC_EXTSH(GP_TMP2, rm);				/* (s16) Rm  */ \
+	PPCC_MULLW(GP_TMP, GP_TMP, GP_TMP2);	/* Rn * Rm -> MACL */ \
+	PPCE_SAVE(GP_TMP, macl);				 \
 
 
 #define SH2JIT_MULU			/* MULU Rm,Rn  0010nnnnmmmm1110 */ \
 	PPCC_ANDI(GP_TMP, rn, 0xFFFF);			/* (u16) Rn  */ \
 	PPCC_ANDI(GP_TMP2, rm, 0xFFFF);			/* (u16) Rm  */ \
-	PPCC_MULLW(GP_MACL, GP_TMP, GP_TMP2);	/* Rn * Rm -> MACL */ \
-	PPCE_SAVE(GP_MACL, macl);				 \
+	PPCC_MULLW(GP_TMP, GP_TMP, GP_TMP2);	/* Rn * Rm -> MACL */ \
+	PPCE_SAVE(GP_TMP, macl);				 \
 
 
 
@@ -516,13 +589,11 @@ void HashClearAll(void)
 
 
 #define SH2JIT_LDCGBR		/* LDC Rm,GBR  0100mmmm00011110 */ \
-	PPCC_ORI(GP_GBR, rn, 0x0);		 \
-	PPCE_SAVE(GP_GBR, gbr);			 \
+	PPCE_SAVE(rn, gbr);			/*Rn -> Save GBR*/ \
 
 
 #define SH2JIT_LDCVBR		/* LDC Rm,VBR  0100mmmm00101110 */ \
-	PPCC_ORI(GP_VBR, rn, 0x0);		 \
-	PPCE_SAVE(GP_VBR, vbr);			 \
+	PPCE_SAVE(rn, vbr);			/*Rn -> Save VBR*/ \
 
 
 #define SH2JIT_LDCMSR /* LDC.L @Rm+,SR  0100mmmm00000111 */ \
@@ -687,13 +758,13 @@ void HashClearAll(void)
 
 #define SH2JIT_MOVBL \
 	PPCC_ORI(3, rm, 0x0);		/*Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read8);			/*Read 8 bit value*/ \
 	PPCC_EXTSB(rn, 3);			/*EXT8(read value) -> Rn*/
 
 
 #define SH2JIT_MOVWL \
 	PPCC_ORI(3, rm, 0x0);		/*Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read16);		/*Read 16 bit value*/ \
 	PPCC_EXTSH(rn, 3);			/*EXT16(read value) -> Rn*/
 
 
@@ -726,14 +797,14 @@ void HashClearAll(void)
 
 #define SH2JIT_MOVBP \
 	PPCC_ORI(3, rm, 0x0);		/*Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read8);		/*Read 8 bit value*/ \
 	PPCC_EXTSB(rn, 3);			/*EXT8(read value) -> Rn*/ \
 	if (rn != rm) { PPCC_ADDI(rm, rm, 1); }		/*increment 4 to Rn*/
 
 
 #define SH2JIT_MOVWP \
 	PPCC_ORI(3, rm, 0x0);		/*Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read16);		/*Read 16 bit value*/ \
 	PPCC_EXTSH(rn, 3);			/*EXT16(read value) -> Rn*/ \
 	if (rn != rm) { PPCC_ADDI(rm, rm, 2); }		/*increment 4 to Rn*/
 
@@ -765,13 +836,13 @@ void HashClearAll(void)
 
 #define SH2JIT_MOVBL0 \
 	PPCC_ADD(3, rm, GP_R0);		/*R0+Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read8);			/*Read 8 bit value*/ \
 	PPCC_EXTSB(rn, 3);			/*EXT8(read value) -> Rn*/
 
 
 #define SH2JIT_MOVWL0 \
 	PPCC_ADD(3, rm, GP_R0);		/*R0+Rm -> address*/ \
-	PPCC_BL(sh2_Read32);		/*Read 32 bit value*/ \
+	PPCC_BL(sh2_Read16);		/*Read 16 bit value*/ \
 	PPCC_EXTSH(rn, 3);			/*EXT16(read value) -> Rn*/
 
 
@@ -786,7 +857,7 @@ void HashClearAll(void)
 
 
 #define SH2JIT_MOVWI /* MOV.W @(disp,PC),Rn  1001nnnndddddddd */ \
-	u32 iaddr = curr_pc + ((disp & 0xFF) << 1); \
+	u32 iaddr = (curr_pc+4) + ((disp & 0xFF) << 1); \
 	PPCC_ADDIS(3, 0, (iaddr >> 16));		/*Set high imm 16 bits */ \
 	PPCC_ORI(3, 3, iaddr);				/*Set low imm 16 bits */ \
 	PPCC_BL(sh2_Read16);				/*Read 16 bit value*/ \
@@ -795,7 +866,7 @@ void HashClearAll(void)
 	//TODO: Check for delay-slot
 
 #define SH2JIT_MOVLI /* MOV.L @(disp,PC),Rn  1101nnnndddddddd */ \
-	u32 iaddr = (curr_pc & 0xFFFFFFFC) + ((disp & 0xFF) << 2); \
+	u32 iaddr = ((curr_pc) & 0xFFFFFFFC) + 4 + ((disp & 0xFF) << 2); \
 	PPCC_ADDIS(3, 0, (iaddr >> 16));		/*Set high imm 16 bits */ \
 	PPCC_ORI(3, 3, iaddr);				/*Set low imm 16 bits */ \
 	PPCC_BL(sh2_Read32);				/*Read 32 bit value*/ \
@@ -884,7 +955,7 @@ void HashClearAll(void)
 
 
 #define SH2JIT_MOVA /* MOVA @(disp,PC),R0  11000111dddddddd */ \
-	u32 iaddr = (curr_pc & 0xFFFFFFFC) + ((disp & 0xFF) << 2); \
+	u32 iaddr = ((curr_pc+4) & 0xFFFFFFFC) + ((disp & 0xFF) << 2); \
 	PPCC_ADDIS(GP_R0, 0, (iaddr >> 16));			/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_R0, GP_R0, iaddr);				/*Set low imm 16 bits */
 	//TODO: Check for delay-slot
@@ -896,7 +967,7 @@ void HashClearAll(void)
 
 /*Branch and Jumps*/
 #define SH2JIT_BF			/* BF disp  10001011dddddddd */ \
-	u32 offset = (EXT_IMM8(disp) << 1) + 4 - 2; \
+	u32 offset = (EXT_IMM8(disp) << 1) + 2; \
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);		/*Set low imm 16 bits */ \
 	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);		/*Get T bit */ \
@@ -907,7 +978,16 @@ void HashClearAll(void)
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 
-#define SH2JIT_BFS	SH2JIT_BF		/* BFS disp  10001111dddddddd */
+#define SH2JIT_BFS		/* BFS disp  10001111dddddddd */ \
+	u32 offset = (EXT_IMM8(disp) << 1); \
+	PPCC_ADDIS(GP_PC, 0, (curr_pc+4) >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_PC, GP_PC, curr_pc+4);		/*Set low imm 16 bits */ \
+	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);		/*Get T bit */ \
+	PPCC_ADDI(GP_TMP, GP_TMP, -1);			/*Mask from T bit (active when T=0)*/ \
+	PPCC_ANDI(GP_TMP, GP_TMP, offset);		/*Mask off offset */ \
+	PPCC_EXTSH(GP_TMP, GP_TMP);				/*Extend to 32bits */ \
+	PPCC_ADD(GP_PC, GP_PC, GP_TMP);			/*Add offset and store in ret value */ \
+	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 
 #define SH2JIT_BRA			/* BRA disp  1010dddddddddddd */ \
@@ -917,66 +997,79 @@ void HashClearAll(void)
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 #define SH2JIT_BRAF						/* BRAF Rm  0000mmmm00100011 */ \
-	PPCC_ADDIS(GP_PC, 0, curr_pc >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PC, GP_PC, curr_pc);		/*Set low imm 16 bits */ \
+	u32 new_pc = curr_pc + 4; 				\
+	PPCC_ADDIS(GP_PC, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_PC, GP_PC, new_pc);		/*Set low imm 16 bits */ \
 	PPCC_ADD(GP_PC, GP_PC, rn)				/*Add Rn to PC */ \
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 #define SH2JIT_BSR			/* BSR disp  1011dddddddddddd */ \
-	u32 offset = (EXT_IMM12(disp) << 1) + 4; \
-	PPCC_ADDIS(GP_PC, 0, curr_pc >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PR, GP_PC, curr_pc);		/*Set low imm 16 bits (PR <- PC) */ \
+	u32 new_pc = curr_pc + 4; 				\
+	u32 offset = (EXT_IMM12(disp) << 1);    \
+	PPCC_ADDIS(GP_PC, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_PR, GP_PC, new_pc);		/*Set low imm 16 bits (PR <- PC) */ \
+	PPCE_SAVE(GP_PR, pr);					/* Save PR */ \
 	PPCC_ADDI(GP_PC, GP_PR, offset)			/* PC <- PC + Ext(offset)*/ \
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 #define SH2JIT_BSRF			/* BSRF Rm  0000mmmm00000011 */ \
-	PPCC_ADDIS(GP_PC, 0, curr_pc >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PR, GP_PC, curr_pc);		/*Set low imm 16 bits (PR <- PC) */ \
-	PPCC_ADD(GP_PC, GP_PR, rn)				/* PC <- Rn + PC */ \
+	u32 new_pc = curr_pc + 4; 				\
+	PPCC_ADDIS(GP_TMP, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_TMP, GP_TMP, new_pc);		/*Set low imm 16 bits (PR <- PC) */ \
+	PPCE_SAVE(GP_TMP, pr);					/* Save PR */ \
+	PPCC_ADD(GP_PC, GP_TMP, rn)				/* PC <- Rn + PC */ \
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
 
 #define SH2JIT_BT			/* BT disp  10001001dddddddd */ \
-	u32 offset = (EXT_IMM8(disp) << 1) + 4 - 2; \
+	u32 offset = (EXT_IMM8(disp) << 1) + 2; \
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);		/*Set low imm 16 bits */ \
-	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);		/*Get T bit */ \
-	PPCC_NEG(GP_TMP, GP_TMP);				/*Mask from T bit (active when T=1)*/ \
-	PPCC_ANDI(GP_TMP, GP_TMP, offset);		/*Mask off offset */ \
-	PPCC_EXTSH(GP_TMP, GP_TMP);				/*Extend to 32bits */ \
-	PPCC_ADD(GP_PC, GP_PC, GP_TMP);			/*Add offset and store in ret value */ \
-	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
+	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
+	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
+	PPCC_NEG(GP_TMP, GP_TMP);					/*Mask from T bit (active when T=1)*/ \
+	PPCC_ANDI(GP_TMP, GP_TMP, offset);			/*Mask off offset */ \
+	PPCC_EXTSH(GP_TMP, GP_TMP);					/*Extend to 32bits */ \
+	PPCC_ADD(GP_PC, GP_PC, GP_TMP);				/*Add offset and store in ret value */ \
+	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
 
-#define SH2JIT_BTS	SH2JIT_BT		/* BTS disp  10001101dddddddd */
-
+#define SH2JIT_BTS			/* BTS disp  10001101dddddddd */ \
+	u32 offset = (EXT_IMM8(disp) << 1); 		\
+	PPCC_ADDIS(GP_PC, 0, (curr_pc+4) >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_PC, GP_PC, curr_pc+4);			/*Set low imm 16 bits */ \
+	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
+	PPCC_NEG(GP_TMP, GP_TMP);					/*Mask from T bit (active when T=1)*/ \
+	PPCC_ANDI(GP_TMP, GP_TMP, offset);			/*Mask off offset */ \
+	PPCC_EXTSH(GP_TMP, GP_TMP);					/*Extend to 32bits */ \
+	PPCC_ADD(GP_PC, GP_PC, GP_TMP);				/*Add offset and store in ret value */ \
+	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
 #define SH2JIT_JMP			/* JMP @Rm  0100mmmm00101011 */ \
-	PPCC_ADDI(GP_PC, rm, 0x0);		/*Rm + 4 -> New PC*/ \
-	PPCE_SAVE(rn, pc);			/* Save PC */
+	PPCE_SAVE(rn, pc);			/* Rm(Rn here) -> Save PC */
 
 
 #define SH2JIT_JSR			/* JSR @Rm  0100mmmm00001011 */ \
-	PPCC_ADDIS(GP_PR, 0, curr_pc >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PR, GP_PR, curr_pc);		/*Set low imm 16 bits */ \
-	PPCC_ADDI(GP_PC, rn, 0x4);				/*Rm + 4 -> New PC*/ \
-	PPCE_SAVE(GP_PC, pc);					/* Save PC */
+	u32 new_pc = curr_pc + 4;  \
+	PPCC_ADDIS(GP_TMP, 0, new_pc >> 16);	/*Set high imm 16 bits (PR = PC)*/ \
+	PPCC_ORI(GP_TMP, GP_TMP, new_pc);		/*Set low imm 16 bits (PR = PC)*/ \
+	PPCE_SAVE(GP_TMP, pr);					/* Save PR = PC */ \
+	PPCE_SAVE(rn, pc);						/* Rm(Rn here) -> Save PC */
 
 
 #define SH2JIT_RTE 			/* RTE  0000000000101011 */ \
 	PPCC_MOV(3, GP_R(15));					/*R15 -> address*/ \
 	PPCC_BL(sh2_Read32);					/*Read 32 bit value*/ \
-	PPCC_ADDI(GP_STMP, 3, 0x4);				/*Result + 4 -> New PC*/ \
+	PPCE_SAVE(3, pc);						/* @(R15) -> Save PC */ \
 	PPCC_ADDI(3, GP_R(15), 0x4);			/*R15 + 4 -> address*/ \
 	PPCC_BL(sh2_Read32);					/*Read 32 bit value*/ \
 	PPCC_ANDI(GP_SR, 3, 0x3F3);				/*Result & 0x03F3 -> SR*/ \
 	PPCC_ADDI(GP_R(15), GP_R(15), 0x8);		/*R15 + 4 -> address*/ \
-	PPCE_SAVE(GP_STMP, pc);					/* Save PC */
+
 
 
 #define SH2JIT_RTS 			/* RTS  0000000000001011 */ \
-	PPCC_ADDI(GP_PC, GP_PR, 4);			/* SR + 4 -> PC*/ \
-	PPCE_SAVE(GP_PC, pc);				/* Save PC */
+	PPCE_LOAD(GP_TMP, pr);				/* Loas PR */ \
+	PPCE_SAVE(GP_TMP, pc);				/* PR -> Save PC */
 
 
 
@@ -986,16 +1079,17 @@ void HashClearAll(void)
 
 
 #define SH2JIT_SLEEP 		/* SLEEP  0000000000011011 */ \
-	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
+	PPCC_ADDIS(GP_PC, 0, curr_pc >> 16);		/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_PC, GP_PC, curr_pc);			/*Set low imm 16 bits */ \
 	PPCE_SAVE(GP_PC, pc);						/* Save PC */
 	/*TODO: Does nothing else ?...*/
 
 
 #define SH2JIT_SWAPB 		/* SWAP.B Rm,Rn  0110nnnnmmmm1000 */ \
-	PPCC_RLWINM(rn, rm, 8, 16, 31);		/*shift to left lower 8 bits*/ \
-	PPCC_RLWINM(rn, rm, 32-8, 24, 31);	/*shift to right higher 8 bits*/ \
-	PPCC_RLWINM(rn, rm, 0, 0, 15);		/*Store as is rest of upper 16 bits of Rm*/
+	PPCC_MOV(GP_TMP, rm);					/*Store in temporal reg */ \
+	PPCC_RLWIMI(GP_TMP, rm, 8, 16, 24);		/*shift to left lower 8 bits*/ \
+	PPCC_RLWIMI(GP_TMP, rm, 32-8, 24, 31);	/*shift to right higher 8 bits*/ \
+	PPCC_MOV(rn, GP_TMP);
 
 
 #define SH2JIT_SWAPW 		/* SWAP.W Rm,Rn  0110nnnnmmmm1001 */ \
@@ -1014,35 +1108,35 @@ void HashClearAll(void)
 
 #define SH2JIT_TRAPA 		/* TRAPA #imm  11000011iiiiiiii */ \
 	u32 dispimm = (imm & 0xFF) << 2;		\
-	PPCC_ADDI(3, GP_R(15), -4);			/*R15 - 4 -> address*/ \
-	PPCC_MOV(4, GP_SR);					/*SR -> value*/ \
-	PPCC_BL(sh2_Write32);				/*Write 32bit value*/ \
-	PPCC_ADDI(3, GP_R(15), -8);			/*R15 - 8 -> address*/ \
+	PPCC_ADDI(3, GP_R(15), -4);				/*R15 - 4 -> address*/ \
+	PPCC_MOV(4, GP_SR);						/*SR -> value*/ \
+	PPCC_BL(sh2_Write32);					/*Write 32bit value*/ \
+	PPCC_ADDI(3, GP_R(15), -8);				/*R15 - 8 -> address*/ \
 	PPCC_ADDIS(4, 0, (curr_pc+2) >> 16);	/*Load PC-2 immediate -> value*/ \
-	PPCC_ORI(4, 4, curr_pc+2);		 	\
-	PPCC_BL(sh2_Write32);				/*Write 32 bit value*/ \
-	PPCC_ADDI(GP_R(15), GP_R(15), -8);	/*R15 - 8 -> address*/ \
-	PPCE_LOAD(GP_VBR, vbr);				 \
-	PPCC_ADDI(3, GP_VBR, dispimm);		/* VBR + dispimm -> address*/ \
-	PPCC_BL(sh2_Read32);				/*Read addr*/ \
-	/* PPCC_MOV(GP_PC, 3); */			/*Result -> PC*/ \
-	PPCE_SAVE(3, pc);				/* Save PC */
+	PPCC_ORI(4, 4, curr_pc+2);		 		\
+	PPCC_BL(sh2_Write32);					/*Write 32 bit value*/ \
+	PPCC_ADDI(GP_R(15), GP_R(15), -8);		/*R15 - 8 -> address*/ \
+	PPCE_LOAD(GP_VBR, vbr);					 \
+	PPCC_ADDI(3, GP_VBR, dispimm);			/* VBR + dispimm -> address*/ \
+	PPCC_BL(sh2_Read32);					/*Read addr*/ \
+	/* PPCC_MOV(GP_PC, 3); */				/*Result -> PC*/ \
+	PPCE_SAVE(3, pc);						/* Save PC */
 
 
 #define SH2JIT_TST			/* TST Rm,Rn  0010nnnnmmmm1000 */ \
-	PPCC_ANDp(rn, rn, rm);					/*Rn AND Rm and check if zero*/ \
+	PPCC_ANDp(GP_TMP, rn, rm);					/*Rn AND Rm and check if zero*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
 	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store CR0[EQ] (Zero) in T*/
 
 
 #define SH2JIT_TSTI			/* TEST #imm,R0  11001000iiiiiiii */ \
-	PPCC_ANDI(GP_R0, GP_R0, imm & 0xFF);	/*R0 AND imm and check if zero*/ \
+	PPCC_ANDI(GP_TMP, GP_R0, imm & 0xFF);	/*R0 AND imm and check if zero*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
 	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store EQ (Zero) in T*/
 
 
 #define SH2JIT_TSTM			/* TST.B #imm,@(R0,GBR)  11001100iiiiiiii */ \
-	PPCE_SAVE(GP_GBR, gbr);					/* Fetch GBR */ \
+	PPCE_LOAD(GP_GBR, gbr);					/* Fetch GBR */ \
 	PPCC_ADD(3, GP_R0, GP_GBR);				/*GBR+R0 -> addr (Reg3)*/ \
 	PPCC_BL(sh2_Read8);						/*Read byte from addr (Reg3) -> byte in Reg3*/ \
 	PPCC_ANDI(3, 3, imm & 0xFF);			/*Reg3 AND imm and check if zero*/ \
@@ -1051,8 +1145,26 @@ void HashClearAll(void)
 	//NOTE: Uses Reg3 for TMP
 
 #define SH2JIT_XTRCT		/* XTRCT Rm,Rn  0010nnnnmmmm1101 */ \
-	PPCC_RLWINM(rn, rn, 16, 16, 31); 	/*Shift Rn*/ \
-	PPCC_RLWIMI(rn, rm, 16, 0, 15); 	/*Store shifted Rm in Rn*/
+	PPCC_RLWINM(GP_TMP, rn, 16, 16, 31); 	/*Shift Rn*/ \
+	PPCC_RLWIMI(GP_TMP, rm, 16, 0, 15); 	/*Store shifted Rm in Rn*/ \
+	PPCC_MOV(rn, GP_TMP); 	/*Store shifted Rm in Rn*/
+	//XXX: Maybe could be done in two instructions.
+
+#define SH2JIT_ILLEGAL		/* Illegal instruciton handler */ \
+	u32 vector = (4 + ((ifc_array[i] & IFC_ILGL_BRANCH) >> 8)) << 2;	/*4 if only illegal 6 if branch value*/	\
+	PPCC_ADDI(3, GP_R(15), -4);			/*R15 - 4 -> address*/ \
+	PPCC_MOV(4, GP_SR);					/*SR -> value*/ \
+	PPCC_BL(sh2_Write32);				/*Write 32bit value*/ \
+	PPCC_ADDI(3, GP_R(15), -8);			/*R15 - 8 -> address*/ \
+	PPCC_ADDIS(4, 0, (curr_pc+2) >> 16);	/*Load PC+2 immediate -> value*/ \
+	PPCC_ORI(4, 4, curr_pc+2);		 	\
+	PPCC_BL(sh2_Write32);				/*Write 32 bit value*/ \
+	PPCC_ADDI(GP_R(15), GP_R(15), -8);	/*R15 - 8 -> address*/ \
+	PPCE_LOAD(GP_VBR, vbr);				 \
+	PPCC_ADDI(3, GP_VBR, vector);		/* VBR + dispimm -> address*/ \
+	PPCC_BL(sh2_Read32);				/*Read addr*/ \
+	/* PPCC_MOV(GP_PC, 3); */			/*Result -> PC*/ \
+	PPCE_SAVE(3, pc);				/* Save PC */
 
 
 
@@ -1385,6 +1497,12 @@ void SH2JIT_NoOpCode(void) {
 	//Does nothing yet.
 }
 
+
+#define BSTATE_END			0
+#define BSTATE_CONT			1
+#define BSTATE_IN_DELAY		2
+#define BSTATE_SET_DELAY	3
+
 #define REG_NUM_R(n)		(1 << (n))
 #define REG_NUM_PR			(1 << 17)
 #define REG_NUM_GBR			(1 << 18)
@@ -1393,538 +1511,478 @@ void SH2JIT_NoOpCode(void) {
 #define REG_NUM_MACL		(1 << 21)
 #define REG_NUM_SR			(1 << 22)
 
-#include <stdio.h>
+struct BlockData {
+	u32 ld_regs;
+	u32 st_regs;
+	u32 instr_count;
+	u32 cycle_count;
+} block_data;
 
-//This pass computes the following information:
-//	Registers used
-//	Registers stored
-//  TODO: Instructions that set a T bit that is used
-//  TODO: Delay slot rearanged instruction
-//  TODO: Other
-u32 _jit_BlockPass0(u32 addr, u32 *useregs, u32 *strregs)
+
+//This function generates block of metadata for subsequent passes
+u32 _jit_GenIFCBlock(u32 addr)
 {
-	u32 continue_block = 1, delay_slot = 0;
+	u32 bstate = BSTATE_CONT;
 	u32 curr_pc = addr;
 	//Pass 0, check instructions and decode one by one:
-	u16 *inst_ptr = (u16*) mem_GetPCAddr(curr_pc);
-	u32 last_t_mod = 0; // Instruction
+	u16 *inst_ptr = (u16*) sh2_GetPCAddr(curr_pc);
+	//u32 last_t_mod = 0; // Instruction
+	u32 instr_count = 0;
 	u32 cycles = 0;
-	//TODO: special registers are not accounted for right now, add them later
-	u32 used_regs = REG_NUM_SR;		// Allways have SR loaded
-	u32 stored_regs = REG_NUM_SR;	// Allways have SR loaded
-
-	while (continue_block | delay_slot) {
+	u32 ld_regs = REG_NUM_SR;	// Allways have SR loaded
+	u32 st_regs = REG_NUM_SR;	// Allways have SR loaded
+	while (bstate != BSTATE_END) {
 		u32 inst = *(inst_ptr++);
-		rn = REG_NUM_R((inst >> 8) & 0xF);
-		rm = REG_NUM_R((inst >> 4) & 0xF);
-		if (delay_slot) {
-			delay_slot = 0;
-		}
+		u32 ifc = 0;
+		_jit_opcode = inst;
 
+		//TODO!!!!:
+		// INSTRUCTIONS THAT SET THE DELAY TO A BRANCH INSTRUCTION USE A ILLEGAL SLOT INSTRUCTION
+		//They are BF BT BFS BTS BRA BRAF BSR BSRF JMP JRE RTS
 		switch ((inst >> 12) & 0xF) {
 			case 0b0000: {
-				switch(inst) { //Constant instructions
-					case 0x0008: { } break;
-					case 0x0018: { } break;
-					case 0x0028: {used_regs |= REG_NUM_MACH | REG_NUM_MACL;} break;
-					case 0x0009: { } break;
-					case 0x0019: { } break;
-					case 0x000B: { continue_block = 0; delay_slot = 1;} break;
-					case 0x001B: { continue_block = 0;} break; //Waits for interrupt
-					case 0x002B: {used_regs |= REG_NUM_R(15); stored_regs |= REG_NUM_R(15); continue_block = 0; delay_slot = 1;} break;
+			switch(inst) { //Constant instructions
+				case 0x0008: {ifc = IFC_CLRT; } break;
+				case 0x0018: {ifc = IFC_SETT; } break;
+				case 0x0028: {ifc = IFC_CLRMAC; } break;
+				case 0x0009: {ifc = IFC_NOP; } break;
+				case 0x0019: {ifc = IFC_DIV0U; } break;
+				case 0x000B: {ifc = IFC_RTS; cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				case 0x001B: {ifc = IFC_SLEEP; cycles+=2; bstate = BSTATE_END;} break; //Waits for interrupt
+				case 0x002B: {ifc = IFC_RTE | IFC_RLS(RLS_S15); cycles+=3; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				default:
+				switch (inst & 0xF) {
+					case 0b0100: {ifc = IFC_MOVBS0 | IFC_RLS(RLS_LNM0); } break;
+					case 0b0101: {ifc = IFC_MOVWS0 | IFC_RLS(RLS_LNM0); } break;
+					case 0b0110: {ifc = IFC_MOVLS0 | IFC_RLS(RLS_LNM0); } break;
+					case 0b0111: {ifc = IFC_MULL   | IFC_RLS(RLS_LNM); cycles+=1; } break;
+					case 0b1100: {ifc = IFC_MOVBL0 | IFC_RLS(RLS_LM0_SN); } break;
+					case 0b1101: {ifc = IFC_MOVWL0 | IFC_RLS(RLS_LM0_SN); } break;
+					case 0b1110: {ifc = IFC_MOVLL0 | IFC_RLS(RLS_LM0_SN); } break;
+					case 0b1111: {ifc = IFC_MACL   | IFC_RLS(RLS_SN); cycles+=1; } break;
 					default:
-						switch (inst & 0xF) {
-							case 0b0100: {used_regs |= rn | rm | REG_NUM_R(0); } break;
-							case 0b0101: {used_regs |= rn | rm | REG_NUM_R(0); } break;
-							case 0b0110: {used_regs |= rn | rm | REG_NUM_R(0); } break;
-							case 0b0111: {used_regs |= rn | rm; } break;
-							case 0b1100: {used_regs |= rn | rm | REG_NUM_R(0); stored_regs |= rn; } break; //MOVBL0
-							case 0b1101: {used_regs |= rn | rm | REG_NUM_R(0); stored_regs |= rn; } break; //MOVWL0
-							case 0b1110: {used_regs |= rn | rm | REG_NUM_R(0); stored_regs |= rn; } break; //MOVLL0
-							case 0b1111: {used_regs |= rn; stored_regs |= rn; } break; //MACL
-							default:
-								switch (inst & 0x3F) {
-									case 0b000010: {used_regs |= rn; stored_regs |= rn; } break; //STCSR
-									case 0b010010: {used_regs |= rn; stored_regs |= rn; } break; //STCGBR
-									case 0b000011: {used_regs |= rn; continue_block = 0; delay_slot = 1;} break; //BSRF
-									case 0b100010: {used_regs |= rn; stored_regs |= rn; } break; //STCVBR
-									case 0b100011: {used_regs |= rn; continue_block = 0; delay_slot = 1;} break; //BRAF
-									case 0b101001: {used_regs |= rn; stored_regs |= rn; } break; //MOVT
-									case 0b001010: {used_regs |= rn; stored_regs |= rn; } break; //STSMACH
-									case 0b011010: {used_regs |= rn; stored_regs |= rn; } break; //STSMACL
-									case 0b101010: {used_regs |= rn; stored_regs |= rn; } break; //STSPR
-								} break;
-						} break;
-				}
-			} break; //TODO
+					switch (inst & 0x3F) {
+						case 0b000010: {ifc = IFC_STCSR   | IFC_RLS(RLS_SN); } break;
+						case 0b010010: {ifc = IFC_STCGBR  | IFC_RLS(RLS_SN); } break;
+						case 0b000011: {ifc = IFC_BSRF    | IFC_RLS(RLS_LN); cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+						case 0b100010: {ifc = IFC_STCVBR  | IFC_RLS(RLS_SN); } break;
+						case 0b100011: {ifc = IFC_BRAF    | IFC_RLS(RLS_LN); cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+						case 0b101001: {ifc = IFC_MOVT    | IFC_RLS(RLS_SN); } break;
+						case 0b001010: {ifc = IFC_STSMACH | IFC_RLS(RLS_SN); } break;
+						case 0b011010: {ifc = IFC_STSMACL | IFC_RLS(RLS_SN); } break;
+						case 0b101010: {ifc = IFC_STSPR   | IFC_RLS(RLS_SN); } break;
+						default:       {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+					} break;
+				} break;
+			}} break;
 			case 0b0001: { // MOV.L Rn Rm disp
-				used_regs |= rn | rm; //MOVLS4
+				ifc = IFC_MOVLS4 | IFC_RLS(RLS_LNM);
 			} break;
 			case 0b0010: {
-				switch (inst & 0xF) { // 0010_NNNN_MMMM_XXXX
-					case 0b0000: {used_regs |= rn | rm; } break;  //MOVBS
-					case 0b0001: {used_regs |= rn | rm; } break;  //MOVWS
-					case 0b0010: {used_regs |= rn | rm; } break;  //MOVLS
-					case 0b0011: { } break;  //NoOpCode
-					case 0b0100: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVBM
-					case 0b0101: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVWM
-					case 0b0110: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVLM
-					case 0b0111: {used_regs |= rn | rm; } break;  //DIV0S
-					case 0b1000: {used_regs |= rn | rm; } break;  //TST
-					case 0b1001: {used_regs |= rn | rm; stored_regs |= rn; } break;  //AND
-					case 0b1010: {used_regs |= rn | rm; stored_regs |= rn; } break;  //XOR
-					case 0b1011: {used_regs |= rn | rm; stored_regs |= rn; } break;  //OR
-					case 0b1100: {used_regs |= rn | rm; } break;  //CMPSTR
-					case 0b1101: {used_regs |= rn | rm; stored_regs |= rn; } break;  //XTRCT
-					case 0b1110: {used_regs |= rn | rm; } break;  //MULU
-					case 0b1111: {used_regs |= rn | rm; } break;  //MULS
-				}
-			} break;
+			switch (inst & 0xF) { // 0010_NNNN_MMMM_XXXX
+				case 0b0000: {ifc = IFC_MOVBS   | IFC_RLS(RLS_LNM); } break;
+				case 0b0001: {ifc = IFC_MOVWS   | IFC_RLS(RLS_LNM); } break;
+				case 0b0010: {ifc = IFC_MOVLS   | IFC_RLS(RLS_LNM); } break;
+				case 0b0011: {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+				case 0b0100: {ifc = IFC_MOVBM   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0101: {ifc = IFC_MOVWM   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0110: {ifc = IFC_MOVLM   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0111: {ifc = IFC_DIV0S   | IFC_RLS(RLS_LNM); } break;
+				case 0b1000: {ifc = IFC_TST     | IFC_RLS(RLS_LNM); } break;
+				case 0b1001: {ifc = IFC_AND     | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1010: {ifc = IFC_XOR     | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1011: {ifc = IFC_OR      | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1100: {ifc = IFC_CMPSTR  | IFC_RLS(RLS_LNM); } break;
+				case 0b1101: {ifc = IFC_XTRCT   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1110: {ifc = IFC_MULU    |  IFC_RLS(RLS_LNM); } break;
+				case 0b1111: {ifc = IFC_MULS    | IFC_RLS(RLS_LNM); } break;
+			}} break;
 			case 0b0011: {
-				switch (inst & 0xF) { // 0011_NNNN_MMMM_XXXX
-					case 0b0000: {used_regs |= rn | rm; } break;  //CMPEQ
-					case 0b0001: { } break;  //NoOpCode
-					case 0b0010: {used_regs |= rn | rm; } break;  //CMPHS
-					case 0b0011: {used_regs |= rn | rm; } break;  //CMPGE
-					case 0b0100: {used_regs |= rn | rm; stored_regs |= rn; } break;  //DIV1
-					case 0b0101: {used_regs |= rn | rm; } break;  //DMULU
-					case 0b0110: {used_regs |= rn | rm; } break;  //CMPHI
-					case 0b0111: {used_regs |= rn | rm; } break;  //CMPGT
-					case 0b1000: {used_regs |= rn | rm; stored_regs |= rn; } break;  //SUB
-					case 0b1001: { } break;  //NoOpCode
-					case 0b1010: {used_regs |= rn | rm; stored_regs |= rn; } break;  //SUBC
-					case 0b1011: {used_regs |= rn | rm; stored_regs |= rn; } break;  //SUBV
-					case 0b1100: {used_regs |= rn | rm; stored_regs |= rn; } break;  //ADD
-					case 0b1101: {used_regs |= rn | rm; } break;  //DMULS
-					case 0b1110: {used_regs |= rn | rm; stored_regs |= rn; } break;  //ADDC
-					case 0b1111: {used_regs |= rn | rm; stored_regs |= rn; } break;  //ADDV
-				}
-			} break;
+			switch (inst & 0xF) { // 0011_NNNN_MMMM_XXXX
+				case 0b0000: {ifc = IFC_CMPEQ   | IFC_RLS(RLS_LNM); } break;
+				case 0b0010: {ifc = IFC_CMPHS   | IFC_RLS(RLS_LNM); } break;
+				case 0b0011: {ifc = IFC_CMPGE   | IFC_RLS(RLS_LNM); } break;
+				case 0b0100: {ifc = IFC_DIV1    | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0101: {ifc = IFC_DMULU   | IFC_RLS(RLS_LNM); cycles+=1; } break;
+				case 0b0110: {ifc = IFC_CMPHI   | IFC_RLS(RLS_LNM); } break;
+				case 0b0111: {ifc = IFC_CMPGT   | IFC_RLS(RLS_LNM); } break;
+				case 0b1000: {ifc = IFC_SUB     | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1010: {ifc = IFC_SUBC    | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1011: {ifc = IFC_SUBV    | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1100: {ifc = IFC_ADD     | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1101: {ifc = IFC_DMULS   | IFC_RLS(RLS_LNM); cycles+=1; } break;
+				case 0b1110: {ifc = IFC_ADDC    | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1111: {ifc = IFC_ADDV    | IFC_RLS(RLS_LM_SN); } break;
+				default:     {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+			}} break;
 			case 0b0100: {
-				switch (inst & 0xF) { // 0100_NNNN_.FX._XXXX
-					case 0b000000: {used_regs |= rn; stored_regs |= rn; } break;  //SHLL
-					case 0b010000: {used_regs |= rn; stored_regs |= rn; } break;  //DT
-					case 0b100000: {used_regs |= rn; stored_regs |= rn; } break;  //SHAL
-					case 0b000001: {used_regs |= rn; stored_regs |= rn; } break;  //SHLR
-					case 0b010001: {used_regs |= rn; } break;  //CMPPZ
-					case 0b100001: {used_regs |= rn; stored_regs |= rn; } break;  //SHAR
-					case 0b000010: {used_regs |= rn; stored_regs |= rn; } break;  //STSMMACH
-					case 0b010010: {used_regs |= rn; stored_regs |= rn; } break;  //STSMMACL
-					case 0b100010: {used_regs |= rn; stored_regs |= rn; } break;  //STSMPR
-					case 0b000011: {used_regs |= rn; stored_regs |= rn; } break;  //STCMSR
-					case 0b010011: {used_regs |= rn; stored_regs |= rn; } break;  //STCMGBR
-					case 0b100011: {used_regs |= rn; stored_regs |= rn; } break;  //STCMVBR
-					case 0b000100: {used_regs |= rn; stored_regs |= rn; } break;  //ROTL
-					case 0b100100: {used_regs |= rn; stored_regs |= rn; } break;  //ROTCL
-					case 0b000101: {used_regs |= rn; stored_regs |= rn; } break;  //ROTR
-					case 0b010101: {used_regs |= rn; } break;  //CMPPL
-					case 0b100101: {used_regs |= rn; stored_regs |= rn; } break;  //ROTCR
-					case 0b000110: {used_regs |= rn; stored_regs |= rn; } break;  //LDSMMACH
-					case 0b010110: {used_regs |= rn; stored_regs |= rn; } break;  //LDSMMACL
-					case 0b100110: {used_regs |= rn; stored_regs |= rn; } break;  //LDSMPR
-					case 0b000111: {used_regs |= rn; stored_regs |= rn; } break;  //LDCMSR
-					case 0b010111: {used_regs |= rn; stored_regs |= rn; } break;  //LDCMGBR
-					case 0b100111: {used_regs |= rn; stored_regs |= rn; } break;  //LDCMVBR
-					case 0b001000: {used_regs |= rn; stored_regs |= rn; } break;  //SHLL2
-					case 0b011000: {used_regs |= rn; stored_regs |= rn; } break;  //SHLL8
-					case 0b101000: {used_regs |= rn; stored_regs |= rn; } break;  //SHLL16
-					case 0b001001: {used_regs |= rn; stored_regs |= rn; } break;  //SHLR2
-					case 0b011001: {used_regs |= rn; stored_regs |= rn; } break;  //SHLR8
-					case 0b101001: {used_regs |= rn; stored_regs |= rn; } break;  //SHLR16
-					case 0b001010: {used_regs |= rn; } break;  //LDSMACH
-					case 0b011010: {used_regs |= rn; } break;  //LDSMACL
-					case 0b101010: {used_regs |= rn; } break;  //LDSPR
-					case 0b001011: {used_regs |= rn; delay_slot = 1; continue_block = 0;} break; //JSR
-					case 0b011011: {used_regs |= rn; } break; //TAS
-					case 0b101011: {used_regs |= rn; delay_slot = 1; continue_block = 0;} break; //JMP
-					case 0b001110: {used_regs |= rn; } break; // LDCSR
-					case 0b011110: {used_regs |= rn; } break; // LDCGBR
-					case 0b101110: {used_regs |= rn; } break; // LDCVBR
-					case 0b001111:
-					case 0b011111:
-					case 0b101111:
-					case 0b111111: {used_regs |= rn | rm; } break; //MACW
-					default: { } break; //Illegal Instr
-				}
-			} break;
-			case 0b0101: { used_regs |= rn | rm; stored_regs |= rn; } break; //MOVLL4
+			switch (inst & 0x3F) { // 0100_NNNN_.FX._XXXX
+				case 0b000000: {ifc = IFC_SHLL     | IFC_RLS(RLS_SN); } break;
+				case 0b010000: {ifc = IFC_DT       | IFC_RLS(RLS_SN); } break;
+				case 0b100000: {ifc = IFC_SHAL     | IFC_RLS(RLS_SN); } break;
+				case 0b000001: {ifc = IFC_SHLR     | IFC_RLS(RLS_SN); } break;
+				case 0b010001: {ifc = IFC_CMPPZ    | IFC_RLS(RLS_LN); } break;
+				case 0b100001: {ifc = IFC_SHAR     | IFC_RLS(RLS_SN); } break;
+				case 0b000010: {ifc = IFC_STSMMACH | IFC_RLS(RLS_SN); } break;
+				case 0b010010: {ifc = IFC_STSMMACL | IFC_RLS(RLS_SN); } break;
+				case 0b100010: {ifc = IFC_STSMPR   | IFC_RLS(RLS_SN); } break;
+				case 0b000011: {ifc = IFC_STCMSR   | IFC_RLS(RLS_SN); cycles+=1; } break;
+				case 0b010011: {ifc = IFC_STCMGBR  | IFC_RLS(RLS_SN); cycles+=1; } break;
+				case 0b100011: {ifc = IFC_STCMVBR  | IFC_RLS(RLS_SN); cycles+=1; } break;
+				case 0b000100: {ifc = IFC_ROTL     | IFC_RLS(RLS_SN); } break;
+				case 0b100100: {ifc = IFC_ROTCL    | IFC_RLS(RLS_SN); } break;
+				case 0b000101: {ifc = IFC_ROTR     | IFC_RLS(RLS_SN); } break;
+				case 0b010101: {ifc = IFC_CMPPL    | IFC_RLS(RLS_LN); } break;
+				case 0b100101: {ifc = IFC_ROTCR    | IFC_RLS(RLS_SN); } break;
+				case 0b000110: {ifc = IFC_LDSMMACH | IFC_RLS(RLS_SN); } break;
+				case 0b010110: {ifc = IFC_LDSMMACL | IFC_RLS(RLS_SN); } break;
+				case 0b100110: {ifc = IFC_LDSMPR   | IFC_RLS(RLS_SN); } break;
+				case 0b000111: {ifc = IFC_LDCMSR   | IFC_RLS(RLS_SN); cycles+=2; } break;
+				case 0b010111: {ifc = IFC_LDCMGBR  | IFC_RLS(RLS_SN); cycles+=2; } break;
+				case 0b100111: {ifc = IFC_LDCMVBR  | IFC_RLS(RLS_SN); cycles+=2; } break;
+				case 0b001000: {ifc = IFC_SHLL2    | IFC_RLS(RLS_SN); } break;
+				case 0b011000: {ifc = IFC_SHLL8    | IFC_RLS(RLS_SN); } break;
+				case 0b101000: {ifc = IFC_SHLL16   | IFC_RLS(RLS_SN); } break;
+				case 0b001001: {ifc = IFC_SHLR2    | IFC_RLS(RLS_SN); } break;
+				case 0b011001: {ifc = IFC_SHLR8    | IFC_RLS(RLS_SN); } break;
+				case 0b101001: {ifc = IFC_SHLR16   | IFC_RLS(RLS_SN); } break;
+				case 0b001010: {ifc = IFC_LDSMACH  | IFC_RLS(RLS_LN); } break;
+				case 0b011010: {ifc = IFC_LDSMACL  | IFC_RLS(RLS_LN); } break;
+				case 0b101010: {ifc = IFC_LDSPR    | IFC_RLS(RLS_LN); } break;
+				case 0b001011: {ifc = IFC_JSR      | IFC_RLS(RLS_LN); cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				case 0b011011: {ifc = IFC_TAS      | IFC_RLS(RLS_LN); cycles+=4; } break;
+				case 0b101011: {ifc = IFC_JMP      | IFC_RLS(RLS_LN); cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				case 0b001110: {ifc = IFC_LDCSR    | IFC_RLS(RLS_LN); } break;
+				case 0b011110: {ifc = IFC_LDCGBR   | IFC_RLS(RLS_LN); } break;
+				case 0b101110: {ifc = IFC_LDCVBR   | IFC_RLS(RLS_LN); } break;
+				case 0b001111:
+				case 0b011111:
+				case 0b101111:
+				case 0b111111: {ifc = IFC_MACW     | IFC_RLS(RLS_LNM); cycles+=1; } break;
+				default:       {ifc = IFC_ILLEGAL  | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+			}} break;
+			case 0b0101: { ifc = IFC_MOVLL4 | IFC_RLS(RLS_LM_SN); } break;
 			case 0b0110: {
-				switch (inst & 0xF) { // 0100_NNNN_.FX._XXXX
-					case 0b0000: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVBL
-					case 0b0001: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVWL
-					case 0b0010: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOVLL
-					case 0b0011: {used_regs |= rn | rm; stored_regs |= rn; } break;  //MOV
-					case 0b0100: {used_regs |= rn | rm; stored_regs |= rn | rm; } break;  //MOVBP
-					case 0b0101: {used_regs |= rn | rm; stored_regs |= rn | rm; } break;  //MOVWP
-					case 0b0110: {used_regs |= rn | rm; stored_regs |= rn | rm; } break;  //MOVLP
-					case 0b0111: {used_regs |= rn | rm; stored_regs |= rn; } break;  //NOT
-					case 0b1000: {used_regs |= rn | rm; stored_regs |= rn; } break;  //SWAPB
-					case 0b1001: {used_regs |= rn | rm; stored_regs |= rn; } break;  //SWAPW
-					case 0b1010: {used_regs |= rn | rm; stored_regs |= rn; } break;  //NEGC
-					case 0b1011: {used_regs |= rn | rm; stored_regs |= rn; } break;  //NEG
-					case 0b1100: {used_regs |= rn | rm; stored_regs |= rn; } break;  //EXTUB
-					case 0b1101: {used_regs |= rn | rm; stored_regs |= rn; } break;  //EXTUW
-					case 0b1110: {used_regs |= rn | rm; stored_regs |= rn; } break;  //EXTSB
-					case 0b1111: {used_regs |= rn | rm; stored_regs |= rn; } break;  //EXTSW
-				}
-			} break;
-			case 0b0111: { used_regs |= rn; stored_regs |= rn; } break; //ADDI
+			switch (inst & 0xF) { // 0100_NNNN_.FX._XXXX
+				case 0b0000: {ifc = IFC_MOVBL | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0001: {ifc = IFC_MOVWL | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0010: {ifc = IFC_MOVLL | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0011: {ifc = IFC_MOV   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b0100: {ifc = IFC_MOVBP | IFC_RLS(RLS_SNM); } break;
+				case 0b0101: {ifc = IFC_MOVWP | IFC_RLS(RLS_SNM); } break;
+				case 0b0110: {ifc = IFC_MOVLP | IFC_RLS(RLS_SNM); } break;
+				case 0b0111: {ifc = IFC_NOT   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1000: {ifc = IFC_SWAPB | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1001: {ifc = IFC_SWAPW | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1010: {ifc = IFC_NEGC  | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1011: {ifc = IFC_NEG   | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1100: {ifc = IFC_EXTUB | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1101: {ifc = IFC_EXTUW | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1110: {ifc = IFC_EXTSB | IFC_RLS(RLS_LM_SN); } break;
+				case 0b1111: {ifc = IFC_EXTSW | IFC_RLS(RLS_LM_SN); } break;
+			}} break;
+			case 0b0111: { ifc = IFC_ADDI | IFC_RLS(RLS_SN); } break;
 			case 0b1000: {
-				switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-					case 0b0000: {used_regs |= rm | REG_NUM_R(0); } break; //MOVBS4
-					case 0b0001: {used_regs |= rm | REG_NUM_R(0); } break; //MOVWS4
-					case 0b0010: { } break; //NoOpCode
-					case 0b0011: { } break; //NoOpCode
-					case 0b0100: {used_regs |= rm | REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVBL4
-					case 0b0101: {used_regs |= rm | REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVWL4
-					case 0b0110: { } break; //NoOpCode
-					case 0b0111: { } break; //NoOpCode
-					case 0b1000: {used_regs |= REG_NUM_R(0); } break; //CMPIM
-					case 0b1001: {continue_block = 0; delay_slot = 1;} break; //BT
-					case 0b1010: { } break;
-					case 0b1011: {continue_block = 0; delay_slot = 1;} break; //BF
-					case 0b1100: { } break;
-					case 0b1101: {continue_block = 0; delay_slot = 1;} break; //BTS
-					case 0b1110: { } break;
-					case 0b1111: {continue_block = 0; delay_slot = 1;} break; //BFS
-				}
-			} break;
-			case 0b1001: { used_regs |= rn; stored_regs |= rn; } break;	//MOVWI
-			case 0b1010: { continue_block = 0; delay_slot = 1;} break; //BRA
-			case 0b1011: { continue_block = 0; delay_slot = 1;} break; //BSR
+			switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
+				case 0b0000: {ifc = IFC_MOVBS4 | IFC_RLS(RLS_LM0); } break;
+				case 0b0001: {ifc = IFC_MOVWS4 | IFC_RLS(RLS_LM0); } break;
+				case 0b0100: {ifc = IFC_MOVBL4 | IFC_RLS(RLS_LM_S0); } break;
+				case 0b0101: {ifc = IFC_MOVWL4 | IFC_RLS(RLS_LM_S0); } break;
+				case 0b1000: {ifc = IFC_CMPIM  | IFC_RLS(RLS_L0); } break;
+				case 0b1001: {ifc = IFC_BT; bstate = BSTATE_END;} break; //TODO: Cycles are weird
+				case 0b1011: {ifc = IFC_BF; bstate = BSTATE_END;} break; //TODO: Cycles are weird
+				case 0b1101: {ifc = IFC_BTS; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
+				case 0b1111: {ifc = IFC_BFS; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
+				default:     {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+			}} break;
+			case 0b1001: { ifc = IFC_MOVWI | IFC_RLS(RLS_SN); } break;
+			case 0b1010: { ifc = IFC_BRA; cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+			case 0b1011: { ifc = IFC_BSR; cycles+=1; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 			case 0b1100: {
-				switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-					case 0b0000: {used_regs |= REG_NUM_R(0); } break; //MOVBSG
-					case 0b0001: {used_regs |= REG_NUM_R(0); } break; //MOVWSG
-					case 0b0010: {used_regs |= REG_NUM_R(0); } break; //MOVLSG
-					case 0b0011: {used_regs |= REG_NUM_R(15); stored_regs |= REG_NUM_R(15); continue_block = 0;} break; //TRAPA
-					case 0b0100: {used_regs |= REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVBLG
-					case 0b0101: {used_regs |= REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVWLG
-					case 0b0110: {used_regs |= REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVLLG
-					case 0b0111: {used_regs |= REG_NUM_R(0); stored_regs |= REG_NUM_R(0); } break; //MOVA
-					case 0b1000: {used_regs |= REG_NUM_R(0); } break; //TSTI
-					case 0b1001: {used_regs |= REG_NUM_R(0); } break; //ANDI
-					case 0b1010: {used_regs |= REG_NUM_R(0); } break; //XORI
-					case 0b1011: {used_regs |= REG_NUM_R(0); } break; //ORI
-					case 0b1100: {used_regs |= REG_NUM_R(0); } break; //TSTM
-					case 0b1101: {used_regs |= REG_NUM_R(0); } break; //ANDM
-					case 0b1110: {used_regs |= REG_NUM_R(0); } break; //XORM
-					case 0b1111: {used_regs |= REG_NUM_R(0); } break; //ORM
-				}
-			} break;
-			case 0b1101: { used_regs |= rn; stored_regs |= rn; } break; //MOVLI
-			case 0b1110: { used_regs |= rn; stored_regs |= rn; } break; //MOVI
-			case 0b1111: { } break;
+			switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
+				case 0b0000: {ifc = IFC_MOVBSG | IFC_RLS(RLS_L0); } break;
+				case 0b0001: {ifc = IFC_MOVWSG | IFC_RLS(RLS_L0); } break;
+				case 0b0010: {ifc = IFC_MOVLSG | IFC_RLS(RLS_L0); } break;
+				case 0b0011: {ifc = IFC_TRAPA  | IFC_RLS(RLS_S15); cycles+=8; bstate = BSTATE_END;} break;
+				case 0b0100: {ifc = IFC_MOVBLG | IFC_RLS(RLS_S0); } break;
+				case 0b0101: {ifc = IFC_MOVWLG | IFC_RLS(RLS_S0); } break;
+				case 0b0110: {ifc = IFC_MOVLLG | IFC_RLS(RLS_S0); } break;
+				case 0b0111: {ifc = IFC_MOVA   | IFC_RLS(RLS_S0); } break;
+				case 0b1000: {ifc = IFC_TSTI   | IFC_RLS(RLS_L0); } break;
+				case 0b1001: {ifc = IFC_ANDI   | IFC_RLS(RLS_L0); } break;
+				case 0b1010: {ifc = IFC_XORI   | IFC_RLS(RLS_L0); } break;
+				case 0b1011: {ifc = IFC_ORI    | IFC_RLS(RLS_L0); } break;
+				case 0b1100: {ifc = IFC_TSTM   | IFC_RLS(RLS_L0); cycles+=2; } break;
+				case 0b1101: {ifc = IFC_ANDM   | IFC_RLS(RLS_L0); cycles+=2; } break;
+				case 0b1110: {ifc = IFC_XORM   | IFC_RLS(RLS_L0); cycles+=2; } break;
+				case 0b1111: {ifc = IFC_ORM    | IFC_RLS(RLS_L0); cycles+=2; } break;
+			}} break;
+			case 0b1101: { ifc = IFC_MOVLI   | IFC_RLS(RLS_SN); } break;
+			case 0b1110: { ifc = IFC_MOVI    | IFC_RLS(RLS_SN); } break;
+			case 0b1111: { ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
 		}
+
+		//Mark regs that need to be loadaed/stored
+		u32 rn = REG_NUM_R((inst >> 8) & 0xF);
+		u32 rm = REG_NUM_R((inst >> 4) & 0xF);
+		switch (IFC_RLS_GET(ifc)) {
+			case RLS_L0:     { ld_regs |= REG_NUM_R(0); } break;
+			case RLS_L15:    { ld_regs |= REG_NUM_R(15); } break;
+			case RLS_LN:     { ld_regs |= rn; } break;
+			case RLS_LNM:    { ld_regs |= rn | rm; } break;
+			case RLS_LM0:    { ld_regs |= rm | REG_NUM_R(0); } break;
+			case RLS_LNM0:   { ld_regs |= rn | rm | REG_NUM_R(0); } break;
+			case RLS_LM_S0:  { ld_regs |= rm                | (st_regs |= REG_NUM_R(0)); } break;
+			case RLS_LM_SN:  { ld_regs |= rm                | (st_regs |= rn); } break;
+			case RLS_LM0_SN: { ld_regs |= rm | REG_NUM_R(0) | (st_regs |= rn); } break;
+			case RLS_S0:     { ld_regs |=                     (st_regs |= REG_NUM_R(0)); } break;
+			case RLS_S15:    { ld_regs |=                     (st_regs |= REG_NUM_R(15)); } break;
+			case RLS_SN:     { ld_regs |=                     (st_regs |= rn); } break;
+			case RLS_SNM:    { ld_regs |=                     (st_regs |= rn | rm); } break;
+		}
+
+		//End the block if it was in delay state
+		switch (bstate) {
+			case BSTATE_SET_DELAY: {bstate = BSTATE_IN_DELAY;} break;
+			case BSTATE_IN_DELAY: {
+				if (ifc >= IFC_BF && ifc <= IFC_RTS) {
+					ifc |= IFC_ILLEGAL | IFC_RLS(RLS_S15) | IFC_ILGL_BRANCH;
+				}
+				bstate = BSTATE_END;
+				ifc |= IFC_IS_DELAY;} break;
+		}
+
+		ifc_array[instr_count] = ifc;
+		++instr_count;
 		++cycles; /* At least one cycle */
 		curr_pc += 2;
 	}
 
-	*useregs = used_regs | stored_regs;
-	*strregs = stored_regs;
+	//Set values
+	block_data.st_regs = st_regs;
+	block_data.ld_regs = ld_regs;
+	block_data.cycle_count = cycles;
+	block_data.instr_count = instr_count;
+
 	return 0;
 }
 
 
 u32 _jit_GenBlock(u32 addr, Block *iblock)
 {
-	u32 continue_block = 1, delay_slot = 0;
 	u32 curr_pc = addr;
 	//Pass 0, check instructions and decode one by one:
-	u16 *inst_ptr = (u16*) mem_GetPCAddr(curr_pc);
-	u32 last_t_mod = 0; // Instruction
-	u32 instr_count = 0;
-	u32 cycles = 0;
+	u16 *inst_ptr = (u16*) sh2_GetPCAddr(curr_pc);
 	u32 *icache_ptr = &drc_code[drc_code_pos];
 	u32 reg_indx[32];
-	u32 useregs = 0;
-	u32 strregs = 0;
-	_jit_BlockPass0(addr, &useregs, &strregs);
-	printf("used: %X, saved: %X", useregs, strregs);
+	_jit_GenIFCBlock(addr);
+
 	PPCC_BEGIN_BLOCK();
 	PPCC_MOV(GP_CTX, 3); //SH2 context is in r3
+	//Load registers used in block
 	PPCE_LOAD(GP_SR, sr);
-	u32 reg_curr = 30;
+	u32 reg_curr = 29;
 	for (u32 i = 0; i < 16; ++i) {
-		if ((useregs >> i) & 1) {
+		if ((block_data.ld_regs >> i) & 1) {
 			reg_indx[i] = reg_curr;
 			PPCE_LOAD(GP_R(i), r[i]);
 			reg_curr--;
 		}
 	}
-	//for (u32 i = 0; i < 16; ++i) {
-	//	PPCE_LOAD(GP_R(i), r[i]);
-	//}
-	while (continue_block | delay_slot) {
-		u32 inst = *(inst_ptr++); ++instr_count;
+	for (u32 i = 0; i < block_data.instr_count; ++i) {
+		u32 inst = *(inst_ptr++);
 		_jit_opcode = inst;
 		rn = GP_R((inst >> 8) & 0xF);
 		rm = GP_R((inst >> 4) & 0xF);
 
-		if (delay_slot) {
-			delay_slot = 0;
+		switch (ifc_array[i] & 0xFF) {
+		//Algebraic/Logical
+			case IFC_ILLEGAL:{SH2JIT_ILLEGAL;} break;
+			case IFC_ADD:    {SH2JIT_ADD;} break;
+			case IFC_ADDI:   {SH2JIT_ADDI;} break;
+			case IFC_ADDC:   {SH2JIT_ADDC;} break;
+			case IFC_ADDV:   {SH2JIT_ADDV;} break;
+			case IFC_SUB:    {SH2JIT_SUB;} break;
+			case IFC_SUBC:   {SH2JIT_SUBC;} break;
+			case IFC_SUBV:   {SH2JIT_SUBV;} break;
+			case IFC_AND:    {SH2JIT_AND;} break;
+			case IFC_ANDI:   {SH2JIT_ANDI;} break;
+			case IFC_ANDM:   {SH2JIT_ANDM;} break;
+			case IFC_OR:     {SH2JIT_OR;} break;
+			case IFC_ORI:    {SH2JIT_ORI;} break;
+			case IFC_ORM:    {SH2JIT_ORM;} break;
+			case IFC_XOR:    {SH2JIT_XOR;} break;
+			case IFC_XORI:   {SH2JIT_XORI;} break;
+			case IFC_XORM:   {SH2JIT_XORM;} break;
+			case IFC_ROTCL:  {SH2JIT_ROTCL;} break;
+			case IFC_ROTCR:  {SH2JIT_ROTCR;} break;
+			case IFC_ROTL:   {SH2JIT_ROTL;} break;
+			case IFC_ROTR:   {SH2JIT_ROTR;} break;
+			case IFC_SHAL:   {SH2JIT_SHAL;} break;
+			case IFC_SHAR:   {SH2JIT_SHAR;} break;
+			case IFC_SHLL:   {SH2JIT_SHLL;} break;
+			case IFC_SHLL2:  {SH2JIT_SHLL2;} break;
+			case IFC_SHLL8:  {SH2JIT_SHLL8;} break;
+			case IFC_SHLL16: {SH2JIT_SHLL16;} break;
+			case IFC_SHLR:   {SH2JIT_SHLR;} break;
+			case IFC_SHLR2:  {SH2JIT_SHLR2;} break;
+			case IFC_SHLR8:  {SH2JIT_SHLR8;} break;
+			case IFC_SHLR16: {SH2JIT_SHLR16;} break;
+			case IFC_NOT:    {SH2JIT_NOT;} break;
+			case IFC_NEG:    {SH2JIT_NEG;} break;
+			case IFC_NEGC:   {SH2JIT_NEGC;} break;
+			case IFC_DT:     {SH2JIT_DT;} break;
+			case IFC_EXTSB:  {SH2JIT_EXTSB;} break;
+			case IFC_EXTSW:  {SH2JIT_EXTSW;} break;
+			case IFC_EXTUB:  {SH2JIT_EXTUB;} break;
+			case IFC_EXTUW:  {SH2JIT_EXTUW;} break;
+		//Mult and Division
+			case IFC_DIV0S: {SH2JIT_DIV0S;} break;
+			case IFC_DIV0U: {SH2JIT_DIV0U;} break;
+			case IFC_DIV1:  {SH2JIT_DIV1;} break;
+			case IFC_DMULS: {SH2JIT_DMULS;} break;
+			case IFC_DMULU: {SH2JIT_DMULU;} break;
+			case IFC_MACL:  {SH2JIT_MACL;} break;
+			case IFC_MACW:  {SH2JIT_MACW;} break;
+			case IFC_MULL:  {SH2JIT_MULL;} break;
+			case IFC_MULS:  {SH2JIT_MULS;} break;
+			case IFC_MULU:  {SH2JIT_MULU;} break;
+		//Set and Clear
+			case IFC_CLRMAC: {SH2JIT_CLRMAC;} break;
+			case IFC_CLRT:   {SH2JIT_CLRT;} break;
+			case IFC_SETT:   {SH2JIT_SETT;} break;
+		//Compare
+			case IFC_CMPEQ:  {SH2JIT_CMPEQ;} break;
+			case IFC_CMPGE:  {SH2JIT_CMPGE;} break;
+			case IFC_CMPGT:  {SH2JIT_CMPGT;} break;
+			case IFC_CMPHI:  {SH2JIT_CMPHI;} break;
+			case IFC_CMPHS:  {SH2JIT_CMPHS;} break;
+			case IFC_CMPPL:  {SH2JIT_CMPPL;} break;
+			case IFC_CMPPZ:  {SH2JIT_CMPPZ;} break;
+			case IFC_CMPSTR: {SH2JIT_CMPSTR;} break;
+			case IFC_CMPIM:  {SH2JIT_CMPIM;} break;
+		//Load and Store
+			case IFC_LDCSR:    {SH2JIT_LDCSR;} break;
+			case IFC_LDCGBR:   {SH2JIT_LDCGBR;} break;
+			case IFC_LDCVBR:   {SH2JIT_LDCVBR;} break;
+			case IFC_LDCMSR:   {SH2JIT_LDCMSR;} break;
+			case IFC_LDCMGBR:  {SH2JIT_LDCMGBR;} break;
+			case IFC_LDCMVBR:  {SH2JIT_LDCMVBR;} break;
+			case IFC_LDSMACH:  {SH2JIT_LDSMACH;} break;
+			case IFC_LDSMACL:  {SH2JIT_LDSMACL;} break;
+			case IFC_LDSPR:    {SH2JIT_LDSPR;} break;
+			case IFC_LDSMMACH: {SH2JIT_LDSMMACH;} break;
+			case IFC_LDSMMACL: {SH2JIT_LDSMMACL;} break;
+			case IFC_LDSMPR:   {SH2JIT_LDSMPR;} break;
+			case IFC_STCSR:    {SH2JIT_STCSR;} break;
+			case IFC_STCGBR:   {SH2JIT_STCGBR;} break;
+			case IFC_STCVBR:   {SH2JIT_STCVBR;} break;
+			case IFC_STCMSR:   {SH2JIT_STCMSR;} break;
+			case IFC_STCMGBR:  {SH2JIT_STCMGBR;} break;
+			case IFC_STCMVBR:  {SH2JIT_STCMVBR;} break;
+			case IFC_STSMACH:  {SH2JIT_STSMACH;} break;
+			case IFC_STSMACL:  {SH2JIT_STSMACL;} break;
+			case IFC_STSPR:    {SH2JIT_STSPR;} break;
+			case IFC_STSMMACH: {SH2JIT_STSMMACH;} break;
+			case IFC_STSMMACL: {SH2JIT_STSMMACL;} break;
+			case IFC_STSMPR:   {SH2JIT_STSMPR;} break;
+		//Move Data
+			case IFC_MOV:    {SH2JIT_MOV;} break;
+			case IFC_MOVBS:  {SH2JIT_MOVBS;} break;
+			case IFC_MOVWS:  {SH2JIT_MOVWS;} break;
+			case IFC_MOVLS:  {SH2JIT_MOVLS;} break;
+			case IFC_MOVBL:  {SH2JIT_MOVBL;} break;
+			case IFC_MOVWL:  {SH2JIT_MOVWL;} break;
+			case IFC_MOVLL:  {SH2JIT_MOVLL;} break;
+			case IFC_MOVBM:  {SH2JIT_MOVBM;} break;
+			case IFC_MOVWM:  {SH2JIT_MOVWM;} break;
+			case IFC_MOVLM:  {SH2JIT_MOVLM;} break;
+			case IFC_MOVBP:  {SH2JIT_MOVBP;} break;
+			case IFC_MOVWP:  {SH2JIT_MOVWP;} break;
+			case IFC_MOVLP:  {SH2JIT_MOVLP;} break;
+			case IFC_MOVBS0: {SH2JIT_MOVBS0;} break;
+			case IFC_MOVWS0: {SH2JIT_MOVWS0;} break;
+			case IFC_MOVLS0: {SH2JIT_MOVLS0;} break;
+			case IFC_MOVBL0: {SH2JIT_MOVBL0;} break;
+			case IFC_MOVWL0: {SH2JIT_MOVWL0;} break;
+			case IFC_MOVLL0: {SH2JIT_MOVLL0;} break;
+			case IFC_MOVI:   {SH2JIT_MOVI;} break;
+			case IFC_MOVWI:  {SH2JIT_MOVWI;} break;
+			case IFC_MOVLI:  {SH2JIT_MOVLI;} break;
+			case IFC_MOVBLG: {SH2JIT_MOVBLG;} break;
+			case IFC_MOVWLG: {SH2JIT_MOVWLG;} break;
+			case IFC_MOVLLG: {SH2JIT_MOVLLG;} break;
+			case IFC_MOVBSG: {SH2JIT_MOVBSG;} break;
+			case IFC_MOVWSG: {SH2JIT_MOVWSG;} break;
+			case IFC_MOVLSG: {SH2JIT_MOVLSG;} break;
+			case IFC_MOVBS4: {SH2JIT_MOVBS4;} break;
+			case IFC_MOVWS4: {SH2JIT_MOVWS4;} break;
+			case IFC_MOVLS4: {SH2JIT_MOVLS4;} break;
+			case IFC_MOVBL4: {SH2JIT_MOVBL4;} break;
+			case IFC_MOVWL4: {SH2JIT_MOVWL4;} break;
+			case IFC_MOVLL4: {SH2JIT_MOVLL4;} break;
+			case IFC_MOVA:   {SH2JIT_MOVA;} break;
+			case IFC_MOVT:   {SH2JIT_MOVT;} break;
+		//Branch and Jumps
+			case IFC_BF:	{SH2JIT_BF;} break;
+			case IFC_BFS:	{SH2JIT_BFS;} break;
+			case IFC_BRA:	{SH2JIT_BRA;} break;
+			case IFC_BRAF:	{SH2JIT_BRAF;} break;
+			case IFC_BSR:	{SH2JIT_BSR;} break;
+			case IFC_BSRF:	{SH2JIT_BSRF;} break;
+			case IFC_BT:	{SH2JIT_BT;} break;
+			case IFC_BTS:	{SH2JIT_BTS;} break;
+			case IFC_JMP:	{SH2JIT_JMP;} break;
+			case IFC_JSR:	{SH2JIT_JSR;} break;
+			case IFC_RTE:	{SH2JIT_RTE;} break;
+			case IFC_RTS:	{SH2JIT_RTS;} break;
+		//Other
+			case IFC_NOP:	{SH2JIT_NOP;} break;
+			case IFC_SLEEP:	{SH2JIT_SLEEP;} break;
+			case IFC_SWAPB:	{SH2JIT_SWAPB;} break;
+			case IFC_SWAPW:	{SH2JIT_SWAPW;} break;
+			case IFC_TAS:	{SH2JIT_TAS;} break;
+			case IFC_TRAPA:	{SH2JIT_TRAPA;} break;
+			case IFC_TST:	{SH2JIT_TST;} break;
+			case IFC_TSTI:	{SH2JIT_TSTI;} break;
+			case IFC_TSTM:	{SH2JIT_TSTM;} break;
+			case IFC_XTRCT:	{SH2JIT_XTRCT;} break;
 		}
-
-		switch ((inst >> 12) & 0xF) {
-			case 0b0000: {
-				switch(inst) { //Constant instructions
-					case 0x0008: {SH2JIT_CLRT; } break;
-					case 0x0018: {SH2JIT_SETT; } break;
-					case 0x0028: {SH2JIT_CLRMAC; } break;
-					case 0x0009: {SH2JIT_NOP; } break;
-					case 0x0019: {SH2JIT_DIV0U; } break;
-					case 0x000B: {SH2JIT_RTS; cycles+=1; continue_block = 0; delay_slot = 1;} break;
-					case 0x001B: {SH2JIT_SLEEP; cycles+=2; continue_block = 0;} break; //Waits for interrupt
-					case 0x002B: {SH2JIT_RTE; cycles+=3; continue_block = 0; delay_slot = 1;} break;
-					default:
-						switch (inst & 0xF) {
-							case 0b0100: {SH2JIT_MOVBS0; } break;
-							case 0b0101: {SH2JIT_MOVWS0; } break;
-							case 0b0110: {SH2JIT_MOVLS0; } break;
-							case 0b0111: {SH2JIT_MULL; cycles+=1; } break;
-							case 0b1100: {SH2JIT_MOVBL0; } break;
-							case 0b1101: {SH2JIT_MOVWL0; } break;
-							case 0b1110: {SH2JIT_MOVLL0; } break;
-							case 0b1111: {SH2JIT_MACL; cycles+=1; } break;
-							default:
-								switch (inst & 0x3F) {
-									case 0b000010: {SH2JIT_STCSR; } break;
-									case 0b010010: {SH2JIT_STCGBR; } break;
-									case 0b000011: {SH2JIT_BSRF; cycles+=1; continue_block = 0; delay_slot = 1;} break;
-									case 0b100010: {SH2JIT_STCVBR; } break;
-									case 0b100011: {SH2JIT_BRAF; cycles+=1; continue_block = 0; delay_slot = 1;} break;
-									case 0b101001: {SH2JIT_MOVT; } break;
-									case 0b001010: {SH2JIT_STSMACH; } break;
-									case 0b011010: {SH2JIT_STSMACL; } break;
-									case 0b101010: {SH2JIT_STSPR; } break;
-								} break;
-						} break;
-				}
-			} break; //TODO
-			case 0b0001: { // MOV.L Rn Rm disp
-				SH2JIT_MOVLS4;
-			} break;
-			case 0b0010: {
-				switch (inst & 0xF) { // 0010_NNNN_MMMM_XXXX
-					case 0b0000: {SH2JIT_MOVBS; } break;
-					case 0b0001: {SH2JIT_MOVWS; } break;
-					case 0b0010: {SH2JIT_MOVLS; } break;
-					case 0b0011: {SH2JIT_NoOpCode(); } break;
-					case 0b0100: {SH2JIT_MOVBM; } break;
-					case 0b0101: {SH2JIT_MOVWM; } break;
-					case 0b0110: {SH2JIT_MOVLM; } break;
-					case 0b0111: {SH2JIT_DIV0S; } break;
-					case 0b1000: {SH2JIT_TST; } break;
-					case 0b1001: {SH2JIT_AND; } break;
-					case 0b1010: {SH2JIT_XOR; } break;
-					case 0b1011: {SH2JIT_OR; } break;
-					case 0b1100: {SH2JIT_CMPSTR; } break;
-					case 0b1101: {SH2JIT_XTRCT; } break;
-					case 0b1110: {SH2JIT_MULU; } break;
-					case 0b1111: {SH2JIT_MULS; } break;
-				}
-			} break;
-			case 0b0011: {
-				switch (inst & 0xF) { // 0011_NNNN_MMMM_XXXX
-					case 0b0000: {SH2JIT_CMPEQ; } break;
-					case 0b0001: {SH2JIT_NoOpCode(); } break;
-					case 0b0010: {SH2JIT_CMPHS; } break;
-					case 0b0011: {SH2JIT_CMPGE; } break;
-					case 0b0100: {SH2JIT_DIV1; } break;
-					case 0b0101: {SH2JIT_DMULU; cycles+=1; } break;
-					case 0b0110: {SH2JIT_CMPHI; } break;
-					case 0b0111: {SH2JIT_CMPGT; } break;
-					case 0b1000: {SH2JIT_SUB; } break;
-					case 0b1001: {SH2JIT_NoOpCode(); } break;
-					case 0b1010: {SH2JIT_SUBC; } break;
-					case 0b1011: {SH2JIT_SUBV; } break;
-					case 0b1100: {SH2JIT_ADD; } break;
-					case 0b1101: {SH2JIT_DMULS; cycles+=1; } break;
-					case 0b1110: {SH2JIT_ADDC; } break;
-					case 0b1111: {SH2JIT_ADDV; } break;
-				}
-			} break;
-			case 0b0100: {
-				switch (inst & 0xF) { // 0100_NNNN_.FX._XXXX
-					case 0b000000: {SH2JIT_SHLL; } break;
-					case 0b010000: {SH2JIT_DT; } break;
-					case 0b100000: {SH2JIT_SHAL; } break;
-					case 0b000001: {SH2JIT_SHLR; } break;
-					case 0b010001: {SH2JIT_CMPPZ; } break;
-					case 0b100001: {SH2JIT_SHAR; } break;
-					case 0b000010: {SH2JIT_STSMMACH; } break;
-					case 0b010010: {SH2JIT_STSMMACL; } break;
-					case 0b100010: {SH2JIT_STSMPR; } break;
-					case 0b000011: {SH2JIT_STCMSR; cycles+=1; } break;
-					case 0b010011: {SH2JIT_STCMGBR; cycles+=1; } break;
-					case 0b100011: {SH2JIT_STCMVBR; cycles+=1; } break;
-					case 0b000100: {SH2JIT_ROTL; } break;
-					case 0b100100: {SH2JIT_ROTCL; } break;
-					case 0b000101: {SH2JIT_ROTR; } break;
-					case 0b010101: {SH2JIT_CMPPL; } break;
-					case 0b100101: {SH2JIT_ROTCR; } break;
-					case 0b000110: {SH2JIT_LDSMMACH; } break;
-					case 0b010110: {SH2JIT_LDSMMACL; } break;
-					case 0b100110: {SH2JIT_LDSMPR; } break;
-					case 0b000111: {SH2JIT_LDCMSR; cycles+=2; } break;
-					case 0b010111: {SH2JIT_LDCMGBR; cycles+=2; } break;
-					case 0b100111: {SH2JIT_LDCMVBR; cycles+=2; } break;
-					case 0b001000: {SH2JIT_SHLL2; } break;
-					case 0b011000: {SH2JIT_SHLL8; } break;
-					case 0b101000: {SH2JIT_SHLL16; } break;
-					case 0b001001: {SH2JIT_SHLR2; } break;
-					case 0b011001: {SH2JIT_SHLR8; } break;
-					case 0b101001: {SH2JIT_SHLR16; } break;
-					case 0b001010: {SH2JIT_LDSMACH; } break;
-					case 0b011010: {SH2JIT_LDSMACL; } break;
-					case 0b101010: {SH2JIT_LDSPR; } break;
-					case 0b001011: {SH2JIT_JSR; cycles+=1; delay_slot = 1; continue_block = 0;} break;
-					case 0b011011: {SH2JIT_TAS; cycles+=4; } break;
-					case 0b101011: {SH2JIT_JMP; cycles+=1; delay_slot = 1; continue_block = 0;} break;
-					case 0b001110: {SH2JIT_LDCSR; } break;
-					case 0b011110: {SH2JIT_LDCGBR; } break;
-					case 0b101110: {SH2JIT_LDCVBR; } break;
-					case 0b001111:
-					case 0b011111:
-					case 0b101111:
-					case 0b111111: {SH2JIT_MACW; cycles+=1; } break;
-					default: {SH2JIT_NoOpCode();} break;
-				}
-			} break;
-			case 0b0101: { SH2JIT_MOVLL4; } break;
-			case 0b0110: {
-				switch (inst & 0xF) { // 0100_NNNN_.FX._XXXX
-					case 0b0000: {SH2JIT_MOVBL; } break;
-					case 0b0001: {SH2JIT_MOVWL; } break;
-					case 0b0010: {SH2JIT_MOVLL; } break;
-					case 0b0011: {SH2JIT_MOV; } break;
-					case 0b0100: {SH2JIT_MOVBP; } break;
-					case 0b0101: {SH2JIT_MOVWP; } break;
-					case 0b0110: {SH2JIT_MOVLP; } break;
-					case 0b0111: {SH2JIT_NOT; } break;
-					case 0b1000: {SH2JIT_SWAPB; } break;
-					case 0b1001: {SH2JIT_SWAPW; } break;
-					case 0b1010: {SH2JIT_NEGC; } break;
-					case 0b1011: {SH2JIT_NEG; } break;
-					case 0b1100: {SH2JIT_EXTUB; } break;
-					case 0b1101: {SH2JIT_EXTUW; } break;
-					case 0b1110: {SH2JIT_EXTSB; } break;
-					case 0b1111: {SH2JIT_EXTSW; } break;
-				}
-			} break;
-			case 0b0111: { SH2JIT_ADDI; } break;
-			case 0b1000: {
-				switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-					case 0b0000: {SH2JIT_MOVBS4; } break;
-					case 0b0001: {SH2JIT_MOVWS4; } break;
-					case 0b0010: {SH2JIT_NoOpCode(); } break;
-					case 0b0011: {SH2JIT_NoOpCode(); } break;
-					case 0b0100: {SH2JIT_MOVBL4; } break;
-					case 0b0101: {SH2JIT_MOVWL4; } break;
-					case 0b0110: {SH2JIT_NoOpCode(); } break;
-					case 0b0111: {SH2JIT_NoOpCode(); } break;
-					case 0b1000: {SH2JIT_CMPIM; } break;
-					case 0b1001: {SH2JIT_BT; continue_block = 0; delay_slot = 1;} break; //TODO: Cycles are weird
-					case 0b1010: {SH2JIT_NoOpCode(); } break;
-					case 0b1011: {SH2JIT_BF; continue_block = 0; delay_slot = 1;} break; //TODO: Cycles are weird
-					case 0b1100: {SH2JIT_NoOpCode(); } break;
-					case 0b1101: {SH2JIT_BTS; continue_block = 0; delay_slot = 1;} break; //TODO: Cycles are weird and Delay Slot is weird
-					case 0b1110: {SH2JIT_NoOpCode(); } break;
-					case 0b1111: {SH2JIT_BFS; continue_block = 0; delay_slot = 1;} break; //TODO: Cycles are weird and Delay Slot is weird
-				}
-			} break;
-			case 0b1001: { SH2JIT_MOVWI; } break;
-			case 0b1010: { SH2JIT_BRA; cycles+=1; continue_block = 0; delay_slot = 1;} break;
-			case 0b1011: { SH2JIT_BSR; cycles+=1; continue_block = 0; delay_slot = 1;} break;
-			case 0b1100: {
-				switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-					case 0b0000: {SH2JIT_MOVBSG; } break;
-					case 0b0001: {SH2JIT_MOVWSG; } break;
-					case 0b0010: {SH2JIT_MOVLSG; } break;
-					case 0b0011: {SH2JIT_TRAPA; cycles+=8; continue_block = 0;} break;
-					case 0b0100: {SH2JIT_MOVBLG; } break;
-					case 0b0101: {SH2JIT_MOVWLG; } break;
-					case 0b0110: {SH2JIT_MOVLLG; } break;
-					case 0b0111: {SH2JIT_MOVA; } break;
-					case 0b1000: {SH2JIT_TSTI; } break;
-					case 0b1001: {SH2JIT_ANDI; } break;
-					case 0b1010: {SH2JIT_XORI; } break;
-					case 0b1011: {SH2JIT_ORI; } break;
-					case 0b1100: {SH2JIT_TSTM; cycles+=2; } break;
-					case 0b1101: {SH2JIT_ANDM; cycles+=2; } break;
-					case 0b1110: {SH2JIT_XORM; cycles+=2; } break;
-					case 0b1111: {SH2JIT_ORM; cycles+=2; } break;
-				}
-			} break;
-			case 0b1101: { SH2JIT_MOVLI; } break;
-			case 0b1110: { SH2JIT_MOVI; } break;
-			case 0b1111: { SH2JIT_NoOpCode(); ++cycles; } break;
-		}
-		++cycles; /* At least one cycle */
 		curr_pc += 2;
 	}
-	//TODO: Save only registers used in block
-	//for (u32 i = 0; i < 16; ++i) {
-	//	PPCE_SAVE(GP_R(i), r[i]);
-	//}
+	//Store registers that were modified in block
 	for (u32 i = 0; i < 16; ++i) {
-		if ((strregs >> i) & 1) {
+		if ((block_data.st_regs >> i) & 1) {
 			PPCE_SAVE(GP_R(i), r[i]);
 		}
 	}
 	PPCE_SAVE(GP_SR, sr);
-
 	PPCC_END_BLOCK();
 
 	/* Fill block code */
 	iblock->code = (DrcCode) &drc_code[drc_code_pos];
 	iblock->ret_addr = 0;
 	iblock->start_addr = addr;
-	iblock->sh2_len = instr_count;
+	iblock->sh2_len = block_data.instr_count;
 	iblock->ppc_len = ((u32) icache_ptr - (u32)iblock->code) >> 2;
-	iblock->cycle_count = cycles;
+	iblock->cycle_count = block_data.cycle_count;
 
-	DCFlushRange((void*)(((u32) iblock->code) & ~0x1F), ((iblock->ppc_len * 4) & ~0x1F) + 0x20);
-	ICBlockInvalidate((void*)(((u32) iblock->code) & ~0x1F));
+	DCStoreRange((void*)(((u32) iblock->code) & ~0x1F), ((iblock->ppc_len * 4) & ~0x1F) + 0x20);
+	ICInvalidateRange((void*)(((u32) iblock->code) & ~0x1F), ((iblock->ppc_len * 4) & ~0x1F) + 0x20);
 
 	/* Add length of block to drc code position */
 	//TODO: Should be aligned 32Bytes?
 	drc_code_pos += iblock->ppc_len;
 	return 0;
 }
-#if 0
-//box86.org/2024/07/revisiting-the-dynarec/
-// Generates a new code block
-u32 __GenBlock(u16 pc)
+
+
+void sh2_DrcInit(void)
 {
-	Block drc_block;
-	u32 inst_count;
-	u32 pc_end; // pc of end of block
-	u32 inst_count = BlockPass0(pc, &pc_end);
-
-	//Compute jump destinations and add some barriers
-	//Compute predecessors
-	u32 size_pred, fill_pred;
-
-	//Propagate the flags to compute
-	update_need
-
-	//Clean up dead code...?
-	Propagate ymm0s: updateYmm0s..?
-
-	BlockPass1(); // Compute final register allocations
-
-	BlockPass2(); // Compute number of native instructions and addess of all instructions
-
-	//Allocate executable memory for instructions
-
-	BlockPass3(); // Compute final register allocations
-
-	// Copy the drc_block into a new metadata block
-
-	return 0;
+	drc_code = memalign(32, DRC_CODE_SIZE*sizeof(*drc_code));
+	drc_blocks = memalign(32, BLOCK_ARR_SIZE*sizeof(*drc_blocks));
+	HashClearAll();
 }
-#endif
 
 void sh2_DrcReset(void)
 {
@@ -1932,35 +1990,33 @@ void sh2_DrcReset(void)
 	HashClearAll();
 }
 
-#include <gccore.h>
-#include <stdio.h>
-#include <ogc/machine/processor.h>
 
 s32 sh2_DrcExec(SH2 *sh, s32 cycles)
 {
-	//XXX: implement the interpreter
-	u32 addr = sh->pc;
-	sh->cycles += cycles; //???
-	while(cycles > 0) {
-		u32 block_found = 0;
-		Block *iblock = HashGet(addr, &block_found);
-		//printf("MSH2: %p SSH2: %p SH2_CTX: %p\n", &msh2, &ssh2, &sh);
-		//printf("IBLOCK: %p\n", iblock);
-
-		if (!block_found) {
-			_jit_GenBlock(addr, iblock);
-			//printf("IBLOCK Gen: %p %d %d %d %d %d\n",
-			//	iblock->code,
-			//	iblock->start_addr,
-			//	iblock->ret_addr,
-			//	iblock->ppc_len,
-			//	iblock->sh2_len,
-			//	iblock->cycle_count);
+	u32 block_found = 0;
+	Block *iblock = HashGet(sh->pc, &block_found);
+	while(sh->cycles < cycles) {
+		u32 addr = sh->pc;
+		if (addr != iblock->start_addr) {
+			iblock = HashGet(addr, &block_found);
+			if (!block_found) {
+				_jit_GenBlock(addr, iblock);
+			}
 		}
 		iblock->code(sh);
-		addr = sh->pc;
-		cycles -= iblock->cycle_count; //XXX: also subtract from delta cycles
+		sh->cycles += iblock->cycle_count; //XXX: also subtract from delta cycles
 	}
-	return cycles;
+	sh->cycles -= cycles;
+	return 0;
 }
 
+// BIOS CODE PPC TO SSH
+//801F0470 -> 2000039E
+//801F0778 -> 20000214
+//801f0c88 -> 00000262
+//801f0a10 -> 000002CE
+//801f0ea8 -> 00000282
+//801f0f08 -> 0000028E
+//801f1000 -> 06000680
+//801f28d8 -> 000042ec
+//801f2a50 -> 000022fa

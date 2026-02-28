@@ -59,7 +59,7 @@
 #define OC_FRC			0x012
 #define OC_OCRA			0x014
 #define OC_OCRB			0x014	//WTF.. Add 0x10
-#define OC_TRC			0x016
+#define OC_TCR			0x016
 #define OC_TOCR			0x017
 #define OC_FICR			0x018
 #define OC_IPRB			0x060
@@ -73,6 +73,7 @@
 #define OC_WTCNT		0x081
 #define OC_RSTCSR		0x082
 #define OC_SBYCR		0x091
+#define OC_CCR			0x092
 #define OC_ICR			0x0E0
 #define OC_IPRA			0x0E2
 #define OC_VCRWDT		0x0E4
@@ -82,6 +83,8 @@
 #define OC_VCRDIV		0x10C
 #define OC_DVDNTH		0x110
 #define OC_DVDNTL		0x114
+#define OC_DVDNTUH		0x118
+#define OC_DVDNTUL		0x11C
 #define OC_BARAH		0x140
 #define OC_BARAL		0x142
 #define OC_BAMRAH		0x144
@@ -128,15 +131,17 @@ typedef struct SH2_tag
 	u32 r[16];
 	u32 pc;
 	u32 pr;
-	u32 mach;
-	u32 macl;
 	u32 gbr;
 	u32 vbr;
+	u32 mach;
+	u32 macl;
 	u32 sr;
 
 	u32 delay_slot;
 	s32 cycles; //There are no negative cycles, this is for underflow reasons
+	s32 cycles_leftover;
 	u32 flags;
+
 
 	u32 frc_leftover;
 	u32 wdt_leftover;
@@ -145,8 +150,8 @@ typedef struct SH2_tag
 
 	//u32 wdt_cntl; // isenable (OC_WTCSR & 0x20), isinterval (~OC_WTCSR & 0x40)
 	//XXX: Interrupt stuff
-	u16 irq[MAX_INTERRUPTS];
-	u32 irq_count;
+	u16 iqr[MAX_INTERRUPTS];
+	u32 iqr_count;
 
 	u32 address_arr[0x100];		/*Address Array*/
 	u8 on_chip[0x200];			/*On-chip peripheral modules*/
@@ -157,20 +162,20 @@ typedef struct SH2_tag
 extern SH2 msh2;
 extern SH2 ssh2;
 
-void sh2_Init();
-void sh2_Deinit();
+void sh2_Init(void);
+void sh2_Deinit(void);
 void sh2_Reset(SH2 *sh);
 void sh2_PowerOn(SH2 *sh);
 void sh2_Exec(SH2 *sh, u32 cycles);
 void sh2_Step(SH2 *sh);
-void sh2_SendInterrupt(SH2 *sh, u32 vec, u32 level);
+void sh2_SetInterrupt(SH2 *sh, u32 vec, u32 level);
 void sh2_NMI(SH2 *sh);
 void sh2_SetRegs(SH2 *sh, u32 *regs[32]);
 void sh2_GetRegs(SH2 *sh, u32 *regs[32]);
 void sh2_WriteNotify(u32 start, u32 len); //Notifies a write for dynarec code cache
 
 void sh2_DMAExec(SH2 *sh);
-void sh2_DMATransfer(SH2 *sh, u32 *chcr, u32 *sar, u32 *dar, u32 *tcr, u32 *vcrdma); //?
+void sh2_DMATransfer(SH2 *sh, u32 dma_slot); //?
 
 //Read/Write functions
 u8   sh2_Read8(u32 addr);
@@ -179,28 +184,7 @@ u32  sh2_Read32(u32 addr);
 void sh2_Write8(u32 addr, u8 val);
 void sh2_Write16(u32 addr, u16 val);
 void sh2_Write32(u32 addr, u32 val);
-
-#if 0
-//On-chip
-u8   sh2_OnchipRead8(u32 addr);
-u16  sh2_OnchipRead16(u32 addr);
-u32  sh2_OnchipRead32(u32 addr);
-void sh2_OnchipWrite8(u32 addr, u8 val);
-void sh2_OnchipWrite16(u32 addr, u16 val);
-void sh2_OnchipWrite32(u32 addr, u32 val);
-
-//Address Array
-u32  sh2_AddressArrayRead32(u32 addr);
-void sh2_AddressArrayWrite32(u32 addr, u32 val);
-
-//Data Array
-u8   sh2_DataArrayRead8(u32 addr);
-u16  sh2_DataArrayRead16(u32 addr);
-u32  sh2_DataArrayRead32(u32 addr);
-void sh2_DataArrayWrite8(u32 addr, u8 val);
-void sh2_DataArrayWrite16(u32 addr, u16 val);
-void sh2_DataArrayWrite32(u32 addr, u32 val);
-#endif
+u32* sh2_GetPCAddr(u32 pc);
 
 //Input Capture
 void sh2_MSH2InputCaptureWrite16(u32 addr, u16 data);
