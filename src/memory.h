@@ -277,12 +277,12 @@ void FASTCALL mem_Write8(u32 addr, u8 val);
 void FASTCALL mem_Write16(u32 addr, u16 val);
 void FASTCALL mem_Write32(u32 addr, u32 val);
 #else
-#define mem_Read8(addr)		(mem_read8_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
-#define mem_Read16(addr)	(mem_read16_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
-#define mem_Read32(addr)	(mem_read32_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF))
-#define mem_Write8(addr, val)	(mem_write8_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
-#define mem_Write16(addr, val)	(mem_write16_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
-#define mem_Write32(addr, val)	(mem_write32_arr[((addr) >> 19) & 0xFF]((addr) & 0x0FFFFFFF, val))
+#define mem_Read8(addr)			(mem_read8_arr[((addr) >> 19) & 0xFF](addr))
+#define mem_Read16(addr)		(mem_read16_arr[((addr) >> 19) & 0xFF](addr))
+#define mem_Read32(addr)		(mem_read32_arr[((addr) >> 19) & 0xFF](addr))
+#define mem_Write8(addr, val)	(mem_write8_arr[((addr) >> 19) & 0xFF](addr, val))
+#define mem_Write16(addr, val)	(mem_write16_arr[((addr) >> 19) & 0xFF](addr, val))
+#define mem_Write32(addr, val)	(mem_write32_arr[((addr) >> 19) & 0xFF](addr, val))
 #endif
 
 u8 FASTCALL mem_ReadNoCache8(u32 addr);
@@ -300,13 +300,13 @@ void FASTCALL mem_WriteNoCache32(u32 addr, u32 val);
 #define PAGE_SIZE			4096
 extern u8 bup_ram_written;
 
-typedef void (FASTCALL *WriteFunc8)(u32, u8);
-typedef void (FASTCALL *WriteFunc16)(u32, u16);
-typedef void (FASTCALL *WriteFunc32)(u32, u32);
+typedef void (*WriteFunc8)(u32, u8);
+typedef void (*WriteFunc16)(u32, u16);
+typedef void (*WriteFunc32)(u32, u32);
 
-typedef u8 (FASTCALL *ReadFunc8)(u32);
-typedef u16 (FASTCALL *ReadFunc16)(u32);
-typedef u32 (FASTCALL *ReadFunc32)(u32);
+typedef u8 (*ReadFunc8)(u32);
+typedef u16 (*ReadFunc16)(u32);
+typedef u32 (*ReadFunc32)(u32);
 
 extern WriteFunc8 mem_write8_arr[0x100];
 extern WriteFunc16 mem_write16_arr[0x100];

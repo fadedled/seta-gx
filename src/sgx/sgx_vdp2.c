@@ -339,38 +339,11 @@ void SGX_Vdp2Init(void)
 	win_tex = (u8*) memalign(32, 704*256); //TODO: This should be half the size
 	//Sreens (704*256 max) [4 SCROLL]
 	//for each screen: ARGB1555 (2 bytes) & ZA [1/2 byte] (only when per pixel Z or when per pixel A)
-	screen_tex = (u8*) memalign(32, 704*240*4*3);
+		//screen_tex = (u8*) memalign(32, 704*240*4*3);
 	//Images (704*512 max) [1st image, 2nd image]
 	//1st Image: ARGB1555 (2 bytes) + Z (1 byte)
 	//2nd Image: ARGB1555 (2 bytes) + A (1 byte, can be from 1st image or 2nd image)
-	image_tex = (u8*) memalign(32, 704*512*6);
-}
-
-static void __Vdp2CopyBackground(u32 bg_id)
-{
-	switch(bg_id) {
-		case 0: {	//Normal BG 0
-			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
-			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
-			GX_CopyTex(screen_tex + (704*256*2*0), GX_TRUE);
-		} break;
-		case 1: {	//Normal BG 1
-			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
-			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
-			GX_CopyTex(screen_tex + (704*256*2*1), GX_TRUE);
-		} break;
-		case 2: {	//Normal BG 2
-			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
-			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
-			GX_CopyTex(screen_tex + (704*256*2*2), GX_TRUE);
-		} break;
-		case 3: {	//Normal BG 3
-			GX_SetTexCopySrc(0, 0, vdp2_disp_w, 256);
-			GX_SetTexCopyDst(vdp2_disp_w, 256, GX_TF_RGB5A3, GX_FALSE);
-			GX_CopyTex(screen_tex + (704*256*2*3), GX_TRUE);
-		} break;
-	}
-	//GX_PixModeSync(); //Not necesary?
+		//image_tex = (u8*) memalign(32, 704*512);
 }
 
 

@@ -126,6 +126,8 @@ u32 rm = 0;
 
 #define PPCE_LOAD(rA, name)		PPCC_LWZ(rA, GP_CTX, offsetof(SH2, name))
 #define PPCE_SAVE(rA, name)		PPCC_STW(rA, GP_CTX, offsetof(SH2, name))
+#define PPCE_SET_T(rA, bit)		PPCC_RLWIMI(GP_SR, GP_TMP, 32-bit, 31, 31);
+#define PPCE_GET_T(rD, bit)		PPCC_RLWINM(GP_TMP, GP_SR, bit, 31-bit, 31-bit);
 
 u32 __GetDrcHash(s32 key)
 {
@@ -182,6 +184,7 @@ void HashClearAll(void)
 	for (u32 i = 0; i < BLOCK_ARR_SIZE; ++i) {
 		drc_blocks[i].start_addr = -1;
 	}
+	drc_code_pos = 0;
 	drc_blocks_size = 0;
 }
 
@@ -219,11 +222,13 @@ void HashClearAll(void)
 
 
 #define SH2JIT_SUBC			/* SUBC Rm,Rn  0011nnnnmmmm1010*/ \
+	PPCC_XORI(GP_SR, GP_SR, 1);				 \
 	PPCC_RLWINM(GP_TMP, GP_SR, 29, 2, 2); 	/*Extract T*/ \
 	PPCC_MTXER(GP_TMP);  					/*Store T in XER[CA]*/ \
 	PPCC_SUBFEO(rn, rm, rn); 				/* rn - rm - !XER[CA]*/ \
 	PPCC_MFXER(GP_TMP); 					/*Load XER[CA] to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store T*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store T*/ \
+	PPCC_XORI(GP_SR, GP_SR, 1);
 
 
 #define SH2JIT_SUBV			/* SUBV Rm,Rn  0011nnnnmmmm1011*/ \
@@ -242,11 +247,12 @@ void HashClearAll(void)
 
 
 #define SH2JIT_ANDM			/* AND.B #imm,@(R0,GBR)  11001101iiiiiiii*/ \
-	PPCE_LOAD(GP_STMP, gbr);		\
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Read8);				/*Read addr*/ \
 	PPCC_ANDI(4, 3, imm & 0xFF);	/*(R0+GBR) & imm -> value*/ \
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Write8);			/*Write (R0+GBR) & imm */
 
 
@@ -259,11 +265,12 @@ void HashClearAll(void)
 
 
 #define SH2JIT_ORM			/* OR.B #imm,@(R0,GBR)  11001111iiiiiiii */ \
-	PPCE_LOAD(GP_STMP, gbr);		\
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Read8);				/*Read addr*/ \
 	PPCC_ORI(4, 3, imm & 0xFF);		/*val(R0+GBR) | imm -> value*/ \
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Write8);			/*Write (R0+GBR) & imm */
 
 
@@ -276,11 +283,12 @@ void HashClearAll(void)
 
 
 #define SH2JIT_XORM			/* XOR.B #imm,@(R0,GBR)  11001110iiiiiiii */ \
-	PPCE_LOAD(GP_STMP, gbr);		\
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Read8);				/*Read addr*/ \
 	PPCC_XORI(4, 3, imm & 0xFF);	/*(R0+GBR) ^ imm -> value*/ \
-	PPCC_ADD(3, GP_R0, GP_STMP);	/*(R0+GBR) -> address*/ \
+	PPCE_LOAD(3, gbr);				\
+	PPCC_ADD(3, 3, GP_R0);			/*(R0+GBR) -> address*/ \
 	PPCC_BL(sh2_Write8);			/*Write (R0+GBR) & imm */
 
 
@@ -360,11 +368,13 @@ void HashClearAll(void)
 
 
 #define SH2JIT_NEGC /* NEGC Rm,Rn  0110nnnnmmmm1010 */ \
-	PPCC_ANDI(GP_TMP, GP_SR, 0x1);			/* Extract T */ \
-	PPCC_NEG(GP_TMP, GP_TMP);				/* Negate T */ \
-	PPCC_SUBFCO(rn, rm, GP_TMP);			/* 0 - Rm - T store in Rn */ \
+	PPCC_XORI(GP_TMP, GP_SR, 1); 			/*Extract ~T*/ \
+	PPCC_RLWINM(GP_TMP, GP_TMP, 29, 2, 2);	 \
+	PPCC_MTXER(GP_TMP);  					/*Store T in XER[CA]*/ \
+	PPCC_SUBFZE(rn, rm);					 \
 	PPCC_MFXER(GP_TMP); 					/*Load XER[CA] to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store T*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store ~T*/ \
+	PPCC_XORI(GP_SR, GP_SR, 1);
 
 
 #define SH2JIT_DT /* DT Rn  0100nnnn00010000 */ \
@@ -403,30 +413,67 @@ u32 mult = 0;
 #define SH2JIT_DIV0U /* DIV0U  0000000000011001 */ \
 	PPCC_ANDI(GP_SR, GP_SR, 0xFCFE);
 
+/*
+	oldQ = Q;
+	Q = MSB(Rn);
+	Rn = (Rn << 1u) | T;
+	const uint32 prevVal = Rn;
+	if (M ^ oldQ) {
+		Rn += Rm;
+		Q ^= (Rn >= prevVal) ^ oldQ;
+	} else {
+		Rn -= Rm;
+		Q ^= (Rn > prevVal) ^ oldQ;
+	}
+	T = (Q == M)
+==========================
+	oldQ = Q;
+	Q = MSB(Rn);
+	Rn = (Rn << 1u) | T;
+	if (M ^ oldQ) {
+		Q ^= carry(Rn += Rm);
+	} else {
+		Q ^= carry(Rn -= Rm);
+	}
+	Q ^= oldQ;
+	T = (Q == M);
+==========================
+	oldQ = Q;
+	Q = MSB(Rn) ^ oldQ;
+	Rn = (Rn << 1u) | T;
+	mask = -(M ^ oldQ);
+	Q ^= carry(Rn += (Rm & mask) | (-Rm & ~mask))
+	T = (Q == M);
 
-//NOTE: This accurate but can be optimized if no immediate calculation is needed
+==========================
+	oldQ = Q;
+	Q = MSB(Rn) ^ oldQ;
+	Rn = (Rn << 1u) | T;
+	mask = (M ^ oldQ) - 1;
+	Q ^= carry(Rn += (Rm ^ mask) + carry(mask))
+	T = (Q == M);
+*/
+
+//NOTE: COULD BE WRONG, WE MUST CHECK
 #define SH2JIT_DIV1 /* DIV1 Rm,Rn  0011nnnnmmmm0100 */ \
-	PPCC_RLWINM(rn, rn, 1, 0, 31);				 \
-	PPCC_ANDI(GP_TMP, rn, 0x1);					/* MSB = (Rn >> 31) & 1 */ \
-	PPCC_RLWIMI(rn, GP_SR, 0, 31, 31);			/* Rn = (Rn << 1) | T */ \
-	PPCC_RLWINM(3, GP_SR, 32-9, 31, 31);		/* tmp2 = -(Q ^ M) */ \
-	PPCC_RLWINM(GP_TMP2, GP_SR, 32-8, 31, 31);	 \
-	PPCC_XOR(GP_TMP2, GP_TMP2, 3);				 \
-	PPCC_NEG(GP_TMP2, GP_TMP2);					 \
-	PPCC_AND(GP_TMP2, GP_TMP2, rm);				/* tmp2 = ((Rm << 1) & tmp2) - Rm */ \
-	PPCC_RLWINM(GP_TMP2, GP_TMP2, 1, 0, 31);	 \
-	PPCC_SUBF(GP_TMP2, rm, GP_TMP2);			 \
-	/* MSB ^= carry(Rn += tmp2) */				 \
-	PPCC_ADDCp(rn, GP_TMP2, rn);				 \
-	PPCC_MFXER(GP_TMP2); 						/* Load XER[CA] to TMP2 (Reuse) */ \
-	PPCC_RLWIMI(GP_TMP2, GP_TMP2, 3, 31, 31);	 \
-	PPCC_XOR(GP_TMP, GP_TMP, GP_TMP2);			 \
-	/* Q = M ^ MSB */							 \
-	PPCC_XOR(3, 3, GP_TMP);						 \
-	PPCC_RLWIMI(GP_SR, 3, 8, 31-8, 31-8);		/* Store Q bit*/ \
-	/* T = !MSB */								 \
-	PPCC_NOR(GP_TMP, GP_TMP, GP_TMP);			 \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 0, 31, 31);		/* Store T bit*/ \
+	SH2JIT_ROTCL;								/* Rn = (Rn << 1) | T; Q = MSB(Rn)  (4 inst) */ \
+	PPCC_RLWINM(3, GP_SR, 32-8, 31, 31); 		/* Extract oldQ */ \
+	PPCC_RLWINM(4, GP_SR, 32-9, 31, 31); 		/* Extract M */ \
+	PPCC_XOR(3, 3, 4);							/* mask = (M ^ oldQ) - 1 */ \
+	PPCC_ADDI(3, 3, -1); 						 \
+	PPCC_MOV(7, rn);							 \
+	PPCC_XOR(GP_TMP2, rm, 3);					/* Rn += (Rm ^ mask) + carry(mask) */ \
+	PPCC_SRAWI(3, 3, 1);				    	/* Sets the carry(mask) */ \
+	PPCC_ADDEO(rn, rn, GP_TMP2);				 \
+	PPCC_XOR(3, 7, rn); 						/*Q ^= MSB(oldRn) ^ MSB(Rn)*/ \
+	PPCC_RLWINM(3, 3, 1, 31, 31);				 \
+	PPCC_XOR(GP_TMP, GP_TMP, 3);				 \
+	PPCC_RLWIMI(GP_SR, GP_TMP, 8, 31-8, 31-8);	 \
+	/* T = (Q == M) = (Q ^ M) ^ 1 */			 \
+	PPCC_XOR(GP_TMP, GP_TMP, 4);				 \
+	PPCC_XORI(GP_TMP, GP_TMP, 1);				 \
+	PPCC_RLWIMI(GP_SR, GP_TMP, 0, 31, 31);
+
 
 
 #define SH2JIT_DMULS 				/* DMULS.L Rm,Rn  0011nnnnmmmm1101 */ \
@@ -442,18 +489,34 @@ u32 mult = 0;
 	PPCE_SAVE(GP_MACH, mach);		\
 	PPCE_SAVE(GP_MACL, macl);		\
 
+extern void sh2_int_MACL(SH2 *sh, u32 inst);
+extern void sh2_int_MACW(SH2 *sh, u32 inst);
 
+//TODO: These are wrong MACL/MACWs
 #define SH2JIT_MACL /* MAC.L @Rm+,@Rn+  0000nnnnmmmm1111 */ \
+	PPCC_MOV(3, GP_CTX); \
+	PPCE_SAVE(rn, r[(inst >> 8) & 0xF]); \
+	PPCE_SAVE(GP_SR, sr); \
+	PPCE_SAVE(rm, r[(inst >> 4) & 0xF]); \
+	PPCC_ADDI(4, 0, inst); \
+	PPCC_BL(sh2_int_MACL); \
+	PPCE_LOAD(rn, r[(inst >> 8) & 0xF]); \
+	PPCE_LOAD(rm, r[(inst >> 4) & 0xF]); \
+
+
+#if 0
+
 	PPCC_MOV(3, rn);							/*Rn -> address*/ \
 	PPCC_BL(sh2_Read32);						/*Read addr*/ \
-	PPCC_MOV(GP_STMP, 3);						/*value -> TMP*/ \
+	PPCE_SAVE(3, tmp);							/*value -> TMP*/ \
 	PPCC_MOV(3, rm);							/*Rm -> address*/ \
 	PPCC_BL(sh2_Read32);						/*Read addr*/ \
 	PPCC_MOV(GP_TMP2, 3);						/*value -> TMP2*/ \
+	PPCE_LOAD(GP_TMP, tmp);						/* restore TMP*/ \
 	PPCC_ADDI(rn, rn, 4);						 \
 	PPCC_ADDI(rm, rm, 4);						 \
-	PPCC_MULHW(4, GP_STMP, GP_TMP2);				/* tmp * tmp2 -> high word */ \
-	PPCC_MULLW(3, GP_STMP, GP_TMP2); 			/* tmp * tmp2 -> low word */ \
+	PPCC_MULHW(4, GP_TMP, GP_TMP2);				/* tmp * tmp2 -> high word */ \
+	PPCC_MULLW(3, GP_TMP, GP_TMP2); 			/* tmp * tmp2 -> low word */ \
 	PPCE_LOAD(GP_MACH, mach);		\
 	PPCE_LOAD(GP_MACL, macl);		\
 	PPCC_ADDCp(GP_MACL, GP_MACL, 3); 			/* macl += lw */ \
@@ -466,27 +529,66 @@ u32 mult = 0;
 	PPCE_SAVE(GP_MACH, mach);					\
 	PPCE_SAVE(GP_MACL, macl);					\
 
+#endif
 
+
+/*
+    s32 op2 = read16(Rn);
+    Rn += 2;
+    s32 op1 = read16(Rm);
+    Rm += 2;
+
+    s32 mul = op1 * op2;
+    if (SR.S) {
+        s64 result = ((s64) MAC.L) + mul;
+        s32 saturatedResult = clamp(result, -0x80000000LL, 0x7FFFFFFFLL);
+        if (result == saturatedResult) {
+            MAC.L = result;
+        } else {
+            MAC.L = saturatedResult;
+            MAC.H |= 1;
+        }
+    } else {
+        MAC.u64 += mul;
+    }
+
+    AdvancePC<delaySlot>();
+    return cycles;
+*/
 #define SH2JIT_MACW /* MAC.W @Rm+,@Rn+  0100nnnnmmmm1111 */ \
+	PPCC_MOV(3, GP_CTX); \
+	PPCE_SAVE(rn, r[(inst >> 8) & 0xF]); \
+	PPCE_SAVE(GP_SR, sr); \
+	PPCE_SAVE(rm, r[(inst >> 4) & 0xF]); \
+	PPCC_ADDI(4, 0, inst); \
+	PPCC_BL(sh2_int_MACW); \
+	PPCE_LOAD(rn, r[(inst >> 8) & 0xF]); \
+	PPCE_LOAD(rm, r[(inst >> 4) & 0xF]); \
+
+#if 0
+
 	PPCC_MOV(3, rn);							/*Rn -> address*/ \
 	PPCC_BL(sh2_Read16);						/*Read addr*/ \
-	PPCC_EXTSH(GP_STMP, 3);						/*value -> TMP*/ \
+	PPCC_EXTSH(3, 3);						/*value -> TMP*/ \
+	PPCE_SAVE(3, tmp);							/*value -> TMP*/ \
 	PPCC_MOV(3, rm);							/*Rm -> address*/ \
 	PPCC_BL(sh2_Read16);						/*Read addr*/ \
 	PPCC_EXTSH(GP_TMP2, 3);						/*value -> TMP2*/ \
+	PPCE_LOAD(GP_TMP, tmp);						/* restore TMP*/ \
 	PPCC_ADDI(rn, rn, 2);						 \
 	PPCC_ADDI(rm, rm, 2);						 \
-	PPCC_MULLW(GP_STMP, GP_STMP, GP_TMP2); 		/* tmp * tmp2 -> tmp (low word) */ \
+	PPCC_MULLW(GP_TMP, GP_TMP, GP_TMP2); 		/* tmp * tmp2 -> tmp (low word) */ \
 	PPCC_RLWINM(GP_TMP2, GP_SR, 32-1, 31, 31); 	/* mask MACH if S bit == 0 */ \
 	PPCC_ADDI(GP_TMP2, GP_TMP2, -1);			 \
 	PPCE_LOAD(GP_MACH, mach);					 \
 	PPCE_LOAD(GP_MACL, macl);					 \
 	PPCC_AND(GP_MACH, GP_MACH, GP_TMP2);		 \
-	PPCC_ADDCp(GP_MACL, GP_MACL, GP_STMP); 		/* macl += lw */ \
+	PPCC_ADDCp(GP_MACL, GP_MACL, GP_TMP); 		/* macl += lw */ \
 	PPCC_ADDZE(GP_MACH, GP_MACH); 				/* mach = mach + carry */ \
 	PPCE_SAVE(GP_MACH, mach);					 \
 	PPCE_SAVE(GP_MACL, macl);					 \
 
+#endif
 
 #define SH2JIT_MULL			/* MUL.L Rm,Rn  0000nnnnmmmm0111 */ \
 	PPCC_MULLW(GP_TMP, rn, rm);				 \
@@ -526,36 +628,54 @@ u32 mult = 0;
 
 /*Compare*/
 #define SH2JIT_CMPEQ		/* CMP_EQ Rm,Rn  0011nnnnmmmm0000 */ \
+	if (rn == rm) {					\
+	SH2JIT_SETT;				\
+	} else {						\
 	PPCC_CMP(0, rn, rm); 					/*Compare rn and rm*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store EQ in T*/
-
+	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store EQ in T*/ \
+	}
 
 #define SH2JIT_CMPGE		/* CMP_GE Rm,Rn  0011nnnnmmmm0011 */ \
+	if (rn == rm) {					\
+	SH2JIT_SETT;					\
+	} else {						\
 	PPCC_CMP(0, rn, rm); 					/*Compare rn and rm*/ \
 	PPCC_CRNOR(0, 0, 0);					/*Negate the CR*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31); 	/*Store LT in T*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31); 	/*Store LT in T*/ \
+	}
 
 
 #define SH2JIT_CMPGT		/* CMP_GT Rm,Rn  0011nnnnmmmm0111 */ \
+	if (rn == rm) {					\
+	SH2JIT_CLRT;					\
+	} else {						\
 	PPCC_CMP(0, rn, rm); 					/*Compare rn and rm*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 2, 31, 31); 	/*Store GT in T*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 2, 31, 31); 	/*Store GT in T*/ \
+	}
 
 
 #define SH2JIT_CMPHI		/* CMP_HI Rm,Rn  0011nnnnmmmm0110 */ \
+	if (rn == rm) {					\
+	SH2JIT_CLRT;					\
+	} else {						\
 	PPCC_CMPL(0, rn, rm); 					/*Compare Unsigned rn and rm*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 2, 31, 31); 	/*Store GT in T*/
+	PPCC_RLWIMI(GP_SR, GP_TMP, 2, 31, 31); 	/*Store GT in T*/ \
+	}
 
 
 #define SH2JIT_CMPHS		/* CMP_HS Rm,Rn  0011nnnnmmmm0010 */ \
+	if (rn == rm) {					\
+	SH2JIT_SETT;					\
+	} else {						\
 	PPCC_CMPL(0, rn, rm); 					/*Compare Unsigned rn and rm*/ \
 	PPCC_CRNOR(0, 0, 0);					/*Negate the CR*/ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31); 	/*Store LT in T*/
-
+	PPCC_RLWIMI(GP_SR, GP_TMP, 1, 31, 31); 	/*Store LT in T*/ \
+	}
 
 #define SH2JIT_CMPPL		/* CMP_PL Rn  0100nnnn00010101 */ \
 	PPCC_NEG(GP_TMP, rn);					/*Negate value*/ \
@@ -566,16 +686,20 @@ u32 mult = 0;
 	PPCC_RLWIMI(GP_SR, rn, 1, 31, 31); 		/*Store MSB in T*/ \
 	PPCC_XORI(GP_SR, GP_SR, 1); 			/*negate T*/
 
-
 #define SH2JIT_CMPSTR		/* CMP_STR Rm,Rn  0010nnnnmmmm1100 */ \
+	if (rn == rm) {					\
+	SH2JIT_SETT;					\
+	} else {						\
 	PPCC_XOR(GP_TMP, rn, rm); 				/*Rn ^ Rm*/ \
-	PPCC_RLWINM(3, GP_TMP, 16, 16, 31); 	/*Get second half*/ \
-	PPCC_AND(GP_TMP, GP_TMP, 3); 			/*AND with first half*/ \
-	PPCC_RLWINM(3, GP_TMP, 8, 24, 31); 		/*Get second byte*/ \
-	PPCC_AND(GP_TMP, GP_TMP, 3); 			/*AND with first byte*/ \
+	PPCC_ADDIS(3, 0, (0x01010101 >> 16));	/*Set high imm 16 bits */ \
+	PPCC_ORI(3, 3, 0x01010101);				/*Set low imm 16 bits */ \
+	PPCC_SUBF(4, 3, GP_TMP);				/* ((Rn ^ Rm) - 0x01010101) & ~(Rn ^ Rm) -> tmp */ \
+	PPCC_ANDC(GP_TMP, 4, GP_TMP);			 \
+	PPCC_RLWINM(GP_TMP, GP_TMP, 1, 0, 31);	 \
+	PPCC_ANDp(GP_TMP, GP_TMP, 3);			/* (tmp <<< 1) & 0x01010101 > 0 then we have a match */ \
 	PPCC_MFCR(GP_TMP); 						/*Load CR0 to TMP*/ \
-	PPCC_RLWIMI(GP_SR, GP_TMP, 3, 31, 31); 	/*Store CR0[EQ] (is zero) in T*/
-
+	PPCC_RLWIMI(GP_SR, GP_TMP, 2, 31, 31); 	/*Store CR0[GT] (is greater than zero) in T*/ \
+	}
 
 #define SH2JIT_CMPIM		/* CMP_EQ #imm,R0  10001000iiiiiiii */ \
 	PPCC_CMPI(0, GP_R0, EXT_IMM8(imm)); 	/*Compare rn to EXT(imm)*/ \
@@ -721,7 +845,7 @@ u32 mult = 0;
 	PPCC_ADDI(rn, rn, -4);		/*Move address four bytes*/ \
 	PPCC_MOV(3, rn);			/*Rn -> address*/ \
 	/* PPCC_MOV(4, GP_MACL); */		/*MACL -> value*/ \
-	PPCE_LOAD(4, mach);			 \
+	PPCE_LOAD(4, macl);			 \
 	PPCC_BL(sh2_Write32);		/*Write MACL*/
 
 
@@ -1003,22 +1127,24 @@ u32 mult = 0;
 	PPCC_ADD(GP_PC, GP_PC, rn)				/*Add Rn to PC */ \
 	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
 
+
 #define SH2JIT_BSR			/* BSR disp  1011dddddddddddd */ \
 	u32 new_pc = curr_pc + 4; 				\
 	u32 offset = (EXT_IMM12(disp) << 1);    \
-	PPCC_ADDIS(GP_PC, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
-	PPCC_ORI(GP_PR, GP_PC, new_pc);		/*Set low imm 16 bits (PR <- PC) */ \
-	PPCE_SAVE(GP_PR, pr);					/* Save PR */ \
-	PPCC_ADDI(GP_PC, GP_PR, offset)			/* PC <- PC + Ext(offset)*/ \
-	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
+	PPCC_ADDIS(GP_TMP, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
+	PPCC_ORI(GP_TMP, GP_TMP, new_pc);		/*Set low imm 16 bits (PR <- PC) */ \
+	PPCE_SAVE(GP_TMP, pr);					/* Save PR */ \
+	PPCC_ADDI(GP_TMP, GP_TMP, offset)		/* PC <- PC + Ext(offset)*/ \
+	PPCE_SAVE(GP_TMP, pc);					/* Save PC */ \
+
 
 #define SH2JIT_BSRF			/* BSRF Rm  0000mmmm00000011 */ \
 	u32 new_pc = curr_pc + 4; 				\
 	PPCC_ADDIS(GP_TMP, 0, new_pc >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_TMP, GP_TMP, new_pc);		/*Set low imm 16 bits (PR <- PC) */ \
 	PPCE_SAVE(GP_TMP, pr);					/* Save PR */ \
-	PPCC_ADD(GP_PC, GP_TMP, rn)				/* PC <- Rn + PC */ \
-	PPCE_SAVE(GP_PC, pc);					/* Save PC */ \
+	PPCC_ADD(GP_TMP, GP_TMP, rn)			/* PC <- Rn + PC */ \
+	PPCE_SAVE(GP_TMP, pc);					/* Save PC */ \
 
 
 #define SH2JIT_BT			/* BT disp  10001001dddddddd */ \
@@ -1081,7 +1207,10 @@ u32 mult = 0;
 #define SH2JIT_SLEEP 		/* SLEEP  0000000000011011 */ \
 	PPCC_ADDIS(GP_PC, 0, curr_pc >> 16);		/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc);			/*Set low imm 16 bits */ \
-	PPCE_SAVE(GP_PC, pc);						/* Save PC */
+	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
+	PPCE_LOAD(GP_TMP, flags);					/* Get sh2 flags */ \
+	PPCC_ORI(GP_TMP, GP_TMP, SH2_FLAG_SLEEPING); \
+	PPCE_SAVE(GP_TMP, flags);					/* Save sh2 flags */
 	/*TODO: Does nothing else ?...*/
 
 
@@ -1160,8 +1289,8 @@ u32 mult = 0;
 	PPCC_ORI(4, 4, curr_pc+2);		 	\
 	PPCC_BL(sh2_Write32);				/*Write 32 bit value*/ \
 	PPCC_ADDI(GP_R(15), GP_R(15), -8);	/*R15 - 8 -> address*/ \
-	PPCE_LOAD(GP_VBR, vbr);				 \
-	PPCC_ADDI(3, GP_VBR, vector);		/* VBR + dispimm -> address*/ \
+	PPCE_LOAD(3, vbr);				 \
+	PPCC_ADDI(3, 3, vector);		/* VBR + dispimm -> address*/ \
 	PPCC_BL(sh2_Read32);				/*Read addr*/ \
 	/* PPCC_MOV(GP_PC, 3); */			/*Result -> PC*/ \
 	PPCE_SAVE(3, pc);				/* Save PC */
@@ -1559,7 +1688,7 @@ u32 _jit_GenIFCBlock(u32 addr)
 					case 0b1100: {ifc = IFC_MOVBL0 | IFC_RLS(RLS_LM0_SN); } break;
 					case 0b1101: {ifc = IFC_MOVWL0 | IFC_RLS(RLS_LM0_SN); } break;
 					case 0b1110: {ifc = IFC_MOVLL0 | IFC_RLS(RLS_LM0_SN); } break;
-					case 0b1111: {ifc = IFC_MACL   | IFC_RLS(RLS_SN); cycles+=1; } break;
+					case 0b1111: {ifc = IFC_MACL   | IFC_RLS(RLS_SNM); cycles+=1; } break;
 					default:
 					switch (inst & 0x3F) {
 						case 0b000010: {ifc = IFC_STCSR   | IFC_RLS(RLS_SN); } break;
@@ -1658,7 +1787,7 @@ u32 _jit_GenIFCBlock(u32 addr)
 				case 0b001111:
 				case 0b011111:
 				case 0b101111:
-				case 0b111111: {ifc = IFC_MACW     | IFC_RLS(RLS_LNM); cycles+=1; } break;
+				case 0b111111: {ifc = IFC_MACW     | IFC_RLS(RLS_SNM); cycles+=1; } break;
 				default:       {ifc = IFC_ILLEGAL  | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
 			}} break;
 			case 0b0101: { ifc = IFC_MOVLL4 | IFC_RLS(RLS_LM_SN); } break;
@@ -1709,9 +1838,9 @@ u32 _jit_GenIFCBlock(u32 addr)
 				case 0b0110: {ifc = IFC_MOVLLG | IFC_RLS(RLS_S0); } break;
 				case 0b0111: {ifc = IFC_MOVA   | IFC_RLS(RLS_S0); } break;
 				case 0b1000: {ifc = IFC_TSTI   | IFC_RLS(RLS_L0); } break;
-				case 0b1001: {ifc = IFC_ANDI   | IFC_RLS(RLS_L0); } break;
-				case 0b1010: {ifc = IFC_XORI   | IFC_RLS(RLS_L0); } break;
-				case 0b1011: {ifc = IFC_ORI    | IFC_RLS(RLS_L0); } break;
+				case 0b1001: {ifc = IFC_ANDI   | IFC_RLS(RLS_S0); } break;
+				case 0b1010: {ifc = IFC_XORI   | IFC_RLS(RLS_S0); } break;
+				case 0b1011: {ifc = IFC_ORI    | IFC_RLS(RLS_S0); } break;
 				case 0b1100: {ifc = IFC_TSTM   | IFC_RLS(RLS_L0); cycles+=2; } break;
 				case 0b1101: {ifc = IFC_ANDM   | IFC_RLS(RLS_L0); cycles+=2; } break;
 				case 0b1110: {ifc = IFC_XORM   | IFC_RLS(RLS_L0); cycles+=2; } break;
@@ -1745,8 +1874,8 @@ u32 _jit_GenIFCBlock(u32 addr)
 		switch (bstate) {
 			case BSTATE_SET_DELAY: {bstate = BSTATE_IN_DELAY;} break;
 			case BSTATE_IN_DELAY: {
-				if (ifc >= IFC_BF && ifc <= IFC_RTS) {
-					ifc |= IFC_ILLEGAL | IFC_RLS(RLS_S15) | IFC_ILGL_BRANCH;
+				if (ifc >= IFC_BF && ifc <= IFC_RTS) { //Illegal branch in delay slot
+					ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15) | IFC_ILGL_BRANCH;
 				}
 				bstate = BSTATE_END;
 				ifc |= IFC_IS_DELAY;} break;
@@ -1770,14 +1899,26 @@ u32 _jit_GenIFCBlock(u32 addr)
 
 u32 _jit_GenBlock(u32 addr, Block *iblock)
 {
-	u32 curr_pc = addr;
 	//Pass 0, check instructions and decode one by one:
-	u16 *inst_ptr = (u16*) sh2_GetPCAddr(curr_pc);
-	u32 *icache_ptr = &drc_code[drc_code_pos];
+	u32 curr_pc = addr;
+	u16 *inst_ptr = (u16*) sh2_GetPCAddr(addr);
 	u32 reg_indx[32];
 	_jit_GenIFCBlock(addr);
 
-	PPCC_BEGIN_BLOCK();
+	if (drc_code_pos + (block_data.instr_count * 4) >= DRC_CODE_SIZE) {
+		HashClearAll();
+	}
+
+	u32 *icache_ptr = &drc_code[drc_code_pos];
+
+	u32 reg_count = 1;
+	for (u32 i = 0; i < 16; ++i) {
+		if ((block_data.ld_regs >> i) & 1) {
+			reg_count++;
+		}
+	}
+
+	PPCC_BEGIN_BLOCK(reg_count);
 	PPCC_MOV(GP_CTX, 3); //SH2 context is in r3
 	//Load registers used in block
 	PPCE_LOAD(GP_SR, sr);
@@ -1957,18 +2098,18 @@ u32 _jit_GenBlock(u32 addr, Block *iblock)
 		}
 	}
 	PPCE_SAVE(GP_SR, sr);
-	PPCC_END_BLOCK();
+	PPCC_END_BLOCK(reg_count);
 
 	/* Fill block code */
 	iblock->code = (DrcCode) &drc_code[drc_code_pos];
-	iblock->ret_addr = 0;
+	iblock->ret_addr = block_data.st_regs;
 	iblock->start_addr = addr;
 	iblock->sh2_len = block_data.instr_count;
-	iblock->ppc_len = ((u32) icache_ptr - (u32)iblock->code) >> 2;
+	iblock->ppc_len = ((u8*) icache_ptr - (u8*)iblock->code) >> 2;
 	iblock->cycle_count = block_data.cycle_count;
 
-	DCStoreRange((void*)(((u32) iblock->code) & ~0x1F), ((iblock->ppc_len * 4) & ~0x1F) + 0x20);
-	ICInvalidateRange((void*)(((u32) iblock->code) & ~0x1F), ((iblock->ppc_len * 4) & ~0x1F) + 0x20);
+	DCStoreRange((u8*) iblock->code, ((u8*) icache_ptr - (u8*)iblock->code) + 0x20);
+	ICInvalidateRange((u8*) iblock->code, ((u8*) icache_ptr - (u8*)iblock->code) + 0x20);
 
 	/* Add length of block to drc code position */
 	//TODO: Should be aligned 32Bytes?
@@ -1979,8 +2120,12 @@ u32 _jit_GenBlock(u32 addr, Block *iblock)
 
 void sh2_DrcInit(void)
 {
-	drc_code = memalign(32, DRC_CODE_SIZE*sizeof(*drc_code));
-	drc_blocks = memalign(32, BLOCK_ARR_SIZE*sizeof(*drc_blocks));
+	if (!drc_code) {
+		drc_code = memalign(32, DRC_CODE_SIZE*sizeof(*drc_code));
+	}
+	if (!drc_blocks) {
+		drc_blocks = memalign(32, BLOCK_ARR_SIZE*sizeof(*drc_blocks));
+	}
 	HashClearAll();
 }
 
@@ -1994,20 +2139,22 @@ void sh2_DrcReset(void)
 s32 sh2_DrcExec(SH2 *sh, s32 cycles)
 {
 	u32 block_found = 0;
-	Block *iblock = HashGet(sh->pc, &block_found);
-	while(sh->cycles < cycles) {
-		u32 addr = sh->pc;
-		if (addr != iblock->start_addr) {
+	u32 search_block = 1;
+	Block *iblock;
+	do {
+		if (search_block) {
+			u32 addr = sh->pc;
 			iblock = HashGet(addr, &block_found);
 			if (!block_found) {
 				_jit_GenBlock(addr, iblock);
 			}
 		}
 		iblock->code(sh);
+		search_block = (sh->pc != iblock->start_addr); //Block repeats, don't search
 		sh->cycles += iblock->cycle_count; //XXX: also subtract from delta cycles
-	}
+	} while(sh->cycles < cycles);
 	sh->cycles -= cycles;
-	return 0;
+	return sh->cycles + cycles;
 }
 
 // BIOS CODE PPC TO SSH

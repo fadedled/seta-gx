@@ -482,7 +482,7 @@ void MappedMemoryInit()
 	mem_MaskFill(0x06000000, 0x07FFFFFF, 0xFFFFF, 1, 1); //High RAM
 
    // Initialize everyting to unhandled to begin with
-   FillMemoryArea(0x00, 0xFF, &UnhandledMemoryReadByte,
+   FillMemoryArea(0x00, 0x100, &UnhandledMemoryReadByte,
                                 &UnhandledMemoryReadWord,
                                 &UnhandledMemoryReadLong,
                                 &UnhandledMemoryWriteByte,
@@ -626,7 +626,7 @@ void MappedMemoryInit()
                                 &discr_Vdp2ScuWrite8,
                                 &discr_Vdp2ScuWrite16,
                                 &discr_Vdp2ScuWrite32);
-    FillMemoryArea(0xC0, 0xFF, &wram_Read8,
+    FillMemoryArea(0xC0, 0x100, &wram_Read8,
                                 &wram_Read16,
                                 &wram_Read32,
                                 &wram_Write8,

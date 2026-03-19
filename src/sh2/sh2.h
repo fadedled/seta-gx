@@ -119,6 +119,79 @@
 #define OC_RTCNT		0x1F4
 #define OC_RTCOR		0x1F8
 
+#define OCR_SMR			ADDR_8(sh->on_chip + OC_SMR)
+#define OCR_BRR			ADDR_8(sh->on_chip + OC_BRR)
+#define OCR_SCR			ADDR_8(sh->on_chip + OC_SCR)
+#define OCR_TDR			ADDR_8(sh->on_chip + OC_TDR)
+#define OCR_SSR			ADDR_8(sh->on_chip + OC_SSR)
+#define OCR_RDR			ADDR_8(sh->on_chip + OC_RDR)
+#define OCR_TIER		ADDR_8(sh->on_chip + OC_TIER)
+#define OCR_FTCSR		ADDR_8(sh->on_chip + OC_FTCSR)
+#define OCR_FRC			ADDR_16(sh->on_chip + OC_FRC)
+#define OCR_OCRA		ADDR_16(sh->on_chip + OC_OCRA)
+#define OCR_OCRB		ADDR_16(sh->on_chip + OC_OCRB+0x10)	//WTF.. Add 0x10
+#define OCR_TCR			ADDR_8(sh->on_chip + OC_TCR)
+#define OCR_TOCR		ADDR_8(sh->on_chip + OC_TOCR)
+#define OCR_FICR		ADDR_16(sh->on_chip + OC_FICR)
+#define OCR_IPRB		ADDR_16(sh->on_chip + OC_IPRB)
+#define OCR_VCRA		ADDR_16(sh->on_chip + OC_VCRA)
+#define OCR_VCRB		ADDR_16(sh->on_chip + OC_VCRB)
+#define OCR_VCRC		ADDR_16(sh->on_chip + OC_VCRC)
+#define OCR_VCRD		ADDR_16(sh->on_chip + OC_VCRD)
+#define OCR_DRCR0		ADDR_8(sh->on_chip + OC_DRCR0)
+#define OCR_DRCR1		ADDR_8(sh->on_chip + OC_DRCR1)
+#define OCR_WTCSR		ADDR_8(sh->on_chip + OC_WTCSR)
+#define OCR_WTCNT		ADDR_8(sh->on_chip + OC_WTCNT)
+#define OCR_RSTCSR		ADDR_8(sh->on_chip + OC_RSTCSR)
+#define OCR_SBYCR		ADDR_8(sh->on_chip + OC_SBYCR)
+#define OCR_CCR			ADDR_8(sh->on_chip + OC_CCR)
+#define OCR_ICR			ADDR_16(sh->on_chip + OC_ICR)
+#define OCR_IPRA		ADDR_16(sh->on_chip + OC_IPRA)
+#define OCR_VCRWDT		ADDR_16(sh->on_chip + OC_VCRWDT)
+#define OCR_DVSR		ADDR_32(sh->on_chip + OC_DVSR)
+#define OCR_DVDNT		ADDR_32(sh->on_chip + OC_DVDNT)
+#define OCR_DVCR		ADDR_32(sh->on_chip + OC_DVCR)
+#define OCR_VCRDIV		ADDR_32(sh->on_chip + OC_VCRDIV)
+#define OCR_DVDNTH		ADDR_32(sh->on_chip + OC_DVDNTH)
+#define OCR_DVDNTL		ADDR_32(sh->on_chip + OC_DVDNTL)
+#define OCR_DVDNTUH		ADDR_32(sh->on_chip + OC_DVDNTUH)
+#define OCR_DVDNTUL		ADDR_32(sh->on_chip + OC_DVDNTUL)
+#define OCR_BARAH		ADDR_16(sh->on_chip + OC_BARAH)
+#define OCR_BARAL		ADDR_16(sh->on_chip + OC_BARAL)
+#define OCR_BAMRAH		ADDR_16(sh->on_chip + OC_BAMRAH)
+#define OCR_BAMRAL		ADDR_16(sh->on_chip + OC_BAMRAL)
+#define OCR_BBRA		ADDR_32(sh->on_chip + OC_BBRA)
+#define OCR_BARBH		ADDR_16(sh->on_chip + OC_BARBH)
+#define OCR_BARBL		ADDR_16(sh->on_chip + OC_BARBL)
+#define OCR_BAMRBH		ADDR_16(sh->on_chip + OC_BAMRBH)
+#define OCR_BAMRBL		ADDR_16(sh->on_chip + OC_BAMRBL)
+#define OCR_BBRB		ADDR_32(sh->on_chip + OC_BBRB)
+#define OCR_BDRBH		ADDR_16(sh->on_chip + OC_BDRBH)
+#define OCR_BDRBL		ADDR_16(sh->on_chip + OC_BDRBL)
+#define OCR_BDMRBH		ADDR_16(sh->on_chip + OC_BDMRBH)
+#define OCR_BDMRBL		ADDR_16(sh->on_chip + OC_BDMRBL)
+#define OCR_BRCR		ADDR_32(sh->on_chip + OC_BRCR)
+#define OCR_SAR0		ADDR_32(sh->on_chip + OC_SAR0)
+#define OCR_DAR0		ADDR_32(sh->on_chip + OC_DAR0)
+#define OCR_TCR0		ADDR_32(sh->on_chip + OC_TCR0)
+#define OCR_CHCR0		ADDR_32(sh->on_chip + OC_CHCR0)
+#define OCR_SAR1		ADDR_32(sh->on_chip + OC_SAR1)
+#define OCR_DAR1		ADDR_32(sh->on_chip + OC_DAR1)
+#define OCR_TCR1		ADDR_32(sh->on_chip + OC_TCR1)
+#define OCR_CHCR1		ADDR_32(sh->on_chip + OC_CHCR1)
+#define OCR_VCRDMA0		ADDR_32(sh->on_chip + OC_VCRDMA0)
+#define OCR_VCRDMA1		ADDR_32(sh->on_chip + OC_VCRDMA1)
+#define OCR_DMAOR		ADDR_32(sh->on_chip + OC_DMAOR)
+#define OCR_BCR1		ADDR_32(sh->on_chip + OC_BCR1) //Real BCR1 is in 0x1E2-0x1E3
+#define OCR_BCR2		ADDR_32(sh->on_chip + OC_BCR2)
+#define OCR_WCR			ADDR_32(sh->on_chip + OC_WCR)
+#define OCR_MCR			ADDR_32(sh->on_chip + OC_MCR)
+#define OCR_RTCSR		ADDR_32(sh->on_chip + OC_RTCSR)
+#define OCR_RTCNT		ADDR_32(sh->on_chip + OC_RTCNT)
+#define OCR_RTCOR		ADDR_32(sh->on_chip + OC_RTCOR)
+
+
+
 #define MAX_INTERRUPTS 	64 	//TODO: CHECK THIS
 
 #define EXT_IMM8(imm)		((imm & 0xFF) | -(imm & 0x80u))
@@ -136,6 +209,7 @@ typedef struct SH2_tag
 	u32 mach;
 	u32 macl;
 	u32 sr;
+	u32 tmp;
 
 	u32 delay_slot;
 	s32 cycles; //There are no negative cycles, this is for underflow reasons

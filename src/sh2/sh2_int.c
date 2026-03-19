@@ -1,5 +1,7 @@
 
 
+#include "sh2.h"
+
 #if 0
 
 
@@ -343,18 +345,6 @@ void sh2_int_DMULS(rn, rm)
 }
 
 void sh2_int_DMULU(rn, rm)
-{
-	sh2_int_Unimpl("ORM", imm, -1);
-	//TODO: Cycles
-}
-
-void sh2_int_MACL(rn, rm)
-{
-	sh2_int_Unimpl("ORM", imm, -1);
-	//TODO: Cycles
-}
-
-void sh2_int_MACW(rn, rm)
 {
 	sh2_int_Unimpl("ORM", imm, -1);
 	//TODO: Cycles
@@ -1051,3 +1041,53 @@ u32 sh2_ExecInt(u32 cycles)
 }
 #endif
 
+//61 inst
+void sh2_int_MACL(SH2 *sh, u32 instr)
+{
+	const u32 n = (instr >> 8) & 0xF;
+	const u32 m = (instr >> 4) & 0xF;
+	const s32 op2 = sh2_Read32(sh->r[n]);
+	sh->r[n] += 4;
+	const s32 op1 = sh2_Read32(sh->r[m]);
+	sh->r[m] += 4;
+
+	s64 mul = ((s64)op1) * ((s64)op2);
+	s64 result = mul + (*(u64*)(&sh->mach));
+	if (SH2_SR_S(sh->sr) && result > 0x00007FFFFFFFFFFFull && result < 0xFFFF800000000000ull ) {
+		//if ((op1 ^ op2) < 0) {
+			result = 0xFFFF800000000000ull ^ (result >> 63);
+		//} else {
+		//	result = 0x00007FFFFFFFFFFFull;
+		//}
+	}
+	(*(u64*)(&sh->mach)) = result;
+}
+
+//78 -> 64 inst
+void sh2_int_MACW(SH2 *sh, u32 instr)
+{
+	const u32 n = (instr >> 8) & 0xF;
+	const u32 m = (instr >> 4) & 0xF;
+	const s32 op2 = (s16) sh2_Read16(sh->r[n]);
+	sh->r[n] += 2;
+	const s32 op1 = (s16) sh2_Read16(sh->r[m]);
+	sh->r[m] += 2;
+
+	s32 mul = op1 * op2;
+	if (SH2_SR_S(sh->sr)) {
+		//Check for overflow..
+		s32 res, xer;
+		asm (
+			"addo %0, %2, %3\n\t"
+			"mfxer %1"
+			: "=r" (res), "=r" (xer)
+			: "r" (sh->macl), "r" (mul)
+		);
+		xer = -((xer >> 30) & 1);
+		sh->macl = (res & ~xer) | (((res >> 31) + 0x80000000) & xer);
+		sh->mach |= (xer & 1);
+	} else {
+		(*(u64*)(&sh->mach)) += mul;
+	}
+
+}
