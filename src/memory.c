@@ -43,6 +43,7 @@
 #include "vdp1.h"
 #include "vdp2.h"
 #include "yabause.h"
+#include "vm/vm.h"
 //#include "sh2/sh2.h"
 
 //////////////////////////////////////////////////////////////////////////////
@@ -73,6 +74,7 @@ u32 write32_mask[0x800];
 u8 *wram;
 u8 *bios_rom;
 u8 *bup_ram;
+u8 *unmapped_page;
 
 /* This flag is set to 1 on every write to backup RAM.  Ports can freely
  * check or clear this flag to determine when backup RAM has been written,
@@ -352,19 +354,27 @@ inline u32 getMemClock(u32 addr) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void mem_MaskFill(u32 start, u32 end, u32 mask, u32 r, u32 w)
+static void mem_MaskFill(u8 *mem, u32 start, u32 end, u32 mask, u32 pp)
 {
-	u32 r_mask = (mask | start) & (r ? 0xFFFFFFFF : 0x0);
-	u32 w_mask = (mask | start) & (w ? 0xFFFFFFFF : 0x0);
+	u32 r_mask = (mask | start) & (pp >> 1 ? 0xFFFFFFFF : 0x0);
+	u32 w_mask = (mask | start) & ((~pp) & 1 ? 0xFFFFFFFF : 0x0);
 	start >>= 16;
 	end >>= 16;
 	u32 i = start;
-	for (; i < end; ++i) {
+	for (; i <= end; ++i) {
 		read_mask[i] = r_mask;
 		write_mask[i] = w_mask;
 	}
 	read_mask[i] = r_mask;
 	write_mask[i] = w_mask;
+
+	mask++;
+	if (mask < PAGE_SIZE) {
+		mask = PAGE_SIZE;
+	}
+	if (mem) { //Map memory
+		VM_MemMap(mem, start, mask, pp);
+	}
 }
 
 
@@ -392,16 +402,17 @@ static void FillMemoryArea(unsigned short start, unsigned short end,
 void mem_allocate(void)
 {
 	//Should be in MEM1
-	wram = (u8*) memalign(32, 0x200000);
-	Vdp1FrameBuffer = (u8*) memalign(32, 0x80000);
-	Vdp1Ram = (u8*) memalign(32, 0x80000);
+	wram = (u8*) memalign(PAGE_SIZE, 0x200000);
+	Vdp1FrameBuffer = (u8*) memalign(PAGE_SIZE, 0x80000);
+	Vdp1Ram = (u8*) memalign(PAGE_SIZE, 0x80000);
+	unmapped_page = (u8*) memalign(PAGE_SIZE, PAGE_SIZE);
 	//wii_vram = (u8*) memalign(32, 0x80000);	//Should be done in another place
 
 
 	//Should be in MEM2
-	SoundRam = (u8*) memalign(32, 0x80000);
-	bios_rom = (u8*) memalign(32, 0x80000);
-	bup_ram = (u8*) memalign(32, 0x10000);
+	SoundRam = (u8*) memalign(PAGE_SIZE, 0x80000);
+	bios_rom = (u8*) memalign(PAGE_SIZE, 0x80000);
+	bup_ram = (u8*) memalign(PAGE_SIZE, 0x10000);
 }
 
 
@@ -441,46 +452,47 @@ void MappedMemoryInit()
 {
 	//Number of pages: 2 + 4 +1 + 1 + 128 + 128 + 1 + 128 + 1 + 1 + 1 + 4
 	//Now we would have 545 pages used
-	//VM_Init(1024*1024, 256*1024);	//DFUK
+	VM_Init(1024*1024, 256*1024);	//DFUK
 	//VM_BATSet(0, general_ram, 0x00000000u, BL_ENC_4M);			//LOW_RAM_BASE
-	//lightrec_mmap(MINIT_BASE, 0x01000000u, PAGE_SIZE);	//MINIT (4 bytes)
-	//lightrec_mmap(SINIT_BASE, 0x01800000u, PAGE_SIZE);	//SINIT (4 bytes)
+
+	//VM_MemMap(MINIT_BASE, 0x01000000u, PAGE_SIZE, VM_PP_NA);	//MINIT (4 bytes)
+	//VM_MemMap(SINIT_BASE, 0x01800000u, PAGE_SIZE, VM_PP_NA);	//SINIT (4 bytes)
 	//XXX: This fakes a non conected cartridge
-	//lightrec_mmap(CS2_REG_BASE, 0x05800000u, PAGE_SIZE);	//CS2 (CD Regs) (64 bytes)
+	//VM_MemMap(CS2_REG_BASE, 0x05800000u, PAGE_SIZE, VM_PP_NA);	//CS2 (CD Regs) (64 bytes)
 	//VM_BATSet(2, AUDIO_RAM_BASE, 0x05A00000u, BL_ENC_512K);	//AudioRAM	(512 KiB) BAT
-	//lightrec_mmap(SCSP_REG_BASE, 0x05B00000u, PAGE_SIZE);	//SCSP Regs (dunno)
-	//lightrec_mmap(Vdp1Ram, 0x05C00000u, VDP1_RAM_SIZE);	//VDP1 VRAM (512 KiB)
-	//lightrec_mmap(Vdp1FrameBuffer, 0x05C80000u, VDP1_FB_SIZE);	//VDP1 FrameBuffer (512 KiB)
-	//lightrec_mmap(VDP1_REG_BASE, 0x05D00000u, PAGE_SIZE);	//VDP1 Regs (24 bytes)
-	//lightrec_mmap(memory, 0x00000000u, 0x200000);	//VDP2 VRAM (512 KiB)
-	//lightrec_mmap(VDP2_CRAM_BASE, 0x05F00000u, PAGE_SIZE);	//VDP2 CRAM (4 KiB)
-	//lightrec_mmap(VDP2_REG_BASE, 0x05F80000u, PAGE_SIZE);	//VDP2 Regs (288 bytes)
-	//lightrec_mmap(SCU_REG_BASE, 0x05FE0000u, PAGE_SIZE);	//SCU Regs (208 bytes)
+	//VM_MemMap(SCSP_REG_BASE, 0x05B00000u, PAGE_SIZE, VM_PP_NA);	//SCSP Regs (dunno)
+	//VM_MemMap(Vdp1Ram, 0x05C00000u, VDP1_RAM_SIZE, VM_PP_NA);	//VDP1 VRAM (512 KiB)
+	//VM_MemMap(Vdp1FrameBuffer, 0x05C80000u, VDP1_FB_SIZE, VM_PP_NA);	//VDP1 FrameBuffer (512 KiB)
+	//VM_MemMap(VDP1_REG_BASE, 0x05D00000u, PAGE_SIZE, VM_PP_NA);	//VDP1 Regs (24 bytes)
+	//VM_MemMap(memory, 0x00000000u, 0x200000, VM_PP_NA);	//VDP2 VRAM (512 KiB)
+	//VM_MemMap(VDP2_CRAM_BASE, 0x05F00000u, PAGE_SIZE, VM_PP_NA);	//VDP2 CRAM (4 KiB)
+	//VM_MemMap(VDP2_REG_BASE, 0x05F80000u, PAGE_SIZE, VM_PP_NA);	//VDP2 Regs (288 bytes)
+	//VM_MemMap(SCU_REG_BASE, 0x05FE0000u, PAGE_SIZE, VM_PP_NA);	//SCU Regs (208 bytes)
 	//VM_BATSet(1, HIGH_RAM_BASE, 0x06000000u, BL_ENC_1M);	//HIGH_RAM_BASE
 
 
-	mem_MaskFill(0x00000000, 0x07FFFFFF, 0, 0, 0); // Init all
-
-	mem_MaskFill(0x00000000, 0x000FFFFF, 0x7FFFF, 1, 1); //BIOS Rom
-	mem_MaskFill(0x00100000, 0x0017FFFF,    0x7F, 1, 1); //SMPC Regs
-	mem_MaskFill(0x00180000, 0x001FFFFF,  0xFFFF, 1, 1); //BUP RAM
-	mem_MaskFill(0x00200000, 0x002FFFFF, 0xFFFFF, 1, 1); //Low RAM
-	mem_MaskFill(0x01000000, 0x017FFFFF,     0x0, 1, 1); //MINIT
-	mem_MaskFill(0x01800000, 0x01FFFFFF,     0x0, 1, 1); //SINIT
-	mem_MaskFill(0x02000000, 0x03FFFFFF,     0x0, 1, 1); //CS0 (can change)
-	mem_MaskFill(0x04000000, 0x04FFFFFF,     0x0, 1, 1); //CS1 (can change)
-	mem_MaskFill(0x05800000, 0x058FFFFF,    0x3F, 1, 1); //CS2
-	mem_MaskFill(0x05A00000, 0x05AFFFFF, 0x7FFFF, 1, 1); //AUDIO RAM (can change)
-	mem_MaskFill(0x05B00000, 0x05BFFFFF,   0xFFF, 1, 1); //SCSP Regs
-	mem_MaskFill(0x05C00000, 0x05C7FFFF, 0x7FFFF, 1, 1); //VDP1 VRAM
-	mem_MaskFill(0x05C80000, 0x05CFFFFF, 0x3FFFF, 1, 1); //VDP1 FB
-	mem_MaskFill(0x05D00000, 0x05D7FFFF,    0x1F, 1, 1); //VDP1 Regs
-	mem_MaskFill(0x05E00000, 0x05EFFFFF, 0x7FFFF, 1, 1); //VDP2 VRAM
-	mem_MaskFill(0x05F00000, 0x05F7FFFF,   0xFFF, 1, 1); //VDP2 CRAM
-	mem_MaskFill(0x05F80000, 0x05FBFFFF,   0x1FF, 1, 1); //VDP2 Regs
-	mem_MaskFill(0x05FE0000, 0x05FEFFFF,    0xFF, 1, 1); //SCU Regs
-	mem_MaskFill(0x06000000, 0x07FFFFFF, 0xFFFFF, 1, 1); //High RAM
-
+	mem_MaskFill(0, 0x00000000, 0x07FFFFFF, 0, VM_PP_NA); // Init all
+	mem_MaskFill(bios_rom,              0x00000000, 0x000FFFFF, 0x7FFFF, VM_PP_RO); //BIOS Rom
+	mem_MaskFill(unmapped_page,         0x00100000, 0x0017FFFF,    0x7F, VM_PP_NA); //SMPC Regs
+	mem_MaskFill(bup_ram,               0x00180000, 0x001FFFFF,  0xFFFF, VM_PP_NA); //BUP RAM
+	mem_MaskFill(wram,                  0x00200000, 0x002FFFFF, 0xFFFFF, VM_PP_RW); //Low RAM
+	mem_MaskFill(unmapped_page,         0x01000000, 0x017FFFFF,     0x0, VM_PP_NA); //MINIT
+	mem_MaskFill(unmapped_page,         0x01800000, 0x01FFFFFF,     0x0, VM_PP_NA); //SINIT
+	mem_MaskFill(unmapped_page,         0x02000000, 0x03FFFFFF,     0x0, VM_PP_NA); //CS0 (can change)
+	mem_MaskFill(unmapped_page,         0x04000000, 0x04FFFFFF,     0x0, VM_PP_NA); //CS1 (can change)
+	mem_MaskFill(unmapped_page,         0x05800000, 0x058FFFFF,    0x3F, VM_PP_NA); //CS2
+	mem_MaskFill(SoundRam,              0x05A00000, 0x05AFFFFF, 0x7FFFF, VM_PP_RW); //AUDIO RAM (can change)
+	mem_MaskFill(unmapped_page,         0x05B00000, 0x05BFFFFF,   0xFFF, VM_PP_NA); //SCSP Regs
+	mem_MaskFill(Vdp1Ram,               0x05C00000, 0x05C7FFFF, 0x7FFFF, VM_PP_NA); //VDP1 VRAM
+	mem_MaskFill(Vdp1FrameBuffer,       0x05C80000, 0x05CFFFFF, 0x3FFFF, VM_PP_NA); //VDP1 FB
+	mem_MaskFill(unmapped_page,         0x05D00000, 0x05D7FFFF,    0x1F, VM_PP_NA); //VDP1 Regs
+	mem_MaskFill(Vdp2Ram,               0x05E00000, 0x05EFFFFF, 0x7FFFF, VM_PP_RW); //VDP2 VRAM
+	mem_MaskFill(unmapped_page,         0x05F00000, 0x05F7FFFF,   0xFFF, VM_PP_RW); //VDP2 CRAM
+	mem_MaskFill(unmapped_page,         0x05F80000, 0x05FBFFFF,   0x1FF, VM_PP_NA); //VDP2 Regs
+	mem_MaskFill(unmapped_page,         0x05FE0000, 0x05FEFFFF,    0xFF, VM_PP_NA); //SCU Regs
+	mem_MaskFill(wram + HIGH_WRAM_SIZE, 0x06000000, 0x07FFFFFF, 0xFFFFF, VM_PP_RW); //High RAM
+	//Handler for sh2 memory mapping
+	VM_MemMap(unmapped_page, 0x10000000, PAGE_SIZE, VM_PP_NA);
    // Initialize everyting to unhandled to begin with
    FillMemoryArea(0x00, 0x100, &UnhandledMemoryReadByte,
                                 &UnhandledMemoryReadWord,

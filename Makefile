@@ -27,7 +27,8 @@ SOURCES		:=	src \
 			src/sgx \
 			src/sh2old \
 			src/sh2 \
-			src/sh2/drc
+			src/sh2/drc \
+			src/vm
 
 DATA		:=	#res
 INCLUDES	:=
@@ -105,8 +106,8 @@ else
 endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES)) $(addsuffix .o,$(TPLFILES))
-export OFILES_SOURCES := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(sFILES:.s=.o) $(SFILES:.S=.o)
-export OFILES := $(OFILES_BIN) $(OFILES_SOURCES) m68kops.o m68kcpu.o m68kopdm.o m68kopac.o m68kopdm.o m68kopnz.o
+export OFILES_SOURCES := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
+export OFILES := $(OFILES_BIN) $(OFILES_SOURCES) m68kops.o m68kcpu.o m68kopdm.o m68kopac.o m68kopdm.o m68kopnz.o dsihandler.o
 
 export HFILES := $(addsuffix .h,$(subst .,_,$(BINFILES))) $(addsuffix .h,$(subst .,_,$(TPLFILES)))
 
@@ -186,7 +187,8 @@ m68kopdm.o:
 m68kopnz.o:
 	$(CC) $(VDEFINES) $(DDEFINES) -mrvl -Wall $(MACHDEP) -I$(LIBOGC_INC) -c $(CURDIR)/../src/musashi/m68kopnz.c -o $@
 
-
+dsihandler.o: ./vm/dsihandler.s
+	$(CC) -x assembler-with-cpp $(CFLAGS) -D_LANGUAGE_ASSEMBLY -c -o $@ $<
 
 -include $(DEPSDIR)/*.d
 

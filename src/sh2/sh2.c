@@ -623,7 +623,9 @@ u8 sh2_Read8(u32 addr)
 		case 0x3:	//Adress Array, read/write space
 			return 0;
 		case 0x2:	//Associative purge space
-		case 0x6:	//Data Array, read/write space	(DataCache)
+			return 0x23;
+		case 0x4:	//Data Array, read/write space	(DataCache)
+		case 0x6:
 			return ADDR_8(sh_ctx->cache + (addr & 0xFFF));
 		case 0x7:	//On-chip peripheral modules
 			if (addr >= 0xFFFFFE00) {
@@ -642,9 +644,11 @@ u16 sh2_Read16(u32 addr)
 		case 0x5:	//dunno
 			return mem_Read16(addr);
 			//return mem_read16_arr[(addr >> 19) & 0xFF](addr);
+		case 0x2:	//Associative purge space
+			return 0x2312;
 		case 0x3:	//Adress Array, read/write space
 			return 0;
-		case 0x2:	//Associative purge space
+		case 0x4:	//Associative purge space
 		case 0x6:	//Data Array, read/write space	(DataCache)
 			return ADDR_16(sh_ctx->cache + (addr & 0xFFF));
 		case 0x7:	//On-chip peripheral modules
@@ -664,10 +668,12 @@ u32 sh2_Read32(u32 addr)
 		case 0x5:	//dunno
 			return mem_Read32(addr);
 			//return mem_read32_arr[(addr >> 19) & 0xFF](addr);
+		case 0x2:	//Associative purge space
+			return 0x2312;
 		case 0x3:	//Adress Array, read/write space //TODO: Add real cache handling
 			return sh_ctx->address_arr[(addr & 0x3FC) >> 2];
-		case 0x2:	//Associative purge space
-		case 0x6:	//Data Array, read/write space	(DataCache)
+		case 0x4:	//Data Array, read/write space	(DataCache)
+		case 0x6:
 			return ADDR_32(sh_ctx->cache + (addr & 0xFFF));
 		case 0x7:	//On-chip peripheral modules
 			if (addr >= 0xFFFFFE00) {
@@ -686,15 +692,15 @@ void sh2_Write8(u32 addr, u8 val)
 		case 0x5:	//dunno
 			mem_Write8(addr, val); return;
 			//mem_write8_arr[(addr >> 19) & 0xFF](addr, val); return;
+		case 0x2:	//Associative purge space
 		case 0x3:	//Adress Array, read/write space
 			break;
-		case 0x2:	//Associative purge space
-		case 0x6:	//Data Array, read/write space	(DataCache)
+		case 0x4:	//Data Array, read/write space	(DataCache)
+		case 0x6:
 			ADDR_8(sh_ctx->cache + (addr & 0xFFF)) = val; return;
 		case 0x7:	//On-chip peripheral modules
 			if (addr >= 0xFFFFFE00) {
 				sh2_OnchipWrite8(addr & 0x1FF, val);
-				return;
 			}
 	}
 }
@@ -708,15 +714,15 @@ void sh2_Write16(u32 addr, u16 val)
 		case 0x5:	//dunno
 			mem_Write16(addr, val); return;
 			//mem_write16_arr[(addr >> 19) & 0xFF](addr, val); return;
+		case 0x2:	//Associative purge space
 		case 0x3:	//Adress Array, read/write space
 			break;
-		case 0x2:	//Associative purge space
-		case 0x6:	//Data Array, read/write space	(DataCache)
+		case 0x4:	//Data Array, read/write space	(DataCache)
+		case 0x6:
 			ADDR_16(sh_ctx->cache + (addr & 0xFFF)) = val; return;
 		case 0x7:	//On-chip peripheral modules
 			if (addr >= 0xFFFFFE00) {
 				sh2_OnchipWrite16(addr & 0x1FF, val);
-				return;
 			}
 	}
 }
@@ -730,15 +736,16 @@ void sh2_Write32(u32 addr, u32 val)
 		case 0x5:	//Dunno
 			mem_Write32(addr, val); return;
 			//mem_write32_arr[(addr >> 19) & 0xFF](addr, val); return;
+		case 0x2:	//Associative purge space
+			return;
 		case 0x3:	//Adress Array, read/write space  //TODO: Add real cache handling
 			sh_ctx->address_arr[(addr & 0x3FC) >> 2] = val; return;
-		case 0x2:	//Associative purge space
-		case 0x6:	//Data Array, read/write space	(DataCache)
+		case 0x4:	//Data Array, read/write space	(DataCache)
+		case 0x6:
 			ADDR_32(sh_ctx->cache + (addr & 0xFFF)) = val; return;
 		case 0x7:	//On-chip peripheral modules
 			if (addr >= 0xFFFFFE00) {
 				sh2_OnchipWrite32(addr & 0x1FF, val);
-				return;
 			}
 	}
 }
