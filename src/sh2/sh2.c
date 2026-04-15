@@ -9,6 +9,8 @@
 #include "../cart.h"
 #include "../memory.h"
 
+#define __rlwimi(d, v, shift, ms, me) __asm__("rlwimi %0, %1, %2, %3, %4" : "+r"(d) : "r"(v), "I"(shift), "I"(31-me), "I"(31-ms))
+
 
 #define ADDR_8(addr)	*((u8*)(addr))
 #define ADDR_16(addr)	*((u16*)(addr))
@@ -23,7 +25,6 @@ SH2 *sh_ctx;
 #define write16(ptr, x)		(*((u16*)(ptr)) = (x))
 #define write32(ptr, x)		(*((u32*)(ptr)) = (x))
 
-static void sh2_HandleInterrupt(SH2 *sh);
 static void sh2_FRTExec(SH2 *sh, u32 cycles);
 static void sh2_WDTExec(SH2 *sh, u32 cycles);
 void sh2_OnchipReset(SH2 *sh);
@@ -81,67 +82,69 @@ void sh2_Reset(SH2 *sh)
 	sh->iqr_count = 0;
 
 	sh2_OnchipReset(sh);
-	sh2_DrcReset();
+	//Do not reset if slave sh2
+	if (!(sh->flags & SH2_FLAG_SLAVE)) {
+		sh2_DrcReset();
+	}
 }
 
 
 void sh2_OnchipReset(SH2 *sh)
 {
-	u8 *oc = sh->on_chip;
-	write8(oc + OC_SMR, 0x00);
-	write8(oc + OC_BRR, 0xFF);
-	write8(oc + OC_SCR, 0x00);
-	write8(oc + OC_TDR, 0xFF);
-	write8(oc + OC_SSR, 0x84);
-	write8(oc + OC_RDR, 0x00);
-	write8(oc + OC_TIER, 0x01);
-	write8(oc + OC_FTCSR, 0x00);
-	write16(oc + OC_FRC, 0x0000);
-	write16(oc + OC_OCRA, 0xFFFF);
-	write16(oc + OC_OCRB + 0x10, 0xFFFF);		//Add 0x10
-	write8(oc + OC_TCR, 0x00);
-	write8(oc + OC_TOCR, 0xE0);
-	write16(oc + OC_ICR, 0x0000);
-	write16(oc + OC_IPRB, 0x0000);
-	write16(oc + OC_VCRA, 0x0000);
-	write16(oc + OC_VCRB, 0x0000);
-	write16(oc + OC_VCRC, 0x0000);
-	write16(oc + OC_VCRD, 0x0000);
-	write8(oc + OC_DRCR0, 0x00);
-	write8(oc + OC_DRCR1, 0x00);
-	write16(oc + OC_WTCSR, 0x0018);
-	write16(oc + OC_WTCNT, 0x0000);
-	write16(oc + OC_RSTCSR, 0x001F);
-	write8(oc + OC_SBYCR, 0x60);
-	write16(oc + OC_ICR, 0x0000);
-	write16(oc + OC_IPRA, 0x0000);
-	write16(oc + OC_VCRWDT, 0x0000);
-	write32(oc + OC_DVCR, 0x0000);
-	write16(oc + OC_BARAH, 0x0000);
-	write16(oc + OC_BARAL, 0x0000);
-	write16(oc + OC_BAMRAH, 0x0000);
-	write16(oc + OC_BAMRAL, 0x0000);
-	write16(oc + OC_BBRA, 0x0000);
-	write16(oc + OC_BARBH, 0x0000);
-	write16(oc + OC_BARBL, 0x0000);
-	write16(oc + OC_BAMRBH, 0x0000);
-	write16(oc + OC_BAMRBL, 0x0000);
-	write16(oc + OC_BBRB, 0x0000);
-	write16(oc + OC_BDRBH, 0x0000);
-	write16(oc + OC_BDRBL, 0x0000);
-	write16(oc + OC_BDMRBH, 0x0000);
-	write16(oc + OC_BDMRBL, 0x0000);
-	write16(oc + OC_BRCR, 0x0000);
-	write32(oc + OC_CHCR0, 0x0000);
-	write32(oc + OC_CHCR1, 0x0000);
-	write32(oc + OC_DMAOR, 0x0000);
-	write32(oc + OC_BCR1, 0x03F0 | (msh2.flags & SH2_FLAG_SLAVE));
-	write32(oc + OC_BCR2, 0x00FC);
-	write32(oc + OC_WCR, 0xAAFF);
-	write32(oc + OC_MCR, 0x0000);
-	write32(oc + OC_RTCSR, 0x0000);
-	write32(oc + OC_RTCNT, 0x0000);
-	write32(oc + OC_RTCOR, 0x0000);
+	OCR_SMR = 0x00;
+	OCR_BRR = 0xFF;
+	OCR_SCR = 0x00;
+	OCR_TDR = 0xFF;
+	OCR_SSR = 0x84;
+	OCR_RDR = 0x00;
+	OCR_TIER = 0x01;
+	OCR_FTCSR = 0x00;
+	OCR_FRC = 0x0000;
+	OCR_OCRA = 0xFFFF;
+	OCR_OCRB = 0xFFFF;		//Add 0x10
+	OCR_TCR = 0x00;
+	OCR_TOCR = 0xE0;
+	OCR_FICR = 0x0000;
+	OCR_IPRB = 0x0000;
+	OCR_VCRA = 0x0000;
+	OCR_VCRB = 0x0000;
+	OCR_VCRC = 0x0000;
+	OCR_VCRD = 0x0000;
+	OCR_DRCR0 = 0x00;
+	OCR_DRCR1 = 0x00;
+	OCR_WTCSR = 0x18;
+	OCR_WTCNT = 0x00;
+	OCR_RSTCSR = 0x1F;
+	OCR_SBYCR = 0x60;
+	OCR_ICR = 0x0000;
+	OCR_IPRA = 0x0000;
+	OCR_VCRWDT = 0x0000;
+	OCR_DVCR = 0x00000000;
+	OCR_BARAH = 0x0000;
+	OCR_BARAL = 0x0000;
+	OCR_BAMRAH = 0x0000;
+	OCR_BAMRAL = 0x0000;
+	OCR_BBRA = 0x0000;
+	OCR_BARBH = 0x0000;
+	OCR_BARBL = 0x0000;
+	OCR_BAMRBH = 0x0000;
+	OCR_BAMRBL = 0x0000;
+	OCR_BBRB = 0x0000;
+	OCR_BDRBH = 0x0000;
+	OCR_BDRBL = 0x0000;
+	OCR_BDMRBH = 0x0000;
+	OCR_BDMRBL = 0x0000;
+	OCR_BRCR = 0x0000;
+	OCR_CHCR0 = 0x00000000;
+	OCR_CHCR1 = 0x00000000;
+	OCR_DMAOR = 0x00000000;
+	OCR_BCR1 = 0x03F0 | (msh2.flags & SH2_FLAG_SLAVE);
+	OCR_BCR2 = 0x00FC;
+	OCR_WCR = 0xAAFF;
+	OCR_MCR = 0x0000;
+	OCR_RTCSR = 0x0000;
+	OCR_RTCNT = 0x0000;
+	OCR_RTCOR = 0x0000;
 }
 
 void sh2_Exec(SH2 *sh, u32 cycles)
@@ -149,17 +152,15 @@ void sh2_Exec(SH2 *sh, u32 cycles)
 	//Update context
 	sh_ctx = sh;
 	sh2_HandleInterrupt(sh);
-	if (!(sh->flags & SH2_FLAG_SLEEPING)) {
-		cycles = sh2_DrcExec(sh, cycles);
-		sh2_FRTExec(sh, cycles);
-		sh2_WDTExec(sh, cycles);
-	} else {
-		sh2_FRTExec(sh, cycles);
-		sh2_WDTExec(sh, cycles);
-	}
+	//if (!(sh->flags & SH2_FLAG_SLEEPING)) {
+	sh2_DrcExec(sh, cycles);
+	cycles += sh->cycles;
+	sh2_FRTExec(sh, cycles);
+	sh2_WDTExec(sh, cycles);
+
 
 #if USE_SH2_DMA_TIMING
-	sh2_DMAExec(sh)
+	//sh2_DMAExec(sh)
 #endif
 
 }
@@ -187,7 +188,7 @@ void sh2_SetInterrupt(SH2 *sh, u32 vec, u32 level)
 	sh->iqr_count++;
 }
 
-static void sh2_HandleInterrupt(SH2 *sh)
+void sh2_HandleInterrupt(SH2 *sh)
 {
 	if (sh->iqr_count) {
 		u32 level = SH2_INTERRUPT_LEVEL(sh->iqr[sh->iqr_count-1]);
@@ -216,7 +217,7 @@ static void sh2_FRTExec(SH2 *sh, u32 cycles)
 	sh->frc_leftover = (cycles + sh->frc_leftover) & mask;
 	//Check for a match with Output Compare A
 	if (frc >= OCR_OCRA && frcold < OCR_OCRA) {
-		if (OCR_TIER & 0x80) {
+		if (OCR_TIER & 0x8) {
 			sh2_SetInterrupt(sh, OCR_VCRC & 0x7F, (OCR_IPRB >> 8) & 0xF);
 		}
 		if (OCR_FTCSR & 0x1) {
@@ -227,7 +228,7 @@ static void sh2_FRTExec(SH2 *sh, u32 cycles)
 	}
 	//Check for a match with Output Compare B
 	if (frc >= OCR_OCRB && frcold < OCR_OCRB) {
-		if (OCR_TIER & 0x40) {
+		if (OCR_TIER & 0x4) {
 			sh2_SetInterrupt(sh, OCR_VCRC & 0x7F, (OCR_IPRB >> 8) & 0xF);
 		}
 		OCR_FTCSR |= 0x4;
@@ -295,85 +296,83 @@ void sh2_WriteNotify(u32 start, u32 len)
 void sh2_DMATransfer(SH2 *sh, u32 dma_slot)
 {
 
-	const u32 chcr = ADDR_32(sh->on_chip + (OC_CHCR0 + (dma_slot << 4)));
-	u32 sar = ADDR_32(sh->on_chip + (OC_SAR0 + (dma_slot << 4)));
-	u32 dar = ADDR_32(sh->on_chip + (OC_DAR0 + (dma_slot << 4)));
-	const u32 tcr = ADDR_32(sh->on_chip + (OC_TCR0 + (dma_slot << 4)));
-	const u32 vcrdma = ADDR_32(sh->on_chip + (OC_VCRDMA0 + (dma_slot << 3)));
+	u32 *chcr = &ADDR_32(sh->on_chip + (OC_CHCR0 + (dma_slot << 4)));
+	u32 *sar = &ADDR_32(sh->on_chip + (OC_SAR0 + (dma_slot << 4)));
+	u32 *dar = &ADDR_32(sh->on_chip + (OC_DAR0 + (dma_slot << 4)));
+	u32 *tcr = &ADDR_32(sh->on_chip + (OC_TCR0 + (dma_slot << 4)));
+	const u32 *vcrdma = &ADDR_32(sh->on_chip + (OC_VCRDMA0 + (dma_slot << 3)));
 	int size;
 	u32 i, i2;
-	if (!(chcr & 0x2)) { // TE is not set
+	if (!(*chcr & 0x2)) { // TE is not set
 		int srcInc;
 		int destInc;
 
-		switch((chcr >> 12) & 0x3) {
+		switch((*chcr >> 12) & 0x3) {
 			case 0x0: srcInc = 0; break;
 			case 0x1: srcInc = 1; break;
 			case 0x2: srcInc = -1; break;
 			default: srcInc = 0; break;
 		}
 
-		switch((chcr >> 14) & 0x3) {
+		switch((*chcr >> 14) & 0x3) {
 			case 0x0: destInc = 0; break;
 			case 0x1: destInc = 1; break;
 			case 0x2: destInc = -1; break;
 			default: destInc = 0; break;
 		}
 
-		switch (size = ((chcr & 0x0C00) >> 10)) {
+		switch (size = ((*chcr & 0x0C00) >> 10)) {
 			case 0: {
-				for (i = 0; i < tcr; i++) {
-					sh2_Write8(dar, sh2_Read8(sar));
-					sar += srcInc;
-					dar += destInc;
+				for (i = 0; i < *tcr; i++) {
+					sh2_Write8(*dar, sh2_Read8(*sar));
+					*sar += srcInc;
+					*dar += destInc;
 				}
 			} break;
 			case 1: {
 				destInc *= 2;
 				srcInc *= 2;
 
-				for (i = 0; i < tcr; i++) {
-					sh2_Write16(dar, sh2_Read16(sar));
-					sar += srcInc;
-					dar += destInc;
+				for (i = 0; i < *tcr; i++) {
+					sh2_Write16(*dar, sh2_Read16(*sar));
+					*sar += srcInc;
+					*dar += destInc;
 				}
 			} break;
 			case 2: {
 				destInc *= 4;
 				srcInc *= 4;
 
-				for (i = 0; i < tcr; i++) {
-					sh2_Write32(dar, sh2_Read32(sar));
-					dar += destInc;
-					sar += srcInc;
+				for (i = 0; i < *tcr; i++) {
+					sh2_Write32(*dar, sh2_Read32(*sar));
+					*dar += destInc;
+					*sar += srcInc;
 				}
 			} break;
 			case 3: { // 32 bit write
 				destInc *= 4;
 				srcInc *= 4;
 
-				for (i = 0; i < tcr; i+=4) {
+				for (i = 0; i < *tcr; i+=4) {
 					for(i2 = 0; i2 < 4; i2++) {
-						sh2_Write32(dar, sh2_Read32(sar));
-						dar += destInc;
-						sar += srcInc;
+						sh2_Write32(*dar, sh2_Read32(*sar));
+						*dar += destInc;
+						*sar += srcInc;
 					}
 				}
 			}
 			break;
 		}
-		ADDR_32(sh->on_chip + (OC_DAR0 + (dma_slot << 4))) = dar;
-		ADDR_32(sh->on_chip + (OC_SAR0 + (dma_slot << 4))) = sar;
-		ADDR_32(sh->on_chip + (OC_TCR0 + (dma_slot << 4))) = 0;
-		sh2_WriteNotify(destInc < 0 ? dar : dar - i * destInc, i * abs(destInc));
+
+		*tcr = 0;
+		sh2_WriteNotify(destInc < 0 ? *dar : *dar - i * destInc, i * abs(destInc));
 	}
 
-	if (chcr & 0x4) {
-		sh2_SetInterrupt(sh, vcrdma, sh->on_chip[OC_IPRA] & 0xF);
+	if (*chcr & 0x4) {
+		sh2_SetInterrupt(sh, *vcrdma & 0x7F, (OCR_IPRA >> 8) & 0xF);
 	}
-
 	// Set Transfer End bit
-	ADDR_32(sh->on_chip + (OC_CHCR0 + (dma_slot << 4))) = chcr | 0x2;
+	*chcr |= 0x2;
 }
 
 
@@ -395,7 +394,7 @@ void sh2_DMAExec(SH2 *sh)
 			sh2_DMATransfer(sh, 1);
 		} break;
 		case 3: { // Chanel 0 and 1 DMA
-			if (sh->on_chip[OC_DMAOR] & 0x8) { //Round robin priority
+			if (OCR_DMAOR & 0x8) { //Round robin priority
 			//	cycles <<= (~sh->on_chip[OC_CHCR0] >> 3) & 1; //Dual channel
 				sh2_DMATransfer(sh, 0);
 				sh2_DMATransfer(sh, 1);
@@ -430,194 +429,334 @@ u32 sh2_OnchipRead32(u32 addr)
 {
 	//Repeated registers
 	if ((addr >= 0x120) && (addr <= 0x13C)) {
-		addr = addr & ~0x20;
+		addr ^= 0x20;
 	}
 	return ADDR_32(sh_ctx->on_chip + addr);
 }
 
 void sh2_OnchipWrite8(u32 addr, u8 val)
 {
-	if ((addr & ~0x1) == 0x14) {
-		addr = OC_OCRA + (sh_ctx->on_chip[OC_TOCR] & 0x10) + (addr & 0x1);
-	}
-
+	SH2 * const sh = sh_ctx;
 	switch(addr) {
-		case OC_SCR: {
+		//Is this needed? v
+		case 0x000: OCR_SMR = val; break;
+		case 0x001: OCR_SMR = val; break;
+		case 0x002:
 			if (!(val & 0x20)) {//If Transmitter is getting disabled, set TDRE
-				sh_ctx->on_chip[OC_SSR] |= 0x80;
+				OCR_SSR |= 0x80;
 			}
-			sh_ctx->on_chip[OC_SCR] = val;
-		} break;
-		case OC_SSR: {} break;
-		case OC_TIER: {sh_ctx->on_chip[OC_TIER] = (val & 0x8E) | 1;} break;
-		case OC_FTCSR: {sh_ctx->on_chip[OC_FTCSR] &= (val & 0xFE);
-					sh_ctx->on_chip[OC_FTCSR] |= (val & 0x1);} break;
-		case OC_TCR: {sh_ctx->on_chip[OC_TCR] = val & 0x83; } break;
-		case OC_TOCR: {sh_ctx->on_chip[OC_TOCR] = (val & 0x13) | 0xE0;} break;
+			OCR_SCR = val; break;
+		case 0x003: OCR_TDR = val; break;
+		case 0x004: break;
+		//Is this needed? ^
+
+		case 0x010: OCR_TIER = (val & 0x8E) | 0x1; break;
+		case 0x011: OCR_FTCSR = (OCR_FTCSR & (val & 0xFE)) | (val & 0x1); break;
+		case 0x012: sh->on_chip[OC_FRC] = val; break;
+		case 0x013: sh->on_chip[OC_FRC + 1] = val; break;
+		case 0x014: sh->on_chip[OC_OCRA + (OCR_TOCR & 0x10) ] = val; break;
+		case 0x015: sh->on_chip[OC_OCRA + (OCR_TOCR & 0x10) + 1] = val; break;
+		case 0x016: OCR_TCR = val & 0x83; break;
+		case 0x017: OCR_TOCR = 0xE0 | (val & 0x13); break;
+
+		case 0x060: sh->on_chip[OC_IPRB] = val; break;
+		//case 0x061: sh->on_chip[OC_IPRB+1] = val; break;
+		case 0x062: sh->on_chip[OC_VCRA]   = val & 0x7F; break;
+		case 0x063: sh->on_chip[OC_VCRA+1] = val & 0x7F; break;
+		case 0x064: sh->on_chip[OC_VCRB]   = val & 0x7F; break;
+		case 0x065: sh->on_chip[OC_VCRB+1] = val & 0x7F; break;
+		case 0x066: sh->on_chip[OC_VCRC]   = val & 0x7F; break;
+		case 0x067: sh->on_chip[OC_VCRC+1] = val & 0x7F; break;
+		case 0x068: sh->on_chip[OC_VCRD]   = val & 0x7F; break;
+		//case 0x069: sh->on_chip[OC_] = val; break;
+		case 0x071: OCR_DRCR0 = val & 0x3; break;
+		case 0x072: OCR_DRCR1 = val & 0x3; break;
+		case 0x091: OCR_SBYCR = val & 0xDF; break;
+		case 0x092: OCR_CCR   = val & 0xCF; break;
+		case 0x0E0: __rlwimi(OCR_ICR, val, 8, 8, 8); break;
+		case 0x0E1: __rlwimi(OCR_ICR, val, 0, 0, 0); break;
+		case 0x0E2: sh->on_chip[OC_IPRA]   = val; break;
+		case 0x0E3: sh->on_chip[OC_IPRA+1] = val & 0xF0; break;
+		case 0x0E4: sh->on_chip[OC_VCRWDT]   = val & 0x7F; break;
+		case 0x0E5: sh->on_chip[OC_VCRWDT+1] = val & 0x7F; break;
 		default:
-			ADDR_8(sh_ctx->on_chip + addr) = val;
+			//Unhandled On chip write byte
 	}
 }
 
 void sh2_OnchipWrite16(u32 addr, u16 val)
 {
+	SH2 * const sh = sh_ctx;
 	switch(addr) {
-		case OC_IPRB: {ADDR_16(sh_ctx->on_chip + addr) = val & 0xFF00;} break;
-		case OC_VCRA: {ADDR_16(sh_ctx->on_chip + addr) = val & 0x7F7F;} break;
-		case OC_VCRB: {ADDR_16(sh_ctx->on_chip + addr) = val & 0x7F7F;} break;
-		case OC_VCRC: {ADDR_16(sh_ctx->on_chip + addr) = val & 0x7F7F;} break;
-		case OC_VCRD: {ADDR_16(sh_ctx->on_chip + addr) = val & 0x7F7F;} break;
-		case OC_WTCSR: {
+		case 0x060: {OCR_IPRB = val & 0xFF00;} break;
+		case 0x062: {OCR_VCRA = val & 0x7F7F;} break;
+		case 0x063: {OCR_VCRB = val & 0x7F7F;} break;
+		case 0x066: {OCR_VCRC = val & 0x7F7F;} break;
+		case 0x068: {OCR_VCRD = val & 0x7F7F;} break;
+		case 0x080: {
 			switch (val >> 8) {
 				case 0xA5: {
 					sh_ctx->wdt_shift = (0xDCA98761 >> ((val & 7) << 2)) & 0xF;
-					sh_ctx->on_chip[OC_WTCSR] = val | 0x18;} break;
-				case 0x5A: {sh_ctx->on_chip[OC_WTCNT] = val;} break;
+					OCR_WTCSR = val | 0x18;} break;
+				case 0x5A: {OCR_WTCNT = val;} break;
 			}
 		} break;
-		case OC_RSTCSR: {
+		case 0x082: {
 			if (val == 0xA500) {
-				ADDR_16(sh_ctx->on_chip + addr) &= 0xFF7F;
+				OCR_RSTCSR &= 0x7F;
 			} else if (val >> 8 == 0x5A) {
-				ADDR_16(sh_ctx->on_chip + addr) &= 0x80;
-				ADDR_16(sh_ctx->on_chip + addr) |= (val & 0x60) | 0x1F;
+				OCR_RSTCSR = (OCR_RSTCSR & 0x80) | (val & 0x60) | 0x1F;
 			}
 		} break;
-		case OC_CCR:  {ADDR_16(sh_ctx->on_chip + addr) = val & 0xCF;} break;
-		case OC_ICR:  {ADDR_16(sh_ctx->on_chip + addr) = val & 0x0101;} break;
-		case OC_IPRA: {ADDR_16(sh_ctx->on_chip + addr) = val & 0xFFF0;} break;
-		case OC_VCRWDT: {ADDR_16(sh_ctx->on_chip + addr) = val & 0x7F7F;} break;
-		case OC_DVCR:
-		case   0x128: {ADDR_16(sh_ctx->on_chip + OC_DVCR) = val & 0x3;} break;
-		case OC_BBRB: {ADDR_16(sh_ctx->on_chip + addr) = val & 0xFF;} break;
-		case OC_BBRA: {ADDR_16(sh_ctx->on_chip + addr) = val & 0xFF;} break;
-		case OC_BRCR: {ADDR_16(sh_ctx->on_chip + addr) = val & 0xF4DC;} break;
+		case 0x092: {OCR_CCR = val & 0xCF;} break;
+		case 0x0E0: {OCR_ICR = val & 0x0101;} break;
+		case 0x0E2: {OCR_IPRA = val & 0xFFF0;} break;
+		case 0x0E4: {OCR_VCRWDT = val & 0x7F7F;} break;
+		case 0x108:
+		case 0x128: {OCR_DVCR = val & 0x3;} break;
+		case 0x140: {OCR_BARAH = val;} break;
+		case 0x142: {OCR_BARAL = val;} break;
+		case 0x144: {OCR_BAMRAH = val;} break;
+		case 0x146: {OCR_BAMRAL = val;} break;
+		case 0x148: {OCR_BBRA = val & 0xFF;} break;
+		case 0x160: {OCR_BARBH = val;} break;
+		case 0x162: {OCR_BARBL = val;} break;
+		case 0x164: {OCR_BAMRBH = val;} break;
+		case 0x166: {OCR_BAMRBL = val;} break;
+		case 0x168: {OCR_BBRB = val & 0xFF;} break;
+		case 0x170: {OCR_BDRBH = val;} break;
+		case 0x172: {OCR_BDRBL = val;} break;
+		case 0x174: {OCR_BDMRBH = val;} break;
+		case 0x176: {OCR_BDMRBL = val;} break;
+		case 0x178: {OCR_BRCR = val & 0xF4DC;} break;
 		default:
-			ADDR_16(sh_ctx->on_chip + addr) = val;
+			//Unhandled On chip write word
 	}
+}
+
+static inline void _calcDiv32(SH2 *sh, s32 val)
+{
+    const s32 dividend = val;
+    const s32 divisor = (s32) OCR_DVSR;
+	s32 res_l = 0x80000000;
+	s32 res_h = 0;
+    if (divisor) {
+        if (!(dividend == 0x80000000 && divisor == -1)) {
+            res_l = dividend / divisor;
+            res_h = dividend % divisor;
+        }
+    } else {
+        // Overflow
+        res_h = dividend >> 29;
+        if (OCR_DVCR & 0x2) {
+            res_l = (dividend << 3) | ((~dividend >> 31) & 7);
+        } else {
+            // DVDNT/DVDNTL is saturated if the interrupt signal is disabled
+            res_l = dividend < 0 ? 0x80000000 : 0x7FFFFFFF;
+        }
+
+        // Signal overflow
+        OCR_DVCR |= 0x1;
+    }
+
+	OCR_DVDNTUH = OCR_DVDNTH = res_h;
+	OCR_DVDNTUL = OCR_DVDNTL = OCR_DVDNT = res_l;
+    if ((OCR_DVCR & 0x3) == 0x3) {
+		sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
+    }
+}
+
+static inline void _calcDiv64(SH2 *sh, u32 val)
+{
+#if 1
+	const s32 kMinValue32 = 0x80000000;
+	const s32 kMaxValue32 = 0x7FFFFFFF;
+
+	s64 dividend = OCR_DVDNTH;
+	dividend <<= 32;
+	//s64 dividend = *((s64 *)(sh->on_chip + OC_DVDNTH));
+	dividend |= val;
+	const s32 divisor = (s32) OCR_DVSR;
+
+	s32 res_l = 0x80000000;
+	s32 res_h = 0;
+	u32 overflow = 0;
+	if (divisor == 0) {
+		overflow = 1;
+	} else if (OCR_DVDNTH == 0x80000000 && val == 0x00000000 && divisor == -1) {
+		// Handle extreme case
+		overflow = 1;
+	} else {
+		const s32 quotient = dividend / divisor;
+		//const s32 remainder = dividend % divisor;
+		//f64 df = (f64) dividend;
+		//f64 dvf = (f64) divisor;
+		//const s32 quotient = (s32) (s64) (df / dvf);
+		const s32 remainder = dividend - (quotient * (s64) divisor);
+		//TODO:
+		res_l = quotient;
+		res_h = remainder;
+
+	}
+
+	if (overflow) {
+		const s64 origDividend = dividend;
+		bool Q = dividend < 0;
+        const bool M = divisor < 0;
+		for (int i = 0; i < 3; i++) {
+			if (Q == M) {
+				dividend -= ((u64)divisor) << 32ull;
+			} else {
+				dividend += ((u64)divisor) << 32ull;
+			}
+
+			Q = dividend < 0;
+			dividend = (dividend << 1ll) | (Q == M);
+		}
+
+		// Update output registers
+		if (OCR_DVCR & 0x2) {
+			res_l = dividend;
+		} else {
+			// DVDNT/DVDNTL is saturated if the interrupt signal is disabled
+			res_l = (s32)((origDividend >> 32) ^ divisor) < 0 ? kMinValue32 : kMaxValue32;
+		}
+		res_h = dividend >> 32ll;
+
+		// Signal overflow
+		OCR_DVCR |= 0x1;
+	}
+
+	OCR_DVDNTUH = OCR_DVDNTH = res_h;
+	OCR_DVDNTUL = OCR_DVDNTL = OCR_DVDNT = res_l;
+
+	if ((OCR_DVCR & 0x3) == 0x3) {
+		sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
+	}
+#else
+	s32 divisor = (s32) OCR_DVSR;
+	s64 dividend = OCR_DVDNTH;
+	dividend <<= 32;
+	dividend |= val;
+w
+	if (divisor == 0) {
+		if (OCR_DVDNTH & 0x80000000)
+		{
+			OCR_DVDNTL = 0x80000000;
+			OCR_DVDNTH = OCR_DVDNTH << 3; // fix me
+		}
+		else
+		{
+			OCR_DVDNTL = 0x7FFFFFFF;
+			OCR_DVDNTH = OCR_DVDNTH << 3; // fix me
+		}
+
+		OCR_DVDNTUL = OCR_DVDNTL;
+		OCR_DVDNTUH = OCR_DVDNTH;
+		OCR_DVCR |= 1;
+		if (OCR_DVCR & 0x2) {
+			sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
+		}
+	} else {
+		s64 quotient = dividend / divisor;
+		s32 remainder = dividend % divisor;
+
+		if (quotient > 0x7FFFFFFF)
+		{
+			OCR_DVCR |= 1;
+			OCR_DVDNTL = 0x7FFFFFFF;
+			OCR_DVDNTH = 0xFFFFFFFE; // fix me
+			if (OCR_DVCR & 0x2) {
+				sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
+			}
+		}
+		else if ((s32)(quotient >> 32) < -1)
+		{
+			OCR_DVCR |= 1;
+			OCR_DVDNTL = 0x80000000;
+			OCR_DVDNTH = 0xFFFFFFFE; // fix me
+			if (OCR_DVCR & 0x2) {
+				sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
+			}
+		} else {
+			OCR_DVDNTL = quotient;
+			OCR_DVDNTH = remainder;
+		}
+
+		OCR_DVDNTUL = OCR_DVDNTL;
+		OCR_DVDNTUH = OCR_DVDNTH;
+	}
+#endif
+
 }
 
 void sh2_OnchipWrite32(u32 addr, u32 val)
 {
-	SH2 *sh = sh_ctx;
+	const SH2 *sh = sh_ctx;
 	switch(addr) {
-		case OC_DVSR:
-		case   0x120: {OCR_DVSR = val;} break;
-		case OC_DVDNT: // 32bit / 32bit divide
-		case    0x124: {
-			s32 div = (s32) OCR_DVSR;
-			if (div) {
-				OCR_DVDNTL = OCR_DVDNTUL = ((s32) val) / div;
-				OCR_DVDNTH = OCR_DVDNTUH = ((s32) val) % div;
-			} else {
-				if (val >> 31) {
-					OCR_DVDNTL = OCR_DVDNTUL = 0x80000000;
-					OCR_DVDNTH = OCR_DVDNTUH = 0xFFFFFFFC | ((val >> 29) & 0x3);
-				} else {
-					OCR_DVDNTL = OCR_DVDNTUL = 0x7FFFFFFF;
-					OCR_DVDNTH = OCR_DVDNTUH = ((val >> 29) & 0x3);
-				}
-				OCR_DVCR |= 0x1;
-				if (OCR_DVCR & 0x2) {
-					sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
-				}
-			}
-			OCR_DVDNTUH = val;
-		} break;
-		case OC_DVCR:
-		case   0x128: {OCR_DVCR = val & 0x3;} break;
-		case OC_VCRDIV:
-		case     0x12C: {OCR_VCRDIV = val & 0xFFFF;} break;
-		case OC_DVDNTH:
-		case     0x130: {OCR_DVDNTH = val;} break;
-		case OC_DVDNTL: // 64bit / 32bit divide
-		case     0x134: {
-			s32 divisor = (s32) OCR_DVSR;
-			u32 dvdnth = OCR_DVDNTH;
-			s64 dividend = (((s64) dvdnth) << 32) | val;
-			if (divisor) {
-				s64 quot = dividend / divisor;
-				s64 rem = dividend % divisor;
-				if (quot > 0x7FFFFFFF) {
-					OCR_DVDNTL = 0x7FFFFFFF;
-					OCR_DVDNTH = 0xFFFFFFFE; // must fix
-					//overflow
-					OCR_DVCR |= 0x1;
-					if (OCR_DVCR & 0x2) {
-						sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
-					}
-				} else if ((s32)(quot >> 32) < -1) {
-					OCR_DVDNTL = 0x80000000;
-					OCR_DVDNTH = 0xFFFFFFFE; // must fix
-					//overflow
-					OCR_DVCR |= 0x1;
-					if (OCR_DVCR & 0x2) {
-						sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
-					}
-				} else {
-					OCR_DVDNTL = quot;
-					OCR_DVDNTH = rem;
-				}
-				OCR_DVDNTUL = OCR_DVDNTL;
-				OCR_DVDNTUH = OCR_DVDNTH;
-			} else {
-				//overflow
-				if (dvdnth >> 31) {
-					OCR_DVDNTL = 0x80000000;
-				} else {
-					OCR_DVDNTL = 0x7FFFFFFF;
-				}
-				OCR_DVDNTH = dvdnth << 3;
-				OCR_DVDNTUL = OCR_DVDNTL;
-				OCR_DVDNTUH = OCR_DVDNTH;
-				OCR_DVCR |= 0x1;
-				if (OCR_DVCR & 0x2) {
-					sh2_SetInterrupt(sh_ctx, OCR_VCRDIV & 0x7F, (OCR_IPRA >> 12) & 0xF);
-				}
-			}
+		case 0x100:
+		case 0x120: {OCR_DVSR = val;} break;
+		case 0x104: // 32bit / 32bit divide
+		case 0x124: {_calcDiv32(sh_ctx, val); } break;
+		case 0x108:
+		case 0x128: {OCR_DVCR = val & 0x3;} break;
+		case 0x10C:
+		case 0x12C: {OCR_VCRDIV = val & 0xFFFF;} break;
+		case 0x110:
+		case 0x130: {OCR_DVDNTH = val;} break;
+		case 0x114: // 64bit / 32bit divide
+		case 0x134: {_calcDiv64(sh_ctx, val);} break;
+		case 0x118:
+		case 0x138: {OCR_DVDNTUH = val;} break;
+		case 0x11C:
+		case 0x13C: {OCR_DVDNTUL = val;} break;
+		case 0x140: {ADDR_32(sh->on_chip + OC_BARAH) = val;} break;
+		case 0x144: {ADDR_32(sh->on_chip + OC_BAMRAH) = val;} break;
+		case 0x180: {OCR_SAR0 = val;} break;
+		case 0x184: {OCR_DAR0 = val;} break;
+		case 0x188: {OCR_TCR0 = val & 0xFFFFFF;} break;
 
-		} break;
-		case OC_DVDNTUH:
-		case      0x138: {OCR_DVDNTUH = val;} break;
-		case OC_DVDNTUL:
-		case      0x13C: {OCR_DVDNTUL = val;} break;
-		case OC_TCR0: {ADDR_32(sh_ctx->on_chip + addr) = val & 0xFFFFFF;} break;
-		case OC_CHCR0: {
-			ADDR_32(sh_ctx->on_chip + addr) = val & 0xFFFF;
-			if ((sh_ctx->on_chip[OC_DMAOR+3] & 7) == 1 && (val & 3) == 1) {
+		case 0x18C: {
+			OCR_CHCR0 = val & 0xFFFF;
+			if ((OCR_DMAOR & 7) == 1 && (val & 3) == 1) {
 				sh2_DMAExec(sh_ctx);
 			} } break;
-		case OC_TCR1: {ADDR_32(sh_ctx->on_chip + addr) = val & 0xFFFFFF;} break;
-		case OC_CHCR1: {
-			ADDR_32(sh_ctx->on_chip + addr) = val & 0xFFFF;
-			if ((sh_ctx->on_chip[OC_DMAOR+3] & 7) == 1 && (val & 3) == 1) {
+		case 0x190: {OCR_SAR1 = val;} break;
+		case 0x194: {OCR_DAR1 = val;} break;
+		case 0x198: {OCR_TCR1 = val & 0xFFFFFF;} break;
+		case 0x19C: {
+			OCR_CHCR1 = val & 0xFFFF;
+			if ((OCR_DMAOR & 7) == 1 && (val & 3) == 1) {
 				sh2_DMAExec(sh_ctx);
 			} } break;
-		case OC_VCRDMA0: {OCR_VCRDMA0 = val & 0xFFFF;} break;
-		case OC_VCRDMA1: {OCR_VCRDMA1 = val & 0xFFFF;} break;
-		case OC_DMAOR: {
+		case 0x1A0: {OCR_VCRDMA0 = val & 0xFFFF;} break;
+		case 0x1A8: {OCR_VCRDMA1 = val & 0xFFFF;} break;
+		case 0x1B0: {
 			OCR_DMAOR = val & 0xF;
 			if ((val & 7) == 1) {
 				sh2_DMAExec(sh_ctx);
 			} } break;
-		case OC_BCR1: {OCR_BCR1 = (sh_ctx->flags & SH2_FLAG_SLAVE) |(val & 0x1FF7);} break;
-		case OC_BCR2: {OCR_BCR2 = val & 0xFC;} break;
-		case OC_MCR: {OCR_MCR = val & 0xFEFC;} break;
-		case OC_RTCSR: {OCR_RTCSR = val & 0xF8;} break;
-		case OC_RTCOR: {OCR_RTCOR = val & 0xFF;} break;
+		case 0x1E0: {OCR_BCR1 = (sh->flags & SH2_FLAG_SLAVE) | (val & 0x1FF7);} break;
+		case 0x1E4: {OCR_BCR2 = val & 0xFC;} break;
+		case 0x1E8: {OCR_WCR = val;} break;
+		case 0x1EC: {OCR_MCR = val & 0xFEFC;} break;
+		case 0x1F0: {OCR_RTCSR = val & 0xF8;} break;
+		case 0x1F8: {OCR_RTCOR = val & 0xFF;} break;
 		default:
-			ADDR_32(sh_ctx->on_chip + addr) = val;
+			//Unhandled On chip write long
 	}
 }
+
+//Access timings for cycles
 
 
 u8 sh2_Read8(u32 addr)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//dunno
-			return mem_Read8(addr);
+		case 0x5:	sh_ctx->cycles += mem_CyclesR(addr);
+		case 0x0:	//Cache area
+			return mem_Read8(addr & 0x0FFFFFFF);
 			//addr &= 0x0FFFFFFF;
 			//return mem_read8_arr[(addr >> 19) & 0xFF](addr);
 		case 0x3:	//Adress Array, read/write space
@@ -639,10 +778,10 @@ u8 sh2_Read8(u32 addr)
 u16 sh2_Read16(u32 addr)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//dunno
-			return mem_Read16(addr);
+		case 0x5:	sh_ctx->cycles += mem_CyclesR(addr);
+		case 0x0:	//Cache area
+			return mem_Read16(addr & 0x0FFFFFFF);
 			//return mem_read16_arr[(addr >> 19) & 0xFF](addr);
 		case 0x2:	//Associative purge space
 			return 0x2312;
@@ -663,10 +802,10 @@ u16 sh2_Read16(u32 addr)
 u32 sh2_Read32(u32 addr)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//dunno
-			return mem_Read32(addr);
+		case 0x5:	sh_ctx->cycles += mem_CyclesR(addr);
+		case 0x0:	//Cache area
+			return mem_Read32(addr & 0x0FFFFFFF);
 			//return mem_read32_arr[(addr >> 19) & 0xFF](addr);
 		case 0x2:	//Associative purge space
 			return 0x2312;
@@ -687,10 +826,10 @@ u32 sh2_Read32(u32 addr)
 void sh2_Write8(u32 addr, u8 val)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//dunno
-			mem_Write8(addr, val); return;
+		case 0x5:	sh_ctx->cycles += mem_CyclesW(addr);
+		case 0x0:	//Cache area
+			mem_Write8(addr & 0x0FFFFFFF, val); return;
 			//mem_write8_arr[(addr >> 19) & 0xFF](addr, val); return;
 		case 0x2:	//Associative purge space
 		case 0x3:	//Adress Array, read/write space
@@ -709,10 +848,10 @@ void sh2_Write8(u32 addr, u8 val)
 void sh2_Write16(u32 addr, u16 val)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//dunno
-			mem_Write16(addr, val); return;
+		case 0x5:	sh_ctx->cycles += mem_CyclesW(addr);
+		case 0x0:	//Cache area
+			mem_Write16(addr & 0x0FFFFFFF, val); return;
 			//mem_write16_arr[(addr >> 19) & 0xFF](addr, val); return;
 		case 0x2:	//Associative purge space
 		case 0x3:	//Adress Array, read/write space
@@ -731,10 +870,10 @@ void sh2_Write16(u32 addr, u16 val)
 void sh2_Write32(u32 addr, u32 val)
 {
 	switch(addr >> 29) {
-		case 0x0:	//Cache area
 		case 0x1:	//Cache-through area
-		case 0x5:	//Dunno
-			mem_Write32(addr, val); return;
+		case 0x5:	sh_ctx->cycles += mem_CyclesW(addr);
+		case 0x0:	//Cache area
+			mem_Write32(addr & 0x0FFFFFFF, val); return;
 			//mem_write32_arr[(addr >> 19) & 0xFF](addr, val); return;
 		case 0x2:	//Associative purge space
 			return;
@@ -755,7 +894,7 @@ u32* sh2_GetPCAddr(u32 pc)
 	switch((pc >> 19) & 0xFF) {
 		case 0x000: // Bios
 			return (u32*) (bios_rom + (pc & (BIOS_SIZE - 1)));
-		case 0x020: // CS0
+		case 0x040: // CS0
 			return cs0_getPCAddr(pc);
 		default: // Assume WRAM... could lead to terrible sideeffects
 			pc |= ((pc >> 6) & HIGH_WRAM_SIZE); // High WRAM bit
@@ -768,20 +907,22 @@ u32* sh2_GetPCAddr(u32 pc)
 //Input Capture
 void sh2_MSH2InputCaptureWrite16(u32 addr, u16 data)
 {
-	msh2.on_chip[OC_FTCSR] |= 0x80; // Set Input Capture Flag
- 	write16(msh2.on_chip + OC_FICR, ADDR_16(msh2.on_chip + OC_FRC)); // Copy FRC register to FICR
-	// Time for an Interrupt?
-	if (msh2.on_chip[OC_TIER] & 0x80) {
-		sh2_SetInterrupt(&msh2, msh2.on_chip[OC_VCRC] & 0x7F, msh2.on_chip[OC_IPRB] & 0xF);
+	SH2 *sh = &msh2;
+	OCR_FTCSR |= 0x80; // Set Input Capture Flag
+	OCR_FICR = OCR_FRC; // Copy FRC register to FICR
+ 	// Time for an Interrupt?
+	if (OCR_TIER & 0x80) {
+		sh2_SetInterrupt(&ssh2, (OCR_VCRC >> 8) & 0x7F, (OCR_IPRB >> 8) & 0xF);
 	}
 }
 
 void sh2_SSH2InputCaptureWrite16(u32 addr, u16 data)
 {
-	ssh2.on_chip[OC_FTCSR] |= 0x80; // Set Input Capture Flag
-	write16(ssh2.on_chip + OC_FICR, ADDR_16(ssh2.on_chip + OC_FRC)); // Copy FRC register to FICR
+	SH2 *sh = &ssh2;
+	OCR_FTCSR |= 0x80; // Set Input Capture Flag
+	OCR_FICR = OCR_FRC; // Copy FRC register to FICR
  	// Time for an Interrupt?
-	if (ssh2.on_chip[OC_TIER] & 0x80) {
-		sh2_SetInterrupt(&ssh2, ssh2.on_chip[OC_VCRC] & 0x7F, ssh2.on_chip[OC_IPRB] & 0xF);
+	if (OCR_TIER & 0x80) {
+		sh2_SetInterrupt(&ssh2, (OCR_VCRC >> 8) & 0x7F, (OCR_IPRB >> 8) & 0xF);
 	}
 }

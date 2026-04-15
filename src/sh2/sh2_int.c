@@ -1040,6 +1040,36 @@ u32 sh2_ExecInt(u32 cycles)
 	}
 }
 #endif
+#include <stdio.h>
+
+//61 inst
+void sh2_int_DIV1(SH2 *sh, u32 instr)
+{
+	const u32 n = (instr >> 8) & 0xF;
+	const u32 m = (instr >> 4) & 0xF;
+	u32 tmp0;
+	u32 old_q, tmp1;
+
+	old_q = SH2_SR_Q(sh->sr);
+	u32 sr_q = (sh->r[n] >> 31) & 1;
+	u32 sr_m = SH2_SR_M(sh->sr);
+	sh->r[n] <<= 1;
+	sh->r[n] |= SH2_SR_T(sh->sr);
+
+	tmp0 = sh->r[n];
+	switch(sr_m ^ old_q) {
+		case 0:
+			sh->r[n] -= sh->r[m];
+			tmp1 = (sh->r[n] > tmp0);
+			break;
+		case 1:
+			sh->r[n] += sh->r[m];
+			tmp1 = (sh->r[n] < tmp0);
+			break;
+	}
+	sh->sr = SH2_SR_SET_Q(sh->sr, tmp1 ^ sr_q ^ sr_m);
+	sh->sr = SH2_SR_SET_T(sh->sr, sr_q == sr_m);
+}
 
 //61 inst
 void sh2_int_MACL(SH2 *sh, u32 instr)
@@ -1050,17 +1080,49 @@ void sh2_int_MACL(SH2 *sh, u32 instr)
 	sh->r[n] += 4;
 	const s32 op1 = sh2_Read32(sh->r[m]);
 	sh->r[m] += 4;
+#if 0
+	s32 mulh, mull, cond, tmpl, tmph;
+	asm (
+		// (op1 * op2) + mac
+		"mullw %4, %2, %3\n\t"
+		"mulhw %5, %2, %3\n\t"
+		"addc  %4, %4, %0\n\t"
+		"adde  %5, %5, %1\n\t"
+		//cond <- -(S & (mul+ 0xFFFF800000000000ull >= 0)
+		"andi. %6, %7, 0x2\n\t"
+		"cror 4, 1, 1\n\t"
+		"addic. %6, %4, 1\n\t"
+		//"crand 1, 1, 0\n\t"
+		"addi %6, %5, 0xFFFF8000\n\t"
+		"addze. %6, %6\n\t"
+		"crand 1, 1, 4\n\t"
+		"mfcr %6\n\t"
+		"rlwinm %6, %6, 2, 31, 31\n\t"
+		"neg %6, %6\n\t"
+		//templ <- ((op1 ^ op2) >> 31)
+		"xor %7, %2, %3\n\t"
+		"srawi %7, %7, 31\n\t"
+		//macl <- (mull & ~cond) | (cond & ~templ)
+		"andc %4, %4, %6\n\t"
+		"andc %2, %6, %7\n\t"
+		"or %0, %4, %2\n\t"
+		//temph < templ ^ 0xFFFF8000
+		"xori %7, %7, 0x8000\n\t"
+		"xoris %7, %7, 0xFFFF\n\t"
+		//mach <- (mulh & ~cond) | (cond & ~temph)
+		"andc %5, %5, %6\n\t"
+		"andc %3, %6, %7\n\t"
+		"or %1, %5, %3"
+		: "+r" (sh->macl), "+r" (sh->mach)
+		: "r" (op1), "r" (op2), "r" (mull), "r" (mulh), "r" (cond), "r" (sh->sr), "r" (tmpl)
+	);
+#else
 
 	s64 mul = ((s64)op1) * ((s64)op2);
-	s64 result = mul + (*(u64*)(&sh->mach));
-	if (SH2_SR_S(sh->sr) && result > 0x00007FFFFFFFFFFFull && result < 0xFFFF800000000000ull ) {
-		//if ((op1 ^ op2) < 0) {
-			result = 0xFFFF800000000000ull ^ (result >> 63);
-		//} else {
-		//	result = 0x00007FFFFFFFFFFFull;
-		//}
-	}
-	(*(u64*)(&sh->mach)) = result;
+	s64 result = mul + (*(s64*)(&sh->mach));
+	s64 cond = -((s64)(SH2_SR_S(sh->sr)) & (((u64)result + 0xFFFF800000000000ull) >= 0ull));
+	(*(s64*)(&sh->mach)) = (result & ~cond) | ((((s64)((op1 ^ op2) >> 31) ^ 0x00007FFFFFFFFFFFll)) & cond);
+#endif
 }
 
 //78 -> 64 inst

@@ -44,8 +44,8 @@
  * WE CAN USE FPR
  */
 
-#define GP_R0		(reg_indx[0])	/* This reg is perserverd */
-#define GP_R(x)		(reg_indx[x]) 	/* These regs are perserverd */
+#define GP_R0		(14)	/* This reg is perserverd */
+#define GP_R(x)		(14+(x)) 	/* These regs are perserverd */
 
 #define GP_TMP		(5)		/* temp variable for mutli-instruction */
 #define GP_TMP2		(6)		/* temp variable for mutli-instruction */
@@ -110,6 +110,7 @@
 #define PPCC_CRNOR(cD, cA, cB)				EMIT(0x4C000042 | ((cD) << 21) | ((cA) << 16) | ((cB) << 11))
 
 //Branch inst
+#define PPCC_B(addr)						EMIT(0x48000000 | ((((u32) addr - (u32)icache_ptr) & 0x3FFFFFC)))
 #define PPCC_BL(addr)						EMIT(0x48000001 | ((((u32) addr - (u32)icache_ptr) & 0x3FFFFFC)))
 #define PPCC_BLR							EMIT(0x4E800020)
 

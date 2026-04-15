@@ -22,19 +22,20 @@
 #define SH2_SR_T(sr)	((sr) & 1)
 #define SH2_SR_S(sr)	(((sr) >> 1) & 1)
 #define SH2_SR_I(sr)	(((sr) >> 4) & 0xF)
-#define SH2_SR_M(sr)	(((sr) >> 5) & 1)
-#define SH2_SR_Q(sr)	(((sr) >> 6) & 1)
+#define SH2_SR_Q(sr)	(((sr) >> 8) & 1)
+#define SH2_SR_M(sr)	(((sr) >> 9) & 1)
+
 
 #define SH2_SR_T_BIT	(0x01)
 #define SH2_SR_S_BIT	(0x02)
 #define SH2_SR_I_BITS	(0xF0)
-#define SH2_SR_M_BIT	(0x100)
-#define SH2_SR_Q_BIT	(0x200)
+#define SH2_SR_Q_BIT	(0x100)
+#define SH2_SR_M_BIT	(0x200)
 
-#define SH2_SR_SET_T(sr, t)		(((sr) & ~SH2_SR_T_BIT) | (t))
+#define SH2_SR_SET_T(sr, t)		(((sr) & ~SH2_SR_T_BIT) | ((t) & 0x1))
 #define SH2_SR_SET_I(sr, i)		(((sr) & ~SH2_SR_I_BITS) | (((i) << 4) & SH2_SR_I_BITS))
-#define SH2_SR_SET_Q(sr, q)		(((sr) & ~SH2_SR_Q_BIT) | ((q) << 5))
-#define SH2_SR_SET_M(sr, m)		(((sr) & ~SH2_SR_M_BIT) | ((m) << 6))
+#define SH2_SR_SET_Q(sr, q)		(((sr) & ~SH2_SR_Q_BIT) | (((q) & 0x1) << 8))
+#define SH2_SR_SET_M(sr, m)		(((sr) & ~SH2_SR_M_BIT) | (((m) & 0x1) << 9))
 
 //===================================
 // SH2 Interrupt
@@ -42,7 +43,7 @@
 #define SH2_INTERRUPT_NMI				(((0x1F) << 8) | (0xB))
 #define SH2_INTERRUPT(vec, level)		(((level) << 8) | (vec))
 #define SH2_INTERRUPT_VEC(ir)			((ir) & 0x7F)
-#define SH2_INTERRUPT_LEVEL(ir)			((ir) >> 8)
+#define SH2_INTERRUPT_LEVEL(ir)			(((ir) >> 8) & 0x1F)
 
 
 //===================================
@@ -202,13 +203,13 @@ typedef struct SH2_tag
 {
 	//
 	u32 r[16];
+	u32 sr;
 	u32 pc;
 	u32 pr;
 	u32 gbr;
 	u32 vbr;
 	u32 mach;
 	u32 macl;
-	u32 sr;
 	u32 tmp;
 
 	u32 delay_slot;
@@ -224,8 +225,8 @@ typedef struct SH2_tag
 
 	//u32 wdt_cntl; // isenable (OC_WTCSR & 0x20), isinterval (~OC_WTCSR & 0x40)
 	//XXX: Interrupt stuff
-	u16 iqr[MAX_INTERRUPTS];
 	u32 iqr_count;
+	u16 iqr[MAX_INTERRUPTS];
 
 	u32 address_arr[0x100];		/*Address Array*/
 	u8 on_chip[0x200];			/*On-chip peripheral modules*/
@@ -243,6 +244,7 @@ void sh2_PowerOn(SH2 *sh);
 void sh2_Exec(SH2 *sh, u32 cycles);
 void sh2_Step(SH2 *sh);
 void sh2_SetInterrupt(SH2 *sh, u32 vec, u32 level);
+void sh2_HandleInterrupt(SH2 *sh);
 void sh2_NMI(SH2 *sh);
 void sh2_SetRegs(SH2 *sh, u32 *regs[32]);
 void sh2_GetRegs(SH2 *sh, u32 *regs[32]);

@@ -527,7 +527,11 @@ int CoreExec()
 		yinit.biospath = biospath;
 		fclose(fp);
 	}
+#if 0
 	yinit.cdpath = isofilename;
+#else
+	yinit.cdpath = NULL;
+#endif
 	strcpy(buppath, saves_dir);
 	yinit.buppath = buppath;
 	yinit.mpegpath = NULL;

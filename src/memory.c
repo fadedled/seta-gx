@@ -56,6 +56,9 @@ ReadFunc8 mem_read8_arr[0x100];
 ReadFunc16 mem_read16_arr[0x100];
 ReadFunc32 mem_read32_arr[0x100];
 
+u8 mem_r_cycles[0x100];
+u8 mem_w_cycles[0x100];
+
 
 //Mask for repeating memorymap sections
 u32 read_mask[0x800];
@@ -354,7 +357,7 @@ inline u32 getMemClock(u32 addr) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static void mem_MaskFill(u8 *mem, u32 start, u32 end, u32 mask, u32 pp)
+static void mem_MaskFill(u8 *mem, u32 start, u32 end, u32 mask, u32 rcycles, u32 wcycles, u32 pp)
 {
 	u32 r_mask = (mask | start) & (pp >> 1 ? 0xFFFFFFFF : 0x0);
 	u32 w_mask = (mask | start) & ((~pp) & 1 ? 0xFFFFFFFF : 0x0);
@@ -364,9 +367,9 @@ static void mem_MaskFill(u8 *mem, u32 start, u32 end, u32 mask, u32 pp)
 	for (; i <= end; ++i) {
 		read_mask[i] = r_mask;
 		write_mask[i] = w_mask;
+		mem_r_cycles[(i >> 3) & 0xFF] = rcycles;
+		mem_w_cycles[(i >> 3) & 0xFF] = wcycles;
 	}
-	read_mask[i] = r_mask;
-	write_mask[i] = w_mask;
 
 	mask++;
 	if (mask < PAGE_SIZE) {
@@ -471,26 +474,26 @@ void MappedMemoryInit()
 	//VM_BATSet(1, HIGH_RAM_BASE, 0x06000000u, BL_ENC_1M);	//HIGH_RAM_BASE
 
 
-	mem_MaskFill(0, 0x00000000, 0x07FFFFFF, 0, VM_PP_NA); // Init all
-	mem_MaskFill(bios_rom,              0x00000000, 0x000FFFFF, 0x7FFFF, VM_PP_RO); //BIOS Rom
-	mem_MaskFill(unmapped_page,         0x00100000, 0x0017FFFF,    0x7F, VM_PP_NA); //SMPC Regs
-	mem_MaskFill(bup_ram,               0x00180000, 0x001FFFFF,  0xFFFF, VM_PP_NA); //BUP RAM
-	mem_MaskFill(wram,                  0x00200000, 0x002FFFFF, 0xFFFFF, VM_PP_RW); //Low RAM
-	mem_MaskFill(unmapped_page,         0x01000000, 0x017FFFFF,     0x0, VM_PP_NA); //MINIT
-	mem_MaskFill(unmapped_page,         0x01800000, 0x01FFFFFF,     0x0, VM_PP_NA); //SINIT
-	mem_MaskFill(unmapped_page,         0x02000000, 0x03FFFFFF,     0x0, VM_PP_NA); //CS0 (can change)
-	mem_MaskFill(unmapped_page,         0x04000000, 0x04FFFFFF,     0x0, VM_PP_NA); //CS1 (can change)
-	mem_MaskFill(unmapped_page,         0x05800000, 0x058FFFFF,    0x3F, VM_PP_NA); //CS2
-	mem_MaskFill(SoundRam,              0x05A00000, 0x05AFFFFF, 0x7FFFF, VM_PP_RW); //AUDIO RAM (can change)
-	mem_MaskFill(unmapped_page,         0x05B00000, 0x05BFFFFF,   0xFFF, VM_PP_NA); //SCSP Regs
-	mem_MaskFill(Vdp1Ram,               0x05C00000, 0x05C7FFFF, 0x7FFFF, VM_PP_NA); //VDP1 VRAM
-	mem_MaskFill(Vdp1FrameBuffer,       0x05C80000, 0x05CFFFFF, 0x3FFFF, VM_PP_NA); //VDP1 FB
-	mem_MaskFill(unmapped_page,         0x05D00000, 0x05D7FFFF,    0x1F, VM_PP_NA); //VDP1 Regs
-	mem_MaskFill(Vdp2Ram,               0x05E00000, 0x05EFFFFF, 0x7FFFF, VM_PP_RW); //VDP2 VRAM
-	mem_MaskFill(unmapped_page,         0x05F00000, 0x05F7FFFF,   0xFFF, VM_PP_RW); //VDP2 CRAM
-	mem_MaskFill(unmapped_page,         0x05F80000, 0x05FBFFFF,   0x1FF, VM_PP_NA); //VDP2 Regs
-	mem_MaskFill(unmapped_page,         0x05FE0000, 0x05FEFFFF,    0xFF, VM_PP_NA); //SCU Regs
-	mem_MaskFill(wram + HIGH_WRAM_SIZE, 0x06000000, 0x07FFFFFF, 0xFFFFF, VM_PP_RW); //High RAM
+	mem_MaskFill(0, 0x00000000, 0x07FFFFFF, 0, 1, 1, VM_PP_NA); // Init all
+	mem_MaskFill(bios_rom,              0x00000000, 0x000FFFFF, 0x7FFFF, 2, 2, VM_PP_RO); //BIOS Rom
+	mem_MaskFill(unmapped_page,         0x00100000, 0x0017FFFF,    0x7F, 4, 2, VM_PP_NA); //SMPC Regs
+	mem_MaskFill(bup_ram,               0x00180000, 0x001FFFFF,  0xFFFF, 2, 2, VM_PP_NA); //BUP RAM
+	mem_MaskFill(wram,                  0x00200000, 0x002FFFFF, 0xFFFFF, 2, 2, VM_PP_RW); //Low RAM
+	mem_MaskFill(unmapped_page,         0x01000000, 0x017FFFFF,     0x0, 4, 2, VM_PP_NA); //MINIT
+	mem_MaskFill(unmapped_page,         0x01800000, 0x01FFFFFF,     0x0, 4, 2, VM_PP_NA); //SINIT
+	mem_MaskFill(unmapped_page,         0x02000000, 0x03FFFFFF,     0x0, 2, 2, VM_PP_NA); //CS0 (can change)
+	mem_MaskFill(unmapped_page,         0x04000000, 0x04FFFFFF,     0x0, 2, 2, VM_PP_NA); //CS1 (can change)
+	mem_MaskFill(unmapped_page,         0x05800000, 0x058FFFFF,    0x3F, 40, 40, VM_PP_NA); //CS2
+	mem_MaskFill(SoundRam,              0x05A00000, 0x05AFFFFF, 0x7FFFF, 40, 2, VM_PP_RW); //AUDIO RAM (can change)
+	mem_MaskFill(unmapped_page,         0x05B00000, 0x05BFFFFF,   0xFFF, 40, 2, VM_PP_NA); //SCSP Regs
+	mem_MaskFill(Vdp1Ram,               0x05C00000, 0x05C7FFFF, 0x7FFFF, 22, 2, VM_PP_NA); //VDP1 VRAM
+	mem_MaskFill(Vdp1FrameBuffer,       0x05C80000, 0x05CFFFFF, 0x3FFFF, 22, 2, VM_PP_NA); //VDP1 FB
+	mem_MaskFill(unmapped_page,         0x05D00000, 0x05D7FFFF,    0x1F, 14, 2, VM_PP_NA); //VDP1 Regs
+	mem_MaskFill(Vdp2Ram,               0x05E00000, 0x05EFFFFF, 0x7FFFF, 20, 2, VM_PP_RW); //VDP2 VRAM
+	mem_MaskFill(unmapped_page,         0x05F00000, 0x05F7FFFF,   0xFFF, 20, 2, VM_PP_RW); //VDP2 CRAM
+	mem_MaskFill(unmapped_page,         0x05F80000, 0x05FBFFFF,   0x1FF, 20, 2, VM_PP_NA); //VDP2 Regs
+	mem_MaskFill(unmapped_page,         0x05FE0000, 0x05FEFFFF,    0xFF, 4, 2, VM_PP_NA); //SCU Regs
+	mem_MaskFill(wram + HIGH_WRAM_SIZE, 0x06000000, 0x07FFFFFF, 0xFFFFF, 2, 2, VM_PP_RW); //High RAM
 	//Handler for sh2 memory mapping
 	VM_MemMap(unmapped_page, 0x10000000, PAGE_SIZE, VM_PP_NA);
    // Initialize everyting to unhandled to begin with
@@ -961,4 +964,50 @@ void FormatBackupRam(void *mem, u32 size)
    }
 }
 
+s32 num_dumps = 0;
 
+void dump_memory(void)
+{
+	return;
+	if (num_dumps > 0) {
+		return;
+	}
+
+	num_dumps++;
+	char fname[32];
+#ifdef USE_SH2_OLD
+	sprintf(fname, "sd:/memdump_int_%d.bin", num_dumps);
+#else
+	sprintf(fname, "sd:/memdump_drc_%d.bin", num_dumps);
+#endif
+	FILE *fp = fopen(fname, "wb");
+	if (!fp) {
+		exit(0);
+	}
+	//Write memory sectors
+	fwrite("WRAM............", 16, 1, fp);
+	fwrite(wram, 0x200000, 1, fp);
+	fwrite("VDP1FB..........", 16, 1, fp);
+	fwrite(Vdp1FrameBuffer, 0x80000, 1, fp);
+	fwrite("VDP1RAM.........", 16, 1, fp);
+	fwrite(Vdp1Ram, 0x80000, 1, fp);
+	fwrite("SoundRam........", 16, 1, fp);
+	fwrite(SoundRam, 0x80000, 1, fp);
+	fwrite("VDP2RAM.........", 16, 1, fp);
+	fwrite(Vdp2Ram, sizeof(Vdp2), 1, fp);
+	fwrite("VDP2CRAM........", 16, 1, fp);
+	fwrite(Vdp2ColorRam, 0x1000, 1, fp);
+	fwrite("MSH2OnChip......", 16, 1, fp);
+#ifdef USE_SH2_OLD
+	fwrite(&MSH2->onchip, sizeof(MSH2->onchip), 1, fp);
+#else
+	fwrite(msh2.on_chip, sizeof(msh2.on_chip), 1, fp);
+#endif
+	fwrite("MSH2Regs........", 16, 1, fp);
+#ifdef USE_SH2_OLD
+	fwrite(&MSH2->regs, 23*4, 1, fp);
+#else
+	fwrite(&msh2, 23*4, 1, fp);
+#endif
+	fclose(fp);
+}

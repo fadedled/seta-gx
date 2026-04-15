@@ -400,25 +400,20 @@ static void writeloadimdest(u8 num, u32 val)
 //Half-Done
 void dsp_dma01(scudspregs_struct *sc, u32 inst)
 {
-	u32 i;
 	u32 imm = ((inst & 0xFF));
 	u8  sel = ((inst >> 8) & 0x03);
-	u32 *md = sc->MD[sel];
-	u32 ct = sc->CT[sel];// & 0x3F;
+	//u8  addr = sc->CT[sel];
+	u32 i;
 
 	const u32 mode = (inst >> 15) & 0x7;
-	const u32 add = (1 << (mode & 0x2)) & ~1;
+	const u32 add = (1 << (mode & 0x2)) &~1;
 
-	u32 ra0m = sc->RA0M << 2;
-
-	for (i = 0; i < imm ; ++i) {
-		md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
-		++ct;
-		ra0m += add;   //sc->RA0M += (add >> 2);
+	for (i = 0; i < imm ; i++) {
+		sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)]((sc->RA0M << 2));
+		sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
+		sc->RA0M += (add >> 2);
 	}
 
-	sc->RA0M = ra0m >> 2;
-	sc->CT[sel] = ct & 0x3F;
     sc->ProgControlPort.part.T0 = 0;
     sc->RA0 = sc->RA0M;
 }
@@ -428,46 +423,43 @@ void dsp_dma_write_d0bus(scudspregs_struct *sc, int sel, int add, int count)
 {
 	int i;
 	u32 Adr = (sc->WA0M << 2) & 0x0FFFFFFF;
-	u32 *md = sc->MD[sel];
-	u32 ct = sc->CT[sel]; // & 0x3F;
 
 	// A-BUS?
 	if (Adr >= 0x02000000 && Adr < 0x05A00000) {
 		if (add > 1) add = 1;
 		WriteFunc32 write32_func = mem_write32_arr[MEM_GET_FUNC_ADDR(Adr)];
-		for (i = 0; i < count; ++i) {
-			u32 Val = md[ct & 0x3F];
+		for (i = 0; i < count; i++) {
+			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
 			Adr = (sc->WA0M << 2);
 			write32_func(Adr, Val);
-			++ct;
+			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
 			sc->WA0M += add;
 		}
 	} // B-BUS?
 	else if (Adr >= 0x05A00000 && Adr < 0x06000000){
-		if (add == 0) add = 1 << 2;
+		if (add == 0) add = 1;
 		WriteFunc16 write16_func = mem_write16_arr[MEM_GET_FUNC_ADDR(Adr)];
-		for (i = 0; i < count; ++i) {
-			u32 Val = md[ct & 0x3F];
+		for (i = 0; i < count; i++) {
+			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
 			write16_func(Adr, (Val>>16));
 			write16_func(Adr+2, Val);
-			++ct;
-			Adr += add;
+			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
+			Adr += (add << 2);
 		}
-		sc->WA0M = sc->WA0M + ((add >> 2) * count);
+		sc->WA0M = sc->WA0M + ((add*count));
 	} // CPU-BUS
 	else {
 		add >>= 1;
 		if (add == 0) add = 1;
-		for (i = 0; i < count; ++i) {
-			u32 Val = md[ct & 0x3F];
+		for (i = 0; i < count; i++) {
+			u32 Val = sc->MD[sel][sc->CT[sel] & 0x3F];
 			Adr = (sc->WA0M << 2);
 			T2WriteLong(wram, (Adr & 0xFFFFC) | 0x100000, Val);
-			++ct;
+			sc->CT[sel] = (sc->CT[sel] + 1) & 0x3F;
 			sc->WA0M += add;
 		}
 	}
 
-	sc->CT[sel] = ct & 0x3F;
 	sc->WA0 = sc->WA0M;
 	sc->ProgControlPort.part.T0 = 0;
 }
@@ -486,52 +478,35 @@ void dsp_dma02(scudspregs_struct *sc, u32 inst)
 //DONE
 void dsp_dma03(scudspregs_struct *sc, u32 inst)
 {
-	u32 count = sc->dsp_dma_size;
+	u32 Counter = sc->dsp_dma_size;
 	u32 i;
-	int sel = (inst >> 8) & 0x7;
+	int sel;
+
+	sel = (inst >> 8) & 0x7;
 	int index = 0;
-	u32 *md = sc->MD[sel];
-	u32 ct = sc->CT[sel];// & 0x3F;
 
 	const u32 mode = (inst >> 15) & 0x7;
-	const u32 add = (1 << (mode & 0x2)) &~1; //XXX: These make no sense
+	const u32 add = (1 << (mode & 0x2)) &~1;
 
 	u32 abus_check = ((sc->RA0M << 2) & 0x0FF00000);
-	u32 ra0m = sc->RA0M << 2;
 
-#if 0
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < Counter; i++) {
 		if (sel == 0x04) {
-			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
-			++index;
+			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
+			index++;
 		}
 		else {
-			        md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
-			++ct;
+			sc->MD[sel][sc->CT[sel] & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(sc->RA0M << 2)](sc->RA0M << 2);
+			sc->CT[sel]++;
+			sc->CT[sel] &= 0x3F;
 		}
-		ra0m += add;
+		sc->RA0M += (add >> 2);
 	}
-#else
-	if (sel == 0x04) {
-		for (i = 0; i < count; i++) {
-			sc->ProgramRam[index] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
-			++index;
-			ra0m += add;
-		}
-	} else {
-		for (i = 0; i < count; i++) {
-			md[ct & 0x3F] = mem_read32_arr[MEM_GET_FUNC_ADDR(ra0m)](ra0m);
-			++ct;
-			ra0m += add;
-		}
-	}
-#endif
 
-	sc->CT[sel] = ct & 0x3F;
-	sc->RA0M += (ra0m >> 2);
 	if (!(abus_check >= 0x02000000 && abus_check < 0x05900000)){
 		sc->RA0 = sc->RA0M;
 	}
+
     sc->ProgControlPort.part.T0 = 0;
 }
 

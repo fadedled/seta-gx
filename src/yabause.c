@@ -74,6 +74,7 @@ int lagframecounter;
 int LagFrameFlag;
 int framelength=16;
 int framecounter;
+u32 mem1_size;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -375,7 +376,7 @@ int YabauseEmulate(void) {
    	lagframecounter += (LagFrameFlag == 1);
 	framecounter++;
 	LagFrameFlag = 1;
-
+	mem1_size = SYS_GetArena1Size();
 	u64 cycles_start;
 	while (!oneframeexec) {
       PROFILE_START("Total Emulation");

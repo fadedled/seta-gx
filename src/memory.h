@@ -276,6 +276,8 @@ u32 FASTCALL mem_Read32(u32 addr);
 void FASTCALL mem_Write8(u32 addr, u8 val);
 void FASTCALL mem_Write16(u32 addr, u16 val);
 void FASTCALL mem_Write32(u32 addr, u32 val);
+#define mem_CyclesR(addr)		1
+#define mem_CyclesW(addr)		1
 #else
 #define mem_Read8(addr)			(mem_read8_arr[((addr) >> 19) & 0xFF](addr))
 #define mem_Read16(addr)		(mem_read16_arr[((addr) >> 19) & 0xFF](addr))
@@ -283,7 +285,10 @@ void FASTCALL mem_Write32(u32 addr, u32 val);
 #define mem_Write8(addr, val)	(mem_write8_arr[((addr) >> 19) & 0xFF](addr, val))
 #define mem_Write16(addr, val)	(mem_write16_arr[((addr) >> 19) & 0xFF](addr, val))
 #define mem_Write32(addr, val)	(mem_write32_arr[((addr) >> 19) & 0xFF](addr, val))
+#define mem_CyclesR(addr)		(mem_r_cycles[((addr) >> 19) & 0xFF])
+#define mem_CyclesW(addr)		(mem_w_cycles[((addr) >> 19) & 0xFF])
 #endif
+
 
 u8 FASTCALL mem_ReadNoCache8(u32 addr);
 u16 FASTCALL mem_ReadNoCache16(u32 addr);
@@ -315,6 +320,9 @@ extern WriteFunc32 mem_write32_arr[0x100];
 extern ReadFunc8 mem_read8_arr[0x100];
 extern ReadFunc16 mem_read16_arr[0x100];
 extern ReadFunc32 mem_read32_arr[0x100];
+
+extern u8 mem_r_cycles[0x100];
+extern u8 mem_w_cycles[0x100];
 
 #define MEM_GET_FUNC_ADDR(addr) (((addr) >> 19) & 0xFF)
 
@@ -358,5 +366,7 @@ void FormatBackupRam(void *mem, u32 size);
 u32 getMemClock(u32 addr);
 
 u16 FASTCALL bios_Read16(u32 addr);
+
+void dump_memory(void);
 
 #endif
