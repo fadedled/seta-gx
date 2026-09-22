@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include "sgx/sgx.h"
 #include "vdp2.h"
+#include "config.h"
 #include "debug.h"
 #include "scu.h"
 #ifdef USE_SH2_OLD
@@ -36,6 +37,7 @@
 #include <ogc/lwp_watchdog.h>
 #include "sgx/sgx.h"
 #include "sgx/svi.h"
+#include "profile.h"
 
 u8 * Vdp2Ram;
 u8 * Vdp2ColorRam;
@@ -286,7 +288,7 @@ static void FPSDisplay(void)
 {
 	static int fpsframecount = 0;
 	static u64 fpsticks;
-	osd_FPSDraw(fps);
+	osd_PrintfColored(8, 8, OSD_COLOR_GREEN, "FPS:%d", fps);
 	fpsframecount++;
 
 	if(YabauseGetTicks() >= fpsticks + yabsys.tickfreq) {
@@ -299,28 +301,26 @@ static void FPSDisplay(void)
 
 //////////////////////////////////////////////////////////////////////////////
 //HALF-DONE
+
+static u64 current_ticks = 0;
 void Vdp2VBlankIN(void) {
    //XXX: Check that this is fine
    //VidSoftVdp2DrawEnd();
-   Vdp2Regs->TVSTAT |= 0x0008;
-   ScuSendVBlankIN();
+   	Vdp2Regs->TVSTAT |= 0x0008;
+   	ScuSendVBlankIN();
 
-   //if (yabsys.IsSSH2Running)
-    //  SH2SendInterrupt(SSH2, 0x43, 0x6);
-	u32 cycles_start;
+
 	GX_InvalidateTexAll();
-
 	//If there where changes in resolution then apply them
 	SVI_SetResolution(Vdp2Regs->TVMD);
-
 	if (Vdp2Regs->TVMD & 0x8000) {
-		DCFlushRange(Vdp2Ram, 0x80000);
+   		DCFlushRange(Vdp2Ram, 0x80000);
 		DCFlushRange(Vdp2ColorRam, 0x1000);
 
-		cycles_start = gettime();
+		prof_Start(PROF_VDP2);
 		SGX_Vdp2GenCRAM();
 		SGX_Vdp2Draw();
-		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
+		prof_StopAndAdd(PROF_VDP2);
 	} else { // Will not render this frame
 		SVI_ClearFrame();
 	}
@@ -359,62 +359,24 @@ void Vdp2HBlankOUT(void) {
 
 //////////////////////////////////////////////////////////////////////////////
 
-static u64 current_ticks = 0;
-static u32 prev_tvmd = 0;
-
 void Vdp2VBlankOUT(void)
 {
 	Vdp2Regs->TVSTAT = (Vdp2Regs->TVSTAT & ~0x0008) | 0x0002;
-	u32 cycles_start;
-#if 0
 
-	//VIDSoftVdp2DrawStart();
-	//SGX_InvalidateVRAM();
-	GX_InvalidateTexAll();
-	//SGX_TlutCRAMUpdate();
-
-	//GX_SetTevColorS10(GX_TEVREG0, ocolor_A);
-	//GX_SetTevColorS10(GX_TEVREG1, ocolor_B);
-
-	//If there where changes in resolution then apply them
-	SVI_SetResolution(Vdp2Regs->TVMD);
-
-	if (Vdp2Regs->TVMD & 0x8000) {
-		DCFlushRange(Vdp2Ram, 0x80000);
-		DCFlushRange(Vdp2ColorRam, 0x1000);
-		cycles_start = gettime();
-		Vdp1Draw();
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
-
-		cycles_start = gettime();
-		SGX_Vdp2GenCRAM();
-		SGX_Vdp2Draw();
-		osd_ProfAddTime(PROF_VDP2, gettime() - cycles_start);
-	} else {
-		Vdp1NoDraw();	//Do nothing
-		SVI_ClearFrame();
-	}
-	if (yabsys.flags & SYS_FLAGS_SHOW_FPS) {
-		FPSDisplay();
-	}
-#if 1
-	osd_ProfDraw();
-#endif
-#endif
 	if (Vdp2Regs->TVMD & 0x8000) {
 		SVI_CopyFrame(); // Finished drawing VDP2
-		cycles_start = gettime();
+		prof_Start(PROF_VDP1);
 		Vdp1Draw();
-		osd_ProfAddTime(PROF_VDP1, gettime() - cycles_start);
+		prof_StopAndAdd(PROF_VDP1);
 	} else {
 		Vdp1NoDraw();	//Do nothing
 	}
-	if (yabsys.flags & SYS_FLAGS_SHOW_FPS) {
+	if (CONF_GET_OPT(CONF_OPT_SHOW_FPS)) {
 		FPSDisplay();
 	}
-	#if 1
-		osd_ProfDraw();
-	#endif
+	if (CONF_GET_OPT(CONF_OPT_SHOW_PROFILE)) {
+		prof_Draw();
+	}
 	SGX_Vdp1SwapFramebuffer();
 	//XXX: Limit FPS.. we can do better than this
 	SVI_SwapBuffers((u32) ticks_to_millisecs((gettime() - current_ticks)) < 16);
@@ -426,8 +388,7 @@ void Vdp2VBlankOUT(void)
 		Vdp1External.manualerase = 1;
 	}
 
-
-   ScuSendVBlankOUT();
+	ScuSendVBlankOUT();
 }
 
 //////////////////////////////////////////////////////////////////////////////

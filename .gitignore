@@ -1,8 +1,11 @@
 /SetaGX
-/saves
 /Wii-plan.odt
-/vgames
+/notes.txt
+/release
 /build
 /*.dol
 /*.elf
 /src/*.old
+/src/sh2old
+/src/drc/m68k
+/src/drc/scu_dsp

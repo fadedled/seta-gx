@@ -1,4 +1,17 @@
-
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 
 #include "sh2.h"
@@ -66,19 +79,17 @@ void sh2_Deinit(void)
 
 void sh2_PowerOn(SH2 *sh)
 {
-	sh->pc = mem_Read32(0x0);	//Get from vector address table
-	sh->r[15] = mem_Read32(0x4); //Get from vector address table
-	sh->vbr = 0x0;
-	sh->sr |= 0xF0;
-	sh->cycles = 0;
+	sh->pc = mem_Read32(sh->vbr + 0x0);	//Get from vector address table
+	sh->r[15] = mem_Read32(sh->vbr + 0x4); //Get from vector address table
 	//__OpenSH2Writer();
 }
 
 
 void sh2_Reset(SH2 *sh)
 {
-	sh->pc = mem_Read32(0x8);	//Get from vector address table
-	sh->r[15] = mem_Read32(0xC); //Get from vector address table
+	for (u32 i = 0; i < 16; i++) {
+		sh->r[i] = 0;
+	}
 	sh->vbr = 0x0;
 	sh->gbr = 0x0;
 	sh->mach = 0x0;
@@ -169,6 +180,7 @@ void sh2_Exec(SH2 *sh, u32 cycles)
 	sh_ctx = sh;
 	//if (!(sh->flags & SH2_FLAG_SLEEPING)) {
 	sh2_DrcExec(sh, cycles);
+	//sh2_IntExec(sh, cycles);
 	cycles += sh->cycles;
 	sh2_FRTExec(sh, cycles);
 	sh2_WDTExec(sh, cycles);
@@ -287,7 +299,8 @@ void sh2_NMI(SH2 *sh)
 
 void sh2_WriteNotify(u32 start, u32 len)
 {
-	HashClearRange(start, start + len);
+	//Align to 4KB
+	HashClearRange(start, len);
 }
 
 
@@ -560,8 +573,6 @@ void sh2_OnchipWrite8(u32 addr, u8 val)
 		case 0x0E3: sh->on_chip[OC_IPRA+1] = val & 0xF0; break;
 		case 0x0E4: sh->on_chip[OC_VCRWDT]   = val & 0x7F; break;
 		case 0x0E5: sh->on_chip[OC_VCRWDT+1] = val & 0x7F; break;
-		default:
-			//Unhandled On chip write byte
 	}
 }
 
@@ -611,8 +622,6 @@ void sh2_OnchipWrite16(u32 addr, u16 val)
 		case 0x174: {OCR_BDMRBH = val;} break;
 		case 0x176: {OCR_BDMRBL = val;} break;
 		case 0x178: {OCR_BRCR = val & 0xF4DC;} break;
-		default:
-			//Unhandled On chip write word
 	}
 }
 
@@ -650,7 +659,7 @@ static inline void _calcDiv32(SH2 *sh, s32 val)
 
 static inline void _calcDiv64(SH2 *sh, u32 val)
 {
-#if 1
+#if 0
 	const s32 kMinValue32 = 0x80000000;
 	const s32 kMaxValue32 = 0x7FFFFFFF;
 
@@ -720,7 +729,7 @@ static inline void _calcDiv64(SH2 *sh, u32 val)
 	s64 dividend = OCR_DVDNTH;
 	dividend <<= 32;
 	dividend |= val;
-w
+
 	if (divisor == 0) {
 		if (OCR_DVDNTH & 0x80000000)
 		{
@@ -824,8 +833,6 @@ void sh2_OnchipWrite32(u32 addr, u32 val)
 		case 0x1EC: {OCR_MCR = val & 0xFEFC;} break;
 		case 0x1F0: {OCR_RTCSR = val & 0xF8;} break;
 		case 0x1F8: {OCR_RTCOR = val & 0xFF;} break;
-		default:
-			//Unhandled On chip write long
 	}
 }
 
@@ -974,7 +981,7 @@ void sh2_Write32(u32 addr, u32 val)
 //#define MAX_PREV 1024
 //const u32 dol_breakpoint = 0x06000950;
 //u32 dol_prev_unreached = 0;
-//u32 dol_breakpoint_val = 0;
+u32 dol_breakpoint_val = 0;
 //u32 dol_prev_pos = 0;
 //u32 dol_prev[MAX_PREV];
 
@@ -1013,6 +1020,7 @@ u16* sh2_GetPCAddr(u32 pc)
 		case 0x06F:
 			return (u16*) (wram + LOW_WRAM_SIZE + (pc & (HIGH_WRAM_SIZE - 1)));
 		default: // Invalid
+		dol_breakpoint_val = pc;
 			return (u16*) (0xDEADBEEF);
 	}
 	return 0;

@@ -1,12 +1,28 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
+
 #include "sgx.h"
 
 
-#define INDTEX_SIZE			0x8000
+#define INDTEX_START_ADDRESS	0x60000
+#define INDTEX_SIZE				0x8000
 
 static u8 indtex_data[INDTEX_SIZE] ATTRIBUTE_ALIGN(32);
 static u32 ind_addr = 0;
 static SGXTexPre indtex_arr[3*4*64];
-u32 preloadtex_addr = 0x60000 >> 5;	//Begin address of preloaded textures
+u32 preloadtex_addr = INDTEX_START_ADDRESS >> 5;	//Begin address of preloaded textures
 
 // 4bpp indirect
 // n is the width divided by 8

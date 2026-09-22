@@ -27,6 +27,7 @@
 #include "m68kcore.h"
 #include "memory.h"
 #include "scsp.h"
+#include "profile.h"
 #include "yabause.h"
 
 #include <math.h>
@@ -1167,7 +1168,7 @@ int ScspChangeCore(int coreid)
       }
    }
 
-/*
+
    if (SCSCore == NULL)
    {
       SCSCore = &SCSDummy;
@@ -1184,7 +1185,7 @@ int ScspChangeCore(int coreid)
 
       SCSCore = &SCSDummy;
    }
-*/
+
 
    return 0;
 }
@@ -1434,16 +1435,18 @@ static void ScspDoExec(u32 cycles)
 
       ScspRunM68K(this_cycles);
 
+	  prof_Start(PROF_SCSP);
       ScspUpdateTimer(this_samples, &scsp.tima, scsp.tactl,
                       SCSP_INTERRUPT_TIMER_A);
       ScspUpdateTimer(this_samples, &scsp.timb, scsp.tbctl,
                       SCSP_INTERRUPT_TIMER_B);
       ScspUpdateTimer(this_samples, &scsp.timc, scsp.tcctl,
                       SCSP_INTERRUPT_TIMER_C);
+	prof_StopAndAdd(PROF_SCSP);
    }
 
       s32 *buf;
-
+   prof_Start(PROF_SCSP);
       // Update sound buffers
       if (scsp_sound_left + sample_count > SCSP_SOUND_BUFSIZE)
       {
@@ -1484,6 +1487,7 @@ static void ScspDoExec(u32 cycles)
    // Update scsp_clock last, so the main thread can use it as a signal
    // that we've finished processing to this point
    scsp_clock += cycles;
+   prof_StopAndAdd(PROF_SCSP);
 }
 
 //-------------------------------------------------------------------------

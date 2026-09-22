@@ -3284,7 +3284,6 @@ SCSScsp1Init(int coreid, void (*interrupt_handler)(void))
 int
 ScspChangeSoundCore (int coreid)
 {
-	int i;
 
 	//TODO: Dont deinit, just pause
     snd_DeInit();
@@ -3507,7 +3506,12 @@ ScspReceiveCDDA (const u8 *sector)
 SCSScsp1ScspReceiveCDDA (const u8 *sector)
 #endif
 {
-  memcpy(cddabuf.sectors[cddanextin], sector, 2352);
+ // memcpy(cddabuf.sectors[cddanextin], sector, 2352);
+  f64 *cdda_src = (f64*) &cddabuf.sectors[cddanextin];
+  f64 *cdda_dst = (f64*) sector;
+  for (u32 i = 0; i < (2352 >> 3); ++i) {
+	*cdda_src++ = *cdda_dst++;
+  }
   cddanextin = (cddanextin+1) % (sizeof(cddabuf.sectors) /
                                  sizeof(cddabuf.sectors[0]));
   cddaoutleft += 2352;

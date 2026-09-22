@@ -1,3 +1,17 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #include "sgx.h"
 #include "../vdp1.h"
@@ -87,6 +101,7 @@ void SGX_Vdp1Init(void)
 {
 	//Set initial matrix
 	guMtxIdentity(vdp1mtx);
+
 	SGX_InitTex(GX_TEXMAP0, TEXREG(0x0000, TEXREG_SIZE_128K), 0);
 	SGX_InitTex(GX_TEXMAP1, TEXREG(0x20000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP2, TEXREG(0x28000, TEXREG_SIZE_32K), 0);
@@ -165,10 +180,6 @@ void SGX_Vdp1Begin(void)
 	GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_1_2);
 	GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
-
-	//Set how the textures are set up
-	//TODO: do this in another function
-	SGX_InitTex(GX_TEXMAP0, TEXREG(0x00000, TEXREG_SIZE_128K), 0);
 
 	//Draw the mesh z-texture vvv
 	GX_SetNumIndStages(0);
@@ -294,7 +305,7 @@ void SGX_Vdp1DrawFramebuffer(void)
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
 	SGX_BeginVdp1();
-	GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
+	//GX_SetBlendMode(GX_BM_NONE, GX_BL_ONE, GX_BL_ZERO, GX_LO_CLEAR);
 	GX_SetCurrentMtx(MTX_IDENTITY);
 	GX_SetAlphaCompare(GX_GREATER, 0, GX_AOP_AND, GX_ALWAYS, 0);
 	//Generate and load the Priority and Colorcalculation TLUT
@@ -483,7 +494,7 @@ static void __Vdp1Convert16bpp(void)
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 	GX_SetTexCopyDst(vdp1_fb_w, vdp1_fb_h, GX_CTF_R8, GX_FALSE);
 	GX_CopyTex(prcc_tex[back_fb], GX_TRUE);
-	GX_PixModeSync(); //Not necesary?
+	GX_PixModeSync();
 	vdp1pix.fb_w = vdp1_fb_w;
 	vdp1pix.fb_h = vdp1_fb_h;
 }

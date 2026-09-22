@@ -1,22 +1,17 @@
-/*  Copyright 2005 Guillaume Duhamel
-    Copyright 2005-2006 Theo Berkau
-
-    This file is part of Yabause.
-
-    Yabause is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    Yabause is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Yabause; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #ifndef PERIPHERAL_H
 #define PERIPHERAL_H
@@ -236,24 +231,39 @@ typedef struct PerData_t {
 
 extern PerData per_data;
 
+enum PadType {
+	PAD_TYPE_NONE,
+	PAD_TYPE_GCPAD,
+	PAD_TYPE_WIIMOTE,
+	PAD_TYPE_CLASSIC,
+	PAD_TYPE_N64PAD,
+	PAD_TYPE_WIIUPAD,
+	PAD_TYPE_MAX
+};
 
-#define PAD_TYPE_NONE		0
-#define PAD_TYPE_GCPAD		1
-#define PAD_TYPE_WIIMOTE	2
-#define PAD_TYPE_CLASSIC	3
-#define PAD_TYPE_N64PAD		4
-#define PAD_TYPE_WIIUPRO	5
 
 typedef struct PerPad_t {
 	u32 type;
 	u32 port;
 	u32 prev_btn;
 	u32 btn;
-	s16 x;
-	s16 y;
-	s16 sx;
-	s16 sy;
+	s8  x;
+	s8  y;
+	s8  sx;
+	s8  sy;
 } PerPad;
+
+#define PERMAP_NOTMAPPED		0x01
+
+typedef struct PerMap_t {
+	u32 c_map;	/* constant mapped buttons for peripheral */
+	u32 v_map;	/* remappable buttons for peripheral */
+} PerMap;
+
+
+
+void per_SetMappingForType(u32 type, u32 new_mapping);
+
 
 extern PerPad perpad[PER_PADMAX];
 
@@ -288,8 +298,8 @@ extern PerPad perpad[PER_PADMAX];
 #define PAD_DI_RIGHT				0x0080
 #define PAD_DI_L 					0x0800
 #define PAD_DI_Z					0x1000
-#define PAD_DI_X					0x2000
-#define PAD_DI_Y					0x4000
+#define PAD_DI_Y					0x2000
+#define PAD_DI_X					0x4000
 #define PAD_DI_R		 			0x8000
 
 
@@ -303,8 +313,8 @@ extern PerPad perpad[PER_PADMAX];
 #define PAD_DI_BIT_RIGHT			7
 #define PAD_DI_BIT_L 				(3+8)
 #define PAD_DI_BIT_Z				(4+8)
-#define PAD_DI_BIT_X				(5+8)
-#define PAD_DI_BIT_Y				(6+8)
+#define PAD_DI_BIT_Y				(5+8)
+#define PAD_DI_BIT_X				(6+8)
 #define PAD_DI_BIT_R		 		(7+8)
 
 //Gamecube controller bit shifts
@@ -336,38 +346,38 @@ extern PerPad perpad[PER_PADMAX];
 #define WII_BIT_HOME			15
 
 //Classic controller bit shifts
-#define WCL_BIT_UP			(8+16)
-#define WCL_BIT_LEFT		(9+16)
+#define WCL_BIT_R			 (1+16)
+#define WCL_BIT_PLUS		 (2+16)
+#define WCL_BIT_HOME		 (3+16)
+#define WCL_BIT_MINUS		 (4+16)
+#define WCL_BIT_L			 (5+16)
+#define WCL_BIT_DOWN		 (6+16)
+#define WCL_BIT_RIGHT		 (7+16)
+#define WCL_BIT_UP			 (8+16)
+#define WCL_BIT_LEFT		 (9+16)
 #define WCL_BIT_ZR			(10+16)
 #define WCL_BIT_X			(11+16)
 #define WCL_BIT_A			(12+16)
 #define WCL_BIT_Y		 	(13+16)
 #define WCL_BIT_B 			(14+16)
 #define WCL_BIT_ZL			(15+16)
-#define WCL_BIT_R			(1+16)
-#define WCL_BIT_PLUS		(2+16)
-#define WCL_BIT_HOME		(3+16)
-#define WCL_BIT_MINUS		(4+16)
-#define WCL_BIT_L			(5+16)
-#define WCL_BIT_DOWN		(6+16)
-#define WCL_BIT_RIGHT		(7+16)
 
-//Classic controller bit shifts
-#define WUP_BIT_UP			(8+16)
-#define WUP_BIT_LEFT		(9+16)
-#define WUP_BIT_ZR			(10+16)
-#define WUP_BIT_X			(11+16)
-#define WUP_BIT_A			(12+16)
-#define WUP_BIT_Y		 	(13+16)
-#define WUP_BIT_B 			(14+16)
-#define WUP_BIT_ZL			(15+16)
-#define WUP_BIT_R			(1+16)
-#define WUP_BIT_PLUS		(2+16)
-#define WUP_BIT_HOME		(3+16)
-#define WUP_BIT_MINUS		(4+16)
-#define WUP_BIT_L			(5+16)
-#define WUP_BIT_DOWN		(6+16)
-#define WUP_BIT_RIGHT		(7+16)
+//Wii U gamepad bit shifts
+#define WIIU_BIT_HOME		1
+#define WIIU_BIT_MINUS		2
+#define WIIU_BIT_PLUS		3
+#define WIIU_BIT_R			4
+#define WIIU_BIT_L			5
+#define WIIU_BIT_ZR			6
+#define WIIU_BIT_ZL			7
+#define WIIU_BIT_DOWN		8
+#define WIIU_BIT_UP			9
+#define WIIU_BIT_RIGHT		10
+#define WIIU_BIT_LEFT		11
+#define WIIU_BIT_Y			12
+#define WIIU_BIT_X			13
+#define WIIU_BIT_B 			14
+#define WIIU_BIT_A			15
 
 //N64 controller bit shifts
 #define N64_BIT_RIGHT   0
@@ -391,6 +401,7 @@ void per_Init(void);
 u32 per_updatePads(void);
 void per_closePad(u32 indx);
 
+#define AXIS_TO_DIGITAL(x, y)			(((x < -40) << PAD_DI_BIT_LEFT) | ((x > 40) << PAD_DI_BIT_RIGHT) | (((y < -40) << PAD_DI_BIT_DOWN) | ((y > 40) << PAD_DI_BIT_UP)))
 #define GC_AXIS_TO_DIGITAL(x, y)		(((x < -46) << GC_BIT_LEFT) | ((x > 46) << GC_BIT_RIGHT) | (((y < -54) << GC_BIT_DOWN) | ((y > 54) << GC_BIT_UP)))
 #define CLASSIC_AXIS_TO_DIGITAL(x, y)	(((x < -30) << WCL_BIT_LEFT) | ((x > 30) << WCL_BIT_RIGHT) | (((y < -30) << WCL_BIT_DOWN) | ((y > 30) << WCL_BIT_UP)))
 #define WIIUPRO_AXIS_TO_DIGITAL(x, y)	(((x < -30) << WCL_BIT_LEFT) | ((x > 30) << WCL_BIT_RIGHT) | (((y < -30) << WCL_BIT_DOWN) | ((y > 30) << WCL_BIT_UP)))

@@ -51,9 +51,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include <assert.h>
 #include <ctype.h>
 #include <wchar.h>
+#include <ogc/lwp_watchdog.h>
+#include "osd/osd.h"
 #include "cdbase.h"
 #include "error.h"
 #include "debug.h"
+#include "profile.h"
 
 static int LoadCHD(const char *chd_filename, FILE *iso_file);
 static int ISOCDReadSectorFADFromCHD(u32 FAD, void *buffer);
@@ -1147,6 +1150,9 @@ static int LoadCHD(const char *chd_filename, FILE *iso_file)
 
   chd_error error = chd_open(chd_filename, CHD_OPEN_READ, NULL, &pChdInfo->chd);
   if (error != CHDERR_NONE) {
+	//if (error == CHDERR_UNSUPPORTED_FORMAT) { //Probably used LZMA inside chd
+	//
+	//}
     return -1;
   }
 
@@ -1363,10 +1369,11 @@ static int ISOCDReadSectorFADFromCHD(u32 FAD, void *buffer) {
 
   int hunkid = (chdlba*CD_FRAME_SIZE) / pChdInfo->header->hunkbytes ;
   int hunk_offset =  (chdlba*CD_FRAME_SIZE) % pChdInfo->header->hunkbytes;
-
   if (pChdInfo->current_hunk_id != hunkid) {
-    chd_read(pChdInfo->chd, hunkid, pChdInfo->hunk_buffer);
-    pChdInfo->current_hunk_id = hunkid;
+    prof_Start(PROF_CDB);
+	chd_read(pChdInfo->chd, hunkid, pChdInfo->hunk_buffer);
+	prof_StopAndAdd(PROF_CDB);
+	pChdInfo->current_hunk_id = hunkid;
   }
 
   if (track->ctl_addr == 0x01) {

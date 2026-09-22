@@ -1,4 +1,17 @@
-
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #ifndef __SH2_H__
 #define __SH2_H__
@@ -194,8 +207,8 @@
 
 #define MAX_INTERRUPTS 	64 	//TODO: CHECK THIS
 
-#define EXT_IMM8(imm)		(((s32)(imm << 24)) >> 24)
-#define EXT_IMM12(imm)		(((s32)(imm << 20)) >> 20)
+//#define EXT_IMM8(imm)		(((s32)(imm << 24)) >> 24)
+//#define EXT_IMM12(imm)		(((s32)(imm << 20)) >> 20)
 
 
 typedef struct SH2_tag
@@ -216,7 +229,6 @@ typedef struct SH2_tag
 	s32 cycles_leftover;
 	u32 flags;
 
-
 	u32 frc_leftover;
 	u32 wdt_leftover;
 	u32 wdt_shift;
@@ -224,6 +236,7 @@ typedef struct SH2_tag
 
 	//u32 wdt_cntl; // isenable (OC_WTCSR & 0x20), isinterval (~OC_WTCSR & 0x40)
 	//XXX: Interrupt stuff
+	u16 *inst_addr;
 	u32 iqr_count;
 	u16 iqr[MAX_INTERRUPTS];
 

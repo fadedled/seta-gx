@@ -19,16 +19,18 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-#include <sys/types.h>
+#include <unistd.h>
 #include <string.h>
 #include "yabause.h"
 #include "cart.h"
 #include "cs2.h"
+#include "config.h"
 #include "debug.h"
 #include "error.h"
 #include "memory.h"
 #include "m68kcore.h"
 #include "peripheral.h"
+#include "profile.h"
 #include "scsp.h"
 #include "scu.h"
 #ifdef USE_SH2_OLD
@@ -36,6 +38,7 @@
 #else
 	#include "sh2/sh2.h"
 #endif
+#include "osd/gui.h"
 #include "osd/osd.h"
 #include "smpc.h"
 #include "vdp1.h"
@@ -51,7 +54,6 @@
 #include <string.h>
 extern char saves_dir[128];
 extern int eachbackupramon;
-extern char prev_itemnum[512];
 int declinenum = 10; //10 in original yabause
 int dividenumclock = 1; //1 in original yabause
 
@@ -67,7 +69,9 @@ int dividenumclock = 1; //1 in original yabause
 //Dynarec sh2
 
 yabsys_struct yabsys;
-char bupfilename[512];
+char cd_path[512];
+char bios_path[256];
+char bup_path[512];
 u64 tickfreq;
 
 int lagframecounter;
@@ -77,6 +81,232 @@ int framecounter;
 u32 mem1_size;
 
 //////////////////////////////////////////////////////////////////////////////
+//Core Scheduler, based on SCU
+
+/*
+
+enum SkdEvent {
+	EV_VDP1
+	EV_VDP2
+	EV_SCU_TIMER1
+	EV_SCSP_SAMPLE
+	EV_CDB_STATE
+	EV_CDB_COMMAND
+	EV_SMPC_COMMAND
+};
+
+typedef void (*SkdCallback)(void);
+
+void skd_Reset()
+{
+
+}
+
+void skd_RegisterEvent(SkdEvent ev, SkdCallback cb)
+{
+
+}
+
+void skd_RescheduleEvent(SkdEvent ev, u32 cycles)
+{
+
+}
+
+u32 skd_CyclesTillNextEvent(void)
+{
+
+}
+
+void skd_ExecNextEvent(void)
+{
+
+}
+
+void core_Init(CoreConfig *config) {
+	mem_Init();
+
+
+	core_Reset();
+}
+
+void core_Reset() {
+	clockspeed = CLK_320;
+	core_UpdateClockRatios();
+
+	skd_Reset();
+	sh2_Reset(&msh2);
+	sh2_Reset(&ssh2);
+	ss2h_enabled = 0;
+	scu_Reset();
+	vdp1_Reset();
+	vdp2_Reset();
+	smpc_Reset();
+	scsp_Reset();
+	cdb_Reset();
+}
+
+
+u32 core_LoadBIOS()
+{
+
+}
+
+#define SYNC_CYCLES 32
+
+struct CoreConfig {
+	//u32 sync_cycles = 32;
+} core;
+
+u32 core_Run()
+{
+	u32 cycles = skd_CyclesTillNextEvent();
+
+	u32 exec_cycles = cycles;
+	if (scu_IsDMAActive()) {
+		scu_Exec(exec_cycles);
+	} else {
+		exec_cycles = mshSpillover;
+		mshSpillover = 0;
+		if (ssh2_enabled) {
+			u32 slave_cycles = sshSpillover;
+			do {
+				sh2_Exec(msh2, exec_cycles);
+				sh2_Exec(ssh2, slave_cycles);
+				scu_Exec(exec_cycles);
+			} while (exec_cycles < cycles);
+		} else {
+			do {
+				sh2_Exec(msh2, exec_cycles);
+				scu_Exec(exec_cycles);
+			} while (exec_cycles < cycles);
+		}
+	}
+	skd_ExecNextEvent();
+}
+
+
+void core_ChangeTiming()
+{
+
+}
+
+*/
+
+#define CORE_STATE_RUNNING		0x1
+#define CORE_STATE_EXIT_REQ		0x2
+#define CORE_STATE_RESET_REQ	0x4
+#define CORE_STATE_AUTOLOAD		0x8
+
+struct Core_t {
+	u32 state;
+} core;
+
+void core_RegisterReset(void)
+{
+	core.state |= CORE_STATE_RESET_REQ;
+}
+
+
+void core_RegisterExit(void)
+{
+	core.state |= CORE_STATE_EXIT_REQ;
+}
+
+
+u32 core_IsRunning(void)
+{
+	return core.state & CORE_STATE_RUNNING;
+}
+
+
+char* core_SetAutoload(char* path, char* filename)
+{
+	core.state |= CORE_STATE_AUTOLOAD;
+	sprintf(cd_path, "%s/%s", path, filename);
+	return cd_path;
+}
+
+
+u32 core_Exec(void)
+{
+	u32 autoload = !(core.state & CORE_STATE_AUTOLOAD);
+	if (autoload) {
+		//Run GUI and get the selected filename
+		if (!gui_Exec()) {
+			return 0;
+		}
+		char *cd_filename = gui_GetSelectedFile();
+		if (cd_filename != NULL) {
+			sprintf(cd_path, "%s/%s", conf.dir[CONF_GAMES], cd_filename);
+		} else {
+			cd_path[0] = '\0';
+		}
+	}
+	yabauseinit_struct yinit;
+	int ret;
+	FILE *fp;
+
+	SVI_EnableNativeVideo(CONF_GET_OPT(CONF_OPT_NATIVE_VIDEO));
+
+	memset(&yinit, 0, sizeof(yabauseinit_struct));
+	//yinit.percoretype = PERCORE_WIICLASSIC;
+	yinit.sh2coretype = 0;
+	yinit.vidcoretype = 2;
+	yinit.scspcoretype = 2;
+	yinit.sndcoretype = 0;
+	yinit.cdcoretype = CDCORE_ISO;
+	yinit.m68kcoretype = 1;
+	yinit.carttype = 0;
+	yinit.regionid = REGION_AUTODETECT;
+	sprintf(bios_path, "%s/%s", conf.dir[CONF_BIOS], "bios.bin");
+	if (((fp = fopen(bios_path, "rb")) == NULL)) {
+		yinit.biospath = NULL;
+	} else {
+		yinit.biospath = bios_path;
+		fclose(fp);
+	}
+
+	yinit.mpegpath = NULL;
+	yinit.cartpath = NULL;
+	yinit.netlinksetting = NULL;
+	yinit.videoformattype = 0;
+	yinit.clocksync = 0;
+	yinit.basetime = 0;
+	yinit.usethreads = 0; // off (for now?)
+
+	VIDEO_SetBlack(1);
+	SVI_SetResolution(0x00D2);
+	VIDEO_WaitVSync();
+
+	core.state = CORE_STATE_RUNNING;
+
+	if ((ret = YabauseInit(&yinit)) == 0) {
+		ScspSetFrameAccurate(1);
+		YabauseSetDecilineMode(1);
+		VIDEO_SetBlack(0);
+
+		while(!(core.state & CORE_STATE_EXIT_REQ)) {
+			if (per_updatePads()) {
+				core.state |= CORE_STATE_EXIT_REQ;
+			} else {
+				YabauseExec();
+			}
+			if (core.state & CORE_STATE_RESET_REQ) {
+				YabauseReset();
+				core.state = core.state & ~CORE_STATE_RESET_REQ;
+			}
+		}
+		VIDEO_SetBlack(1);
+		YabauseDeInit();
+	}
+	SVI_SetResolution(0x80D2);
+	VIDEO_SetBlack(0);
+	VIDEO_WaitVSync();
+	return autoload;
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 
 void YabauseChangeTiming(int freqtype) {
    // Setup all the variables related to timing
@@ -127,45 +357,43 @@ int	YabauseInit(yabauseinit_struct *init)
 #endif
 
 #ifdef SCSP_PLUGIN
-   if (ScspChangeCore(init->scspcoretype) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "SCSP");
-      return -1;
-   }
+	if (ScspChangeCore(init->scspcoretype) != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "SCSP");
+		return -1;
+	}
 #endif
 
-   if (VideoInit(init->vidcoretype) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "Video");
-      return -1;
-   }
+	if (VideoInit(1) != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "Video");
+		return -1;
+	}
 
+	if (Cs2Init(init->carttype, init->cdcoretype, cd_path, NULL, NULL, NULL) != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "CS2");
+		return -1;
+	}
 
-   if (Cs2Init(init->carttype, init->cdcoretype, init->cdpath, init->mpegpath, NULL, NULL) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "CS2");
-      return -1;
-   }
+	Cs2GetRegionID(); //for getting itemnum
 
-   Cs2GetRegionID(); //for getting itemnum
-
-   if (cart_Init(init->carttype, init->cartpath) != 0)
-   {
-      YabSetError(YAB_ERR_CANNOTINIT, "Cartridge");
-      return -1;
-   }
+	if (cart_Init(init->carttype, init->cartpath) != 0) {
+		YabSetError(YAB_ERR_CANNOTINIT, "Cartridge");
+		return -1;
+	}
 
 	MappedMemoryInit();
 
-	//Get the BUP file
-	Cs2GetRegionID(); //for getting itemnum
-	for (u32 i = 0; i < sizeof(cdip->itemnum); ++i) {
-		cdip->itemnum[i] = ((cdip->itemnum[i] >= 33) && (cdip->itemnum[i] <= 126) ? cdip->itemnum[i] : '\0');
+	//Get the BUP savefile
+	char gameid[16];
+	u32 j = 0;
+	for (u32 i = 0; i < 10; ++i) {
+		char c = cdip->itemnum[i];
+		if ( '-' <= c && c <= 'z') {
+			gameid[j++] = c;
+		}
 	}
-	sprintf(bupfilename, "%s/%.10s.bup", saves_dir, cdip->itemnum);
-	if (LoadBackupRam(bupfilename)) {
-		FormatBackupRam(bup_ram, 0x10000);
-	}
+	gameid[j] = '\0';
+	sprintf(bup_path, "%s/%s.sav", conf.dir[CONF_SAVES], gameid);
+	bup_ReadSave(bup_path);
 	bup_ram_written = 0;
 
    if (ScuInit() != 0)
@@ -229,8 +457,9 @@ void YabauseDeInit(void) {
 #else
 	sh2_Deinit();
 #endif
-	if (SaveBackupRam(bupfilename))
-         YabSetError(YAB_ERR_FILEWRITE, (void *)bupfilename);
+	bup_WriteSave(bup_path);
+	//if (SaveBackupRam(bup_path))
+    //     YabSetError(YAB_ERR_FILEWRITE, (void *)bup_path);
 
    cart_Deinit();
    Cs2DeInit();
@@ -377,10 +606,7 @@ int YabauseEmulate(void) {
 	framecounter++;
 	LagFrameFlag = 1;
 	mem1_size = SYS_GetArena1Size();
-	u64 cycles_start;
 	while (!oneframeexec) {
-      PROFILE_START("Total Emulation");
-
       if (yabsys.DecilineMode) {
          // Since we run the SCU with half the number of cycles we send
          // to SH2Exec(), we always compute an even number of cycles here
@@ -389,16 +615,16 @@ int YabauseEmulate(void) {
          u32 sh2cycles = (yabsys.SH2CycleFrac >> (YABSYS_TIMING_BITS + 1)) << 1;
          yabsys.SH2CycleFrac &= ((YABSYS_TIMING_MASK << 1) | 1);
 			//Run the main SH2
-			cycles_start = gettime();
+			prof_Start(PROF_SH2M);
 #ifdef USE_SH2_OLD
 			SH2Exec(MSH2, sh2cycles);
 #else
 			//TODO: Cycles are not the same
 			sh2_Exec(&msh2, sh2cycles);
 #endif
-			osd_ProfAddTime(PROF_SH2M, gettime() - cycles_start);
+			prof_StopAndAdd(PROF_SH2M);
 			//Run the secondary SH2
-			cycles_start = gettime();
+			prof_Start(PROF_SH2S);
 			if (yabsys.IsSSH2Running)
 #ifdef USE_SH2_OLD
 				SH2Exec(SSH2, sh2cycles);
@@ -406,124 +632,85 @@ int YabauseEmulate(void) {
 			//TODO: Cycles are not the same
 				sh2_Exec(&ssh2, sh2cycles);
 #endif
-			osd_ProfAddTime(PROF_SH2S, gettime() - cycles_start);
+			prof_StopAndAdd(PROF_SH2S);
 
 #ifndef SCSP_PLUGIN
 #ifdef USE_SCSP2
-         PROFILE_START("SCSP");
          ScspExec(1);
-         PROFILE_STOP("SCSP");
 #endif
 #else
          if(SCSCore->id == SCSCORE_SCSP2)
          {
-            PROFILE_START("SCSP");
             SCSCore->Exec(1);
-            PROFILE_STOP("SCSP");
          }
 #endif
 
          yabsys.DecilineCount++;
-#ifndef GEKKO
-         if(yabsys.DecilineCount == 9)
-#else
-         if(yabsys.DecilineCount == declinenum - 1)
-#endif
-         {
+         if(yabsys.DecilineCount == declinenum - 1) {
             // HBlankIN
-            PROFILE_START("hblankin");
             Vdp2HBlankIN();
-            PROFILE_STOP("hblankin");
          }
 
 		//SCU
-		cycles_start = gettime();
+		prof_Start(PROF_SCU);
 		ScuExec(sh2cycles / 2);
-		osd_ProfAddTime(PROF_SCU, gettime() - cycles_start);
-
+		prof_StopAndAdd(PROF_SCU);
       }
 
 #ifndef SCSP_PLUGIN
 #ifndef USE_SCSP2
-      PROFILE_START("68K");
       M68KSync();  // Wait for the previous iteration to finish
-      PROFILE_STOP("68K");
-	  osd_ProfAddTime(PROF_M68K, 1);
 #endif
 #else
       if(SCSCore->id == SCSCORE_SCSP1)
       {
-         PROFILE_START("68K");
-         M68KSync();  // Wait for the previous iteration to finish
-         PROFILE_STOP("68K");
-		 osd_ProfAddTime(PROF_M68K, 2);
+		 M68KSync();  // Wait for the previous iteration to finish
       }
 #endif
 
-#ifndef GEKKO
-      if (!yabsys.DecilineMode || yabsys.DecilineCount == 10)
-#else
-      if (!yabsys.DecilineMode || yabsys.DecilineCount == declinenum)
-#endif
-      {
+      if (!yabsys.DecilineMode || yabsys.DecilineCount == declinenum) {
          // HBlankOUT
-         PROFILE_START("hblankout");
          Vdp2HBlankOUT();
-         PROFILE_STOP("hblankout");
 #ifndef SCSP_PLUGIN
 #ifndef USE_SCSP2
-         PROFILE_START("SCSP");
          ScspExec();
-		 osd_ProfAddTime(PROF_SCSP, 1);
-         PROFILE_STOP("SCSP");
 #endif
 #else
-         if(SCSCore->id == SCSCORE_SCSP1)
-         {
-            PROFILE_START("SCSP");
+         if(SCSCore->id == SCSCORE_SCSP1) {
             SCSCore->Exec(0);  // 0 is dummy value
-            PROFILE_STOP("SCSP");
-			osd_ProfAddTime(PROF_SCSP, 2);
          }
 #endif
          yabsys.DecilineCount = 0;
          yabsys.LineCount++;
          if (yabsys.LineCount == yabsys.VBlankLineCount)
          {
-            PROFILE_START("vblankin");
             // VBlankIN
             SmpcINTBACKEnd();
             Vdp2VBlankIN();
-            PROFILE_STOP("vblankin");
          }
          else if (yabsys.LineCount == yabsys.MaxLineCount)
          {
             // VBlankOUT
-            PROFILE_START("VDP1/VDP2");
             Vdp2VBlankOUT();
             yabsys.LineCount = 0;
             oneframeexec = 1;
-            PROFILE_STOP("VDP1/VDP2");
          }
       }
 
       yabsys.UsecFrac += usecinc;
-      cycles_start = gettime();
+	  prof_Start(PROF_SMPC);
       SmpcExec(yabsys.UsecFrac >> YABSYS_TIMING_BITS);
-      osd_ProfAddTime(PROF_SMPC, gettime() - cycles_start);
+      prof_StopAndAdd(PROF_SMPC);
 
 	//CD BLOCK
-	cycles_start = gettime();
 	Cs2Exec(yabsys.UsecFrac >> YABSYS_TIMING_BITS);
-	osd_ProfAddTime(PROF_CDB, gettime() - cycles_start);
-      yabsys.UsecFrac &= YABSYS_TIMING_MASK;
+	yabsys.UsecFrac &= YABSYS_TIMING_MASK;
 
 #ifndef SCSP_PLUGIN
 #ifndef USE_SCSP2
       {
          int cycles;
 
-         PROFILE_START("68K");
          cycles = m68kcycles;
 	 saved_centicycles += m68kcenticycles;
          if (saved_centicycles >= 100) {
@@ -531,8 +718,6 @@ int YabauseEmulate(void) {
             saved_centicycles -= 100;
          }
          M68KExec(cycles);
-         PROFILE_STOP("68K");
-		 osd_ProfAddTime(PROF_M68K, 3);
       }
 #endif
 #else
@@ -540,7 +725,6 @@ int YabauseEmulate(void) {
       {
          int cycles;
 
-         PROFILE_START("68K");
          cycles = m68kcycles;
          saved_centicycles += m68kcenticycles;
          if (saved_centicycles >= 100) {
@@ -548,23 +732,9 @@ int YabauseEmulate(void) {
             saved_centicycles -= 100;
          }
          M68KExec(cycles);
-         PROFILE_STOP("68K");
-		 osd_ProfAddTime(PROF_M68K, 4);
       }
 #endif
-
-      PROFILE_STOP("Total Emulation");
-
    }
-
-#ifndef SCSP_PLUGIN
-#ifndef USE_SCSP2
-   M68KSync();
-#endif
-#else
-   if(SCSCore->id == SCSCORE_SCSP1)
-      M68KSync();
-#endif
 
    return 0;
 }
@@ -916,6 +1086,7 @@ int YabauseQuickLoadGame(void)
       SH2SetRegisters(MSH2, &MSH2->regs);
 #else
 	  	msh2.pc = 0x06002E00;
+		//msh2.r[15] = Cs2GetMasterStackAddress();
 		sh2_WriteNotify(addr, blocks<<11);
 #endif
 
@@ -937,3 +1108,78 @@ int YabauseQuickLoadGame(void)
 }
 
 //////////////////////////////////////////////////////////////////////////////
+//Per game settings for cartridges
+#if 0
+u64 gameid_1MB[] = {
+	"T-1521G/x20" //Astra Superstars
+	"T-9904G/x20" //Cotton 2
+	"T-3111G/x20" //Metal Slug
+	"T-3114G/x20"
+	"T-22206G"    //Noël 3
+	"T-22205G"
+	"T-1217G/x20" //Cyberbots: FullMetal Madness
+	"T-1216G/x20"
+	"GS-9107/x20" //Fighter's History Dynamite
+	"GS-9153/x20"
+	"T-20109G"    //Friends: Seishun no Kagayaki
+	"T-14411G"    //Groove On Fight: Gouketsuji Ichizoku 3
+	"T-14413G"
+	"T-1215G/x20" //Marvel Super Heroes
+	"T-1214H/x20"
+	"T-7032H-"
+	"T-7032H-"
+	"T-7032H-"
+	"T-20114G"    //Pia Carrot e Youkoso!! 2
+	"T-3105G/x20" //Real Bout Garou Densetsu Best Collection
+	"T-3124G/x20"
+	"T-3117G/x20" //Real Bout Garou Densetsu Special
+	"T-3119G/x20"
+	"T-3123G/x20" //Samurai Spirits Best Collection
+	"T-3106G/x20" //Samurai Spirits Zankurou Musouken
+	"T-3104G/x20"
+	"T-16509G"    //Super Real Maajan P7
+	"T-16510G"
+	"T-3108G/x20" //The King of Fighters '96
+	"T-3109G/x20"
+	"T-3110G/x20" //The King of Fighters '96 + '95 (Gentei KOF Double Pack)
+	"T-3120G/x20" //The King of Fighters '97
+	"T-3121G/x20"
+	"T-3125G/x20" //The King of Fighters Best Collection
+	"T-1516G/x20" //Waku Waku 7
+	"T-1515G/x20"
+};
+
+u64 gameid_4MB[] = {
+	"T-1230G/x20" //Pocket Fighter†
+	"T-1247G/x20" //Street Fighter Zero 3
+	"T-1246G/x20"
+	"T-1228G/x20" //Vampire Savior: The Lord of Vampire
+	"T-1229G/x20"
+	"T-1227G/x20" //X-Men vs. Street Fighter
+	"T-1226G/x20"
+	"T-1239G/x20" //Marvel Super Heroes vs. Street Fighter
+	"T-1238G/x20"
+	"T-1249G/x20" //Final Fight Revenge
+	"T-1248G/x20"
+	"T-1224G/x20" //Dungeons & Dragons Collection
+	"T-1245G/x20"
+};
+
+static u32 __core_CheckID(u64 id, u64 *id_list, u32 entries) {
+	for (u32 i = 0; i < entries; ++i) {
+		if (*id_list == id) {
+			return 1;
+		}
+		id_list++;
+	}
+	return 0;
+}
+
+static u32 core_DetectCartridge(u8 *game_id) {
+	u64 id = *((u64*) game_id);
+	__core_CheckID(id, gameid_1MB, sizeof(gameid_1MB) / sizeof(*gameid_1MB));
+	__core_CheckID(id, gameid_4MB, sizeof(gameid_4MB) / sizeof(*gameid_4MB));
+	//__core_CheckID(id, gameid_1MB, sizeof(gameid_1MB) / sizeof(*gameid_1MB));
+
+}
+	#endif

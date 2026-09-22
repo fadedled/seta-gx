@@ -24,6 +24,42 @@
 
 #include "core.h"
 
+
+enum CoreTask {
+	SX_VBLANK_IN,
+	SX_VBLANK_OUT,
+	SX_HBLANK_IN,
+	SX_TIMER0,
+	SX_TIMER1,
+	SX_DPS_END,
+	SX_SOUND_REQUEST,
+	SX_SYSTEM_MANAGER,
+	SX_PAD_INTERRUPT,
+	SX_LEVEL2_DMA_END,
+	SX_LEVEL1_DMA_END,
+	SX_LEVEL0_DMA_END,
+	SX_DMA_ILLEGAL,
+	SX_SPRITE_DRAW_END,
+	SX_EXT_IRQ_00,
+	SX_EXT_IRQ_01,
+	SX_EXT_IRQ_02,
+	SX_EXT_IRQ_03,
+	SX_EXT_IRQ_04,
+	SX_EXT_IRQ_05,
+	SX_EXT_IRQ_06,
+	SX_EXT_IRQ_07,
+	SX_EXT_IRQ_08,
+	SX_EXT_IRQ_09,
+	SX_EXT_IRQ_0A,
+	SX_EXT_IRQ_0B,
+	SX_EXT_IRQ_0C,
+	SX_EXT_IRQ_0D,
+	SX_EXT_IRQ_0E,
+	SX_EXT_IRQ_0F,
+	SX_TASK_MAX
+};
+
+
 typedef struct
 {
    int percoretype;
@@ -38,8 +74,7 @@ typedef struct
    int carttype;
    u8 regionid;
    const char *biospath;
-   const char *cdpath;
-   const char *buppath;
+   const char *cdfilename;
    const char *mpegpath;
    const char *cartpath;
    const char *netlinksetting;
@@ -76,7 +111,7 @@ int YabauseQuickLoadGame(void);
 #define YABSYS_TIMING_MASK  ((1 << YABSYS_TIMING_BITS) - 1)
 
 #define SYS_FLAGS_SHOW_FPS 			0x2	/* Shows FPS on screen */
-#define SYS_FLAGS_SHOW_DEBUG 		0x2	/* Shows debug info on screen */
+#define SYS_FLAGS_SHOW_DEBUG 		0x4	/* Shows debug info on screen */
 
 typedef struct {
 	int DecilineMode;
@@ -105,5 +140,14 @@ extern int framelength;
 extern int framecounter;
 
 int YabauseEmulate(void);
+
+
+//New core stuff
+u32   core_Exec(void);
+char* core_SetAutoload(char* path, char* filename);
+void  core_RegisterReset(void);
+void  core_RegisterExit(void);
+u32   core_IsRunning(void);
+
 
 #endif

@@ -1,22 +1,17 @@
-/*  Copyright 2005 Guillaume Duhamel
-    Copyright 2005-2006 Theo Berkau
-
-    This file is part of Yabause.
-
-    Yabause is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    Yabause is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Yabause; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
-*/
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #include "debug.h"
 #include "peripheral.h"
@@ -24,84 +19,29 @@
 #include <wiiuse/wpad.h>
 #include <ogc/n64.h>
 
-PerPad perpad[PER_PADMAX];
-u32 pad_status = 0;
-PerData per_data;
-//PADStatus status_gc[PAD_CHANMAX];
-//JOYStatus status_64[JOY_CHANMAX];
+//For wii u version
+#ifdef WII_U_VERSION
+#include <wiidrc/wiidrc.h>
 
-//XXX: this is for gamepad configuration
-//static u8 gcpad_bitoffsets[16] = { 0, 0, 0, 0, 0, 0, 0, GC_BIT_A, GC_BIT_B, GC_BIT_Z2, GC_BIT_Y, GC_BIT_X, GC_BIT_Z };
-//static u8 wcpad_bitoffsets[16];
-//static u8 wpad_bitoffsets[16];
+u32 wiiu_inited;
+#endif /* WII_U_VERSION */
+
+
+PerData per_data;
+PerPad perpad[PER_PADMAX];
 
 
 void per_Init(void)
 {
-	//JOY_Init(status_64, status_gc);
-	pad_status = 0;
 	PAD_Init();
 	WPAD_Init();
+#ifdef WII_U_VERSION
+	WiiDRC_Init();
+	wiiu_inited = WiiDRC_Inited();
+#endif
+	WPAD_SetDataFormat(WPAD_CHAN_ALL, WPAD_FMT_BTNS_ACC_IR);
 	per_data.ids[0] = PER_ID_DIGITAL;
 }
-
-
-/*
-
-	u32 port_stat[2] = {PER_STAT_NONE, PER_STAT_NONE};
-	u32 per_num = 0;
-
-	//Reset ports
-	per_data.data_sent = 0;
-	per_data.data_size = 2;
-	per_data.data[0] = PER_STAT_NONE;	//Port 1
-	per_data.data[1] = PER_STAT_NONE;	//Port 2
-	per_data.port2_offset = 1;
-
-	//Fill with controllers from gc ports
-	u32 exit_code = __per_ScanPorts(&per_num);
-
-
-	u32 pad_types[PAD_CHANMAX];
-	u32 connected = 0;
-	u32 exit_code = 0;
-
-	//Read the N64 and GC controllers
-	JOY_Read(status_64, status_gc);
-	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		if (status_64[i].err == PAD_ERR_NONE) {
-			pad_types[i] = PAD_TYPE_N64PAD;
-			connected |= 1 << i;
-		} else if (status_gc[i].err == PAD_ERR_NONE) {
-			pad_types[i] = PAD_TYPE_GCPAD;
-			connected |= 1 << i;
-		}
-	}
-
-	//Add pads
-	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
-		if ((connected >> i) & 1) {
-			PerPad *per = &perpad[*per_num];
-			per->type = pad_types[i];
-			if (per->type == PAD_TYPE_GCPAD) {
-				per->y = status_gc[i].stickY;
-				per->x = status_gc[i].stickX;
-				per->prev_btn = per->btn;
-				per->btn = status_gc[i].button;
-				per->sx = status_gc[i].substickX;
-				per->sy = status_gc[i].substickY;
-				per_GCToSat(*per_num, &exit_code);
-			} else {
-				per->y = status_64[i].stickY;
-				per->x = status_64[i].stickX;
-				per->prev_btn = per->btn;
-				per->btn = status_64[i].button;
-				per_N64ToSat(*per_num, &exit_code);
-			}
-			*per_num = *per_num + 1;
-		}
-	}
-*/
 
 
 static void per_N64ToSat(u32 indx, u32 *exit_code)
@@ -128,7 +68,7 @@ static void per_N64ToSat(u32 indx, u32 *exit_code)
 	(((btns >> N64_BIT_CL) & 1)    << PAD_DI_BIT_Y) |
 	(((btns >> N64_BIT_CU) & 1)    << PAD_DI_BIT_Z) |
 	(((btns >> N64_BIT_R) & 1)     << PAD_DI_BIT_R) |
-	0x300;	//First 2 bits must be 0
+	0x0400;	//First 2 bits must be 0
 	perpad[indx].btn = sat_btns;
 }
 
@@ -158,7 +98,7 @@ static void per_GCToSat(u32 indx, u32 *exit_code)
 		(((btns >> GC_BIT_Y) & 1) << PAD_DI_BIT_Y) |
 		(((btns >> GC_BIT_Z) & 1) << PAD_DI_BIT_Z) |
 		(((btns >> GC_BIT_R) & 1) << PAD_DI_BIT_R) |
-		0x300;	//First 2 bits must be 0
+		0x0400;	//First 2 bits must be 0
 	perpad[indx].btn = sat_btns;
 }
 
@@ -185,7 +125,7 @@ static void per_WiiToSat(u32 indx, u32 *exit_code)
 	(((btns >> WII_BIT_B) & 1) << PAD_DI_BIT_Y) |
 	//(((btns >> WII_BIT_ZR) & 1) << PAD_DI_BIT_Z) |
 	//(((btns >> WII_BIT_R) & 1) << PAD_DI_BIT_R) |
-	0x300;	//First 2 bits must be 0
+	0x0400;	//First 2 bits must be 0
 	perpad[indx].btn = sat_btns;
 }
 
@@ -197,7 +137,7 @@ static void per_ClassicToSat(u32 indx, u32 *exit_code)
 
 	u32 btns = perpad[indx].btn;
 	btns |= CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
-	*exit_code |= (btns & WPAD_CLASSIC_BUTTON_HOME);
+	*exit_code |= (btns & WPAD_CLASSIC_BUTTON_HOME) | (btns & WPAD_BUTTON_HOME);
 
 	//TODO: get the user defined bits for the buttons
 	u32 sat_btns =
@@ -214,21 +154,48 @@ static void per_ClassicToSat(u32 indx, u32 *exit_code)
 	(((btns >> WCL_BIT_ZL) & 1) << PAD_DI_BIT_Y) |
 	(((btns >> WCL_BIT_ZR) & 1) << PAD_DI_BIT_Z) |
 	(((btns >> WCL_BIT_R) & 1) << PAD_DI_BIT_R) |
-	0x300;	//First 2 bits must be 0
+	0x0400;	//First 2 bits must be 0
 	perpad[indx].btn = sat_btns;
 }
 
-u32 _per_ScanPads(u32 *exit_code)
+#ifdef WII_U_VERSION
+static void per_WiiUToSat(u32 indx, u32 *exit_code)
+{
+	s8 axis_x = perpad[indx].x;
+	s8 axis_y = perpad[indx].y;
+	//TODO: only do this when using the ANALOGUE controller
+
+	u32 btns = perpad[indx].btn;
+	btns |= CLASSIC_AXIS_TO_DIGITAL(axis_x, axis_y);
+	*exit_code |= (btns & WIIDRC_BUTTON_HOME);
+
+	//TODO: get the user defined bits for the buttons
+	u32 sat_btns =
+	(((btns >> WIIU_BIT_Y) & 1) << PAD_DI_BIT_A) |
+	(((btns >> WIIU_BIT_B) & 1) << PAD_DI_BIT_B) |
+	(((btns >> WIIU_BIT_A) & 1) << PAD_DI_BIT_C) |
+	(((btns >> WIIU_BIT_PLUS) & 1) << PAD_DI_BIT_STR) |
+	(((btns >> WIIU_BIT_UP) & 1) << PAD_DI_BIT_UP) |
+	(((btns >> WIIU_BIT_DOWN) & 1) << PAD_DI_BIT_DOWN) |
+	(((btns >> WIIU_BIT_LEFT) & 1) << PAD_DI_BIT_LEFT) |
+	(((btns >> WIIU_BIT_RIGHT) & 1) << PAD_DI_BIT_RIGHT) |
+	(((btns >> WIIU_BIT_L) & 1) << PAD_DI_BIT_L) |
+	(((btns >> WIIU_BIT_X) & 1) << PAD_DI_BIT_X) |
+	(((btns >> WIIU_BIT_ZL) & 1) << PAD_DI_BIT_Y) |
+	(((btns >> WIIU_BIT_ZR) & 1) << PAD_DI_BIT_Z) |
+	(((btns >> WIIU_BIT_R) & 1) << PAD_DI_BIT_R) |
+	0x0400;	//First 2 bits must be 0
+	perpad[indx].btn = sat_btns;
+}
+#endif /* WII_U_VERSION */
+
+/* Modified from libogc2's pad.c */
+u32 _per_ScanJoybusPads(u32 *exit_code)
 {
 	PADStatus padstatus[PAD_CHANMAX];
-	static N64Status n64status[PAD_CHANMAX] = {
-		{ .err = N64_ERR_NO_CONTROLLER },
-		{ .err = N64_ERR_NO_CONTROLLER },
-		{ .err = N64_ERR_NO_CONTROLLER },
-		{ .err = N64_ERR_NO_CONTROLLER }
-	};
+	N64Status n64status;
 
-	u32 per_num = 0;
+	u32 pad_status = 0;
 	u32 padBit;
 	u32 resetBits = 0;
 
@@ -238,43 +205,37 @@ u32 _per_ScanPads(u32 *exit_code)
 
 		switch(padstatus[i].err) {
 		case PAD_ERR_NONE:
-			perpad[per_num].type = PAD_TYPE_GCPAD;
-			perpad[per_num].x = padstatus[i].stickX;
-			perpad[per_num].y = padstatus[i].stickY;
-			perpad[per_num].sx = padstatus[i].substickX;
-			perpad[per_num].sy = padstatus[i].substickY;
-			perpad[per_num].prev_btn = perpad[per_num].btn;
-			perpad[per_num].btn = padstatus[i].button;
-			per_GCToSat(per_num, exit_code);
-			pad_status |= padBit;
-			per_num++;
+			perpad[i].type     = PAD_TYPE_GCPAD;
+			perpad[i].x        = padstatus[i].stickX;
+			perpad[i].y        = padstatus[i].stickY;
+			perpad[i].sx       = padstatus[i].substickX;
+			perpad[i].sy       = padstatus[i].substickY;
+			perpad[i].prev_btn = perpad[i].btn;
+			perpad[i].btn      = padstatus[i].button;
+			per_GCToSat(i, exit_code);
+			pad_status |= 1 << i;
 			break;
 
 		case PAD_ERR_NO_CONTROLLER:
 			switch(SI_Probe(i)) {
-			case SI_ERROR_BUSY:
-				if (n64status[i].err == N64_ERR_NO_CONTROLLER) {
-					goto no_controller;
-				}
-
 			case SI_N64_CONTROLLER:
-				N64_ReadAsync(i, &n64status[i], NULL);
+				N64_GetResponse(i, &n64status);
 
-				switch(n64status[i].err) {
+				switch(n64status.err) {
 				case N64_ERR_READY:
-					perpad[per_num].type = PAD_TYPE_N64PAD;
-					perpad[per_num].x        = n64status[i].stickX;
-					perpad[per_num].y        = n64status[i].stickY;
-					perpad[per_num].sx       = 0;
-					perpad[per_num].sy       = 0;
-					perpad[per_num].prev_btn = perpad[per_num].btn;
-					perpad[per_num].btn      = n64status[i].button;
-					per_N64ToSat(per_num, exit_code);
-					pad_status |= padBit;
-					per_num++;
+					perpad[i].type     = PAD_TYPE_N64PAD;
+					perpad[i].x        = n64status.stickX;
+					perpad[i].y        = n64status.stickY;
+					perpad[i].sx       = 0;
+					perpad[i].sy       = 0;
+					perpad[i].prev_btn = perpad[i].btn;
+					perpad[i].btn      = n64status.button;
+					per_N64ToSat(i, exit_code);
+					pad_status |= 1 << i;
 					break;
 
 				case N64_ERR_NO_CONTROLLER:
+					N64_EnablePolling(padBit);
 					goto no_controller;
 					break;
 
@@ -284,6 +245,9 @@ u32 _per_ScanPads(u32 *exit_code)
 				}
 				break;
 
+			case SI_GC_CONTROLLER:
+			case SI_GC_WAVEBIRD:
+				resetBits |= padBit;
 no_controller:
 			default:
 				resetBits |= padBit;
@@ -293,22 +257,21 @@ no_controller:
 
 not_ready:
 		default:
-				per_num++;
+			pad_status |= 1 << i;
 			break;
 		}
 	}
 	if(resetBits) {
 		PAD_Reset(resetBits);
 	}
-	return per_num;
+	return pad_status;
 }
 
 
 u32 per_updatePads()
 {
-	u32 port_stat[2] = {PER_STAT_NONE, PER_STAT_NONE};
-
 	//Reset ports
+	u32 per_num = 0;
 	u32 exit_code = 0;
 	per_data.data_sent = 0;
 	per_data.data_size = 2;
@@ -316,48 +279,143 @@ u32 per_updatePads()
 	per_data.data[1] = PER_STAT_NONE;	//Port 2
 	per_data.port2_offset = 1;
 
-	//Fill with gc controllers
-	u32 per_num = _per_ScanPads(&exit_code);
+	//Fill with joybus controllers
+	u32 per_status = _per_ScanJoybusPads(&exit_code);
 
-	//Fill with wiimote
+#ifdef WII_U_VERSION
+	if (wiiu_inited && WiiDRC_Connected()) {
+		WiiDRC_ScanPads();
+		const struct WiiDRCData *drcdat = WiiDRC_Data();
+		//Search for first free port
+		while ((per_status >> per_num) & 1) {
+			per_num++;
+		}
+		perpad[per_num].type = PAD_TYPE_WIIUPAD;
+		perpad[per_num].x = (s8) drcdat->xAxisL;
+		perpad[per_num].y = (s8) drcdat->yAxisL;
+		perpad[per_num].prev_btn = perpad[per_num].btn;
+		perpad[per_num].btn = drcdat->button;
+		per_WiiUToSat(per_num, &exit_code);
+		per_status |= 1 << per_num;
+		++per_num;
+	}
+#endif
+
+	//Fill rest of entries with wiimotes
 	for (u32 i = 0; i < PAD_CHANMAX; ++i) {
+		//Search for first free port
+		while ((per_status >> per_num) & 1) {
+			per_num++;
+		}
+
 		WPADData *wpad = WPAD_Data(i);
 		u32 exp_type;
 		u32 err = WPAD_Probe(i, &exp_type);
 		WPAD_ReadPending(i, NULL);
 		if (err == WPAD_ERR_NONE) {
-			if (exp_type == WPAD_EXP_NONE) {	//Wiimote used
+			if (exp_type == WPAD_EXP_CLASSIC) { //Classic controller used
+				perpad[per_num].type = PAD_TYPE_CLASSIC;
+				perpad[per_num].x = wpad->exp.classic.ljs.pos.x - wpad->exp.classic.ljs.center.x;
+				perpad[per_num].y = wpad->exp.classic.ljs.pos.y - wpad->exp.classic.ljs.center.y;
+				perpad[per_num].prev_btn = perpad[per_num].btn;
+				perpad[per_num].btn = (wpad->btns_h & 0xFFFF) | (wpad->exp.classic.btns << 16);
+				per_ClassicToSat(per_num, &exit_code);
+				per_status |= 1 << per_num;
+				++per_num;
+			} else {	//Default to wiimote
 				perpad[per_num].type = PAD_TYPE_WIIMOTE;
 				perpad[per_num].x = 0;
 				perpad[per_num].y = 0;
 				perpad[per_num].prev_btn = perpad[per_num].btn;
 				perpad[per_num].btn = wpad->btns_h;
 				per_WiiToSat(per_num, &exit_code);
-				++per_num;
-			} else if (exp_type == WPAD_EXP_CLASSIC) { //Classic controller used
-				if (wpad->exp.classic.type == 2) { //Wii U Pro pad
-					perpad[per_num].type = PAD_TYPE_WIIUPRO;
-				} else { //Normal Classic controller
-					perpad[per_num].type = PAD_TYPE_CLASSIC;
-				}
-				perpad[per_num].x = (s16) (wpad->exp.classic.ljs.pos.x);
-				perpad[per_num].y = (s16) (wpad->exp.classic.ljs.pos.y);
-				perpad[per_num].prev_btn = perpad[per_num].btn;
-				perpad[per_num].btn = wpad->btns_h;
-				per_ClassicToSat(per_num, &exit_code);
+				per_status |= 1 << per_num;
 				++per_num;
 			}
 		}
 	}
 
-	//Set the port stats
-	port_stat[0] = (per_num ? (per_num == 8 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
-	port_stat[1] = (per_num > 1 ? (per_num > 2 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
+	//Fill the rest of the pads
+	for (u32 i = 0; i < PER_PADMAX; ++i) {
+		if (!((per_status >> i) & 1)){
+			perpad[i].type = PAD_TYPE_NONE;
+			perpad[i].x = 0;
+			perpad[i].y = 0;
+			perpad[i].sx = 0;
+			perpad[i].sy = 0;
+			perpad[i].btn = 0;
+		}
+	}
+
+
+	//Generate Peripheral data for SMPC
 	u32 size = 0;
+	//TODO: make multitap optional (or use game id table)
+	if (0) { //Use of multitap
+		if (per_status & 0x80) { //All controllers are connected
+			//setup multitap
+			per_data.data[size++] = PER_STAT_MULTITAP;
+			for (u32 i = 0; i < 6; ++i) {
+				if (perpad[i].type != PAD_TYPE_NONE) {
+					per_data.data[size++] = PER_ID_DIGITAL;
+					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
+				} else {
+					per_data.data[size++] = PER_ID_NONE;
+				}
+			}
+			//add last peripheral data
+			per_data.data[size++] = PER_STAT_MULTITAP;
+			for (u32 i = 6; i < 8; ++i) {
+				if (perpad[i].type != PAD_TYPE_NONE) {
+					per_data.data[size++] = PER_ID_DIGITAL;
+					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
+				} else {
+					per_data.data[size++] = PER_ID_NONE;
+				}
+			}
+		} else { // Up until 7 controllers conected
+			//setup multitap
+			per_data.data[size++] = PER_STAT_MULTITAP;
+			for (u32 i = 0; i < 6; ++i) {
+				if (perpad[i].type != PAD_TYPE_NONE) {
+					per_data.data[size++] = PER_ID_DIGITAL;
+					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
+				} else {
+					per_data.data[size++] = PER_ID_NONE;
+				}
+			}
+			//add last peripheral data
+			per_data.data[size++] = per_status & (1 << 6) ? PER_STAT_DIRECT : PER_STAT_NONE;
+			if (per_status & 0x2) {
+				per_data.data[size++] = PER_ID_DIGITAL;
+				per_data.data[size++] = ~(perpad[6].btn & 0xFF);
+				per_data.data[size++] = ~((perpad[6].btn >> 0x8) & 0xFF);
+			}
+		}
+	} else {
+		per_data.data[size++] = per_status & 0x1 ? PER_STAT_DIRECT : PER_STAT_NONE;
+		if (per_status & 0x1) {
+			per_data.data[size++] = PER_ID_DIGITAL;
+			per_data.data[size++] = ~(perpad[0].btn & 0xFF);
+			per_data.data[size++] = ~((perpad[0].btn >> 0x8) & 0xFF);
+		}
+		per_data.data[size++] = per_status & 0x2 ? PER_STAT_DIRECT : PER_STAT_NONE;
+		if (per_status & 0x2) {
+			per_data.data[size++] = PER_ID_DIGITAL;
+			per_data.data[size++] = ~(perpad[1].btn & 0xFF);
+			per_data.data[size++] = ~((perpad[1].btn >> 0x8) & 0xFF);
+		}
+	}
+/*
+	//Set the port stats
+	port_stat[0] = (per_status & 0x1 ? (per_status & 0x80 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
+	port_stat[1] = (per_status & 0x2 ? (per_status & 0xFC ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
 	u32 port_count = 0;
 	u32 port_ofs = 0b00000011 + (per_num == 8 ? 2 : 0);
 
-	//Generate Peripheral data for SMPC
 	for (u32 i = 0; i < per_num; ++i) {
 		if ((port_ofs >> i) & 1) {	//See if port stat must be set
 			per_data.data[size++] = port_stat[port_count++];
@@ -376,21 +434,14 @@ u32 per_updatePads()
 	} else if (per_num == 1) {	//Only have one controller
 		per_data.data[size++] = PER_STAT_NONE;
 	}
-
-	//Fill the rest of the pads
-	while (per_num < PER_PADMAX) {
-		perpad[per_num].type = PAD_TYPE_NONE;
-		perpad[per_num].x = 0;
-		perpad[per_num].y = 0;
-		perpad[per_num].sx = 0;
-		perpad[per_num].sy = 0;
-		perpad[per_num].btn = 0;
-		++per_num;
-	}
-
+*/
 	per_data.data_size = size;
 	return exit_code;
 }
 
 
 
+void per_SetMappingForType(u32 type, u32 new_mapping)
+{
+
+}

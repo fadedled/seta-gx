@@ -19,6 +19,7 @@
 
 #include "m68kcore.h"
 #include "memory.h"
+#include "profile.h"
 #include "musashi/m68k.h"
 #include "musashi/m68kcpu.h"
 
@@ -51,7 +52,10 @@ void musashi_Reset(void)
 
 s32 musashi_Exec(s32 cycles)
 {
-	return m68k_execute(cycles);
+	prof_Start(PROF_M68K);
+	u32 cycles_exec = m68k_execute(cycles);
+	prof_StopAndAdd(PROF_M68K);
+	return cycles_exec;
 }
 
 void musashi_Sync(void)

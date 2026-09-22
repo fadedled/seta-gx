@@ -1,7 +1,24 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #include <malloc.h>
 #include "svi.h"
 #include "sgx.h"
+#include "../profile.h"
+#include "../osd/osd.h"
+#include "svi_vmodes.inc"
 
 #define COLOR_BLACK        (0x10801080)
 
@@ -14,6 +31,8 @@ enum TVModeType {
 	TVMODE_B_HI = 3		//704
 };
 
+
+
 extern void __VIClearFramebuffer(void* fb, u32 bytes, u32 color);
 extern u32 vdp2_disp_w;
 extern u32 vdp2_disp_h;
@@ -25,8 +44,10 @@ u32 vert_offset = 0;
 u32 scale_mtx = MTX_TEX_SCALED_N;
 u16 *xfb[2] = { NULL, NULL };
 u32 fbsel = 0;
+GXRModeObj *rmode_conf;
 GXRModeObj *rmode;
 u32 tvmode;
+u32 svi_disp = 0;
 void *gp_fifo;
 u8 *fb_scale_tex ATTRIBUTE_ALIGN(32);		/*Texture for scaling x axis fb*/
 
@@ -40,6 +61,7 @@ static void __svi_PretraceCB(u32 ret_count)
 	u32 height = SS_DISP_HEIGHT + (((tvmd_curr & 0x30) > 0) << 4);
 	u32 vdp2_x_hires = ((tvmd_curr >> 1) & 1);
 	u32 vdp2_interlace = ((tvmd_curr & 0xC0) == 0xC0);
+	svi_disp = ((height | vdp2_interlace) << 16) | (width | vdp2_x_hires);
 	vdp2_disp_w = width << vdp2_x_hires;
 	vdp2_disp_h = height << vdp2_interlace;
 	vdp1_fb_w = width;
@@ -49,17 +71,17 @@ static void __svi_PretraceCB(u32 ret_count)
 	tvmode = (tvmd_curr & 3);
 
 	//TODO: DONT CHANGE THIS, ONLY CLEAR TO BLACK
-	const u32 xfb_size = 704 * 480 * VI_DISPLAY_PIX_SZ;
-	__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
-	__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
-	GX_SetDispCopyYScale((f32)(2 - vdp2_interlace));	//scale the XFB copy if not interlaced
-	GX_Flush();
+	//const u32 xfb_size = 704 * 480 * VI_DISPLAY_PIX_SZ;
+	//__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
+	//__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
+	if (rmode_conf != TVNTSCNative) {
+		GX_SetDispCopyYScale((f32)(2 - vdp2_interlace));	//scale the XFB copy if not interlaced
+		GX_Flush();
+	}
 
+	u32 vmode_indx = (vdp2_interlace << 1) | ((tvmd_curr & 0x30) > 0);
+	rmode = &rmode_conf[vmode_indx];
 	rmode->fbWidth = width << 1; //rmode->fbWidth = 704;
-	rmode->viWidth = 704;
-	rmode->viHeight = rmode->xfbHeight = height << 1;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) / 2;
-	rmode->viYOrigin = (VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
 	//rmode->viYOrigin = vert_offset;
 	//rmode->viHeight = height << 1;
 	//rmode->viYOrigin = 4;//(VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
@@ -68,10 +90,27 @@ static void __svi_PretraceCB(u32 ret_count)
 	VIDEO_SetPreRetraceCallback(NULL);
 }
 
+const u32 const_vert_colors[40] ATTRIBUTE_ALIGN(32) = {
+	0x00000000, 0x00000008, 0x00000010, 0x00000018,
+	0x00000021, 0x00000029, 0x00000031, 0x00000039,
+	0x00000042, 0x0000004A, 0x00000052, 0x0000005A,
+	0x00000063, 0x0000006B, 0x00000073, 0x0000007B,
+	0x00000084, 0x0000008C, 0x00000094, 0x0000009C,
+	0x000000A5, 0x000000AD, 0x000000B5, 0x000000BD,
+	0x000000C6, 0x000000CE, 0x000000D6, 0x000000DE,
+	0x000000E7, 0x000000EF, 0x000000F7, 0x000000FF,
+
+	0x00000001, 0x00000000, 0x00000000, 0x00000000,
+	0x00000000, 0x00000000, 0x00000000, 0x00000000,
+};
 
 void SVI_Init(void)
 {
 	VIDEO_Init();
+	if (VIDEO_HaveComponentCable()) {
+
+	}
+	SVI_EnableNativeVideo(0);
 	rmode = VIDEO_GetPreferredMode(NULL);
 
 	Mtx44 perspective;
@@ -81,16 +120,11 @@ void SVI_Init(void)
 	//Allocate framebuffers
 	xfb[0] = MEM_K0_TO_K1(memalign(32, xfb_size));
 	xfb[1] = MEM_K0_TO_K1(memalign(32, xfb_size));
-	fb_scale_tex = (u8*) memalign(32, 704*480*2);
+	fb_scale_tex = (u8*) memalign(32, xfb_size);
 
 	__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
 	__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
 
-	rmode->fbWidth = 704;
-	rmode->viWidth = 704;
-	rmode->viHeight = rmode->xfbHeight = SS_DISP_HEIGHT << 1;
-	rmode->viXOrigin = (VI_MAX_WIDTH_NTSC - rmode->viWidth) / 2;
-	rmode->viYOrigin = (VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
 	VIDEO_SetBlack(1);
 	VIDEO_Configure(rmode);
 	VIDEO_Flush();
@@ -129,20 +163,24 @@ void SVI_Init(void)
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT3, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA6, 0);
 
-	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XYZ,  GX_F32, 1);
-
 	//VDP2 vertex format
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_POS,  GX_POS_XYZ,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
+
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 
 	//GUI vertex format
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
 
-	GX_SetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA);
-	GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_BLUE, GX_CH_GREEN, GX_CH_RED, GX_CH_ALPHA);
-	GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE);
+	//Swap Mode Tables
+	GX_SetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA); //Normal swap mode
+	GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_BLUE, GX_CH_GREEN, GX_CH_RED, GX_CH_ALPHA); //For sega saturn palettes/RGB
+	GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE); //For VDP1 drawing of fb
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetZCompLoc(GX_FALSE);
@@ -151,6 +189,9 @@ void SVI_Init(void)
 	GX_SetChanCtrl(GX_COLOR0A0, GX_DISABLE, GX_SRC_VTX, GX_SRC_VTX, GX_LIGHTNULL, GX_DF_NONE, GX_AF_NONE);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_TEX0, MTX_IDENTITY);
 	GX_SetCurrentMtx(MTX_IDENTITY);
+
+	//Create vertex arrays for transparency
+	//GX_SetArray(GX_VA_CLR0, const_vert_colors, 4);
 
 	//TODO: Check that the values are stored correctly.
 	guOrtho(perspective, 0, 480.0, 0.0, 640.0, 0.0, GX_MAX_Z24+1);
@@ -178,6 +219,11 @@ void SVI_Init(void)
 	VIDEO_WaitVSync();
 }
 
+void SVI_EnableNativeVideo(u32 enable)
+{
+	rmode_conf = (enable ? TVNTSCNative :TVNTSCProg);
+}
+
 void SVI_ResetViewport(void)
 {
 	//GX_SetViewport(0, 0, 640, 480, 0.0f, 256.0f);
@@ -202,6 +248,7 @@ void SVI_CopyXFB(u32 x, u32 y)
 
 void SVI_CopyFrame(void)
 {
+	osd_Draw();
 
 	GX_SetScissor(0, 0, 640, 480);
 	GX_ClearVtxDesc();
@@ -289,6 +336,7 @@ void SVI_CopyFrame(void)
 			GX_CopyDisp(xfb[fbsel], GX_TRUE);
 		} break;
 		case TVMODE_B_HI: {
+			//TODO: need to add the other strip
 			GX_SetDispCopySrc(0, 0, 640, vdp2_disp_h);
 			GX_SetDispCopyDst(704, vdp2_disp_h);
 			GX_DrawDone();
@@ -314,8 +362,11 @@ void SVI_SwapBuffers(u32 wait_vsync)
 {
 	VIDEO_SetNextFramebuffer(xfb[fbsel]);
 	VIDEO_Flush();
+	//Profile total frame time
+	prof_StopAndAdd(PROF_TOTAL);
 	if (wait_vsync) {
 		VIDEO_WaitVSync();
 	}
+	prof_Start(PROF_TOTAL);
 	fbsel ^= 1;
 }

@@ -367,6 +367,9 @@ u32 getMemClock(u32 addr);
 
 u16 FASTCALL bios_Read16(u32 addr);
 
+void bup_ReadSave(const char *fn);
+void bup_WriteSave(const char *fn);
+
 void dump_memory(void);
 
 #endif

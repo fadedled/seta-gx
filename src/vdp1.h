@@ -97,6 +97,7 @@ typedef struct {
    int frame_change_plot;
    int swap_frame_buffer;
    int current_frame;
+   int frame_change;
    int status;
 } Vdp1External_struct;
 

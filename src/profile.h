@@ -1,65 +1,57 @@
-/* copyright Patrick Kooman, 2002
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
-  Lightweight C & C++ profiler. Works both in
-  debug- and release mode. For more info, read:
+#ifndef __PROFILE_H__
+#define __PROFILE_H__
 
-  http://www.2dgame-tutorial.com/sdl/profile.htm
+#include <gctypes.h>
 
-  You are free to use / modify / re-distribute this code.
+#ifdef DO_PROFILE
 
-  */
-#ifndef _PROFILE_H_
-#define _PROFILE_H_
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <assert.h>
+//Profile index names for ease of use, if you can modify the names to your liking
+enum ProfIndx {
+	PROF_SH2M,
+	PROF_SH2S,
+	PROF_M68K,
+	PROF_SCSP,
+	PROF_SCU,
+	PROF_SMPC,
+	PROF_VDP1,
+	PROF_VDP2,
+	PROF_CDB,
+	PROF_TOTAL,
+	PROF_MAX 	 //Always last value
+};
 
-#ifdef DONT_PROFILE
-/* Profiling disabled: compiler won't generate machine instructions now. */
-#define PROFILE_START(t)
-#define PROFILE_STOP(t)
-#define PROFILE_PRINT()     
-#define PROFILE_RESET()
+void prof_AddCounter(u32 indx, char *name);
+void prof_AddTime(u32 indx, u32 ticks);
+void prof_Start(u32 indx);
+void prof_StopAndAdd(u32 indx);
+void prof_Draw(void);	//All counters reset to 0
+
 #else
-/* Profiling enabled */
-#define MAX_TAG_LEN       100
-#define NUM_TAGS          100
 
-typedef struct {
-  char str_name [MAX_TAG_LEN] ;
-  int i_calls ;
-  clock_t start_time ;
-  int i_stopped ;
-  long l_total_ms ;
-} entry_t ;
+//Ignore function calls
+#define prof_AddCounter(...)
+#define prof_AddTime(...)
+#define prof_Start(...)
+#define prof_StopAndAdd(...)
+#define prof_Draw(...)
 
-/* Compiler calls functions now. */
-#define PROFILE_START(t)    ProfileStart (t)
-#define PROFILE_STOP(t)     ProfileStop (t)
-#define PROFILE_PRINT()     ProfilePrint ()
-#define PROFILE_RESET()     ProfileReset ()
+#endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
-
-/* Start timer for given tag */
-void ProfileStart (char* str_tag) ;
-/* Stops timer for given tag and add time to total time for this tag */
-void ProfileStop (char* str_tag) ;
-/* Prints result to stdout */
-void ProfilePrint (void) ;
-/* Resets the profiler. */
-void ProfileReset (void) ;
-
-#ifdef __cplusplus
-}
-#endif /* __cplusplus */
-
-#endif /* NO_PROFILE */
-
-#endif /* _PROFILE_H_ */
+#endif /* __PROFILE_H__ */
 

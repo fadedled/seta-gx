@@ -1,3 +1,18 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
+
 #ifndef __VID_GX_H__
 #define __VID_GX_H__
 
@@ -14,11 +29,13 @@
 #define TLUT_SIZE_16			(GX_TLUT_16 << 10)
 #define TLUT_SIZE_256			(GX_TLUT_256 << 10)
 #define TLUT_SIZE_2K			(GX_TLUT_2K << 10)
+#define TLUT_SIZE_8K			(GX_TLUT_8K << 10)
 
 #define TLUT_FMT_IA8			(GX_TL_IA8 << 10)
 #define TLUT_FMT_RGB5A3			(GX_TL_RGB5A3 << 10)
 #define TLUT_FMT_RGB565			(GX_TL_RGB565 << 10)
 
+#define TLUT_INDX_CRAM			(0x200)
 #define TLUT_INDX_CRAM			(0x200)
 #define TLUT_INDX_PPCC			(0x210)		//Priority and colorcalculation (256 colors)
 #define TLUT_INDX_WIN			(0x22E)		//Vdp2 Window values			(16 colors)
@@ -83,6 +100,15 @@
 #define TEXPRE_TYPE_16BPP	(2<<15)
 #define TEXPRE_TYPE_32BPP	(3<<15)
 
+
+#define SCR_BACKCOLOR	0
+#define SCR_SPR			1
+#define SCR_RBG0		2
+#define SCR_NBG0		3
+#define SCR_NBG1		4
+#define SCR_NBG2		5
+#define SCR_NBG3		6
+#define SCR_LINECOLOR	7
 
 #define PRI_SPR			0x07
 #define PRI_RGB0		0x06
@@ -205,6 +231,7 @@ void SGX_Vdp2Init(void);
 void SGX_Vdp2Draw(void);
 void SGX_Vdp2Postprocess(void);
 void SGX_SetLineScroll(f32 hor_scroll, f32 hor_inc, u32 line);
+
 
 /*
  * Here we have a serious attempt at replacing all GX functions that use shadow regs

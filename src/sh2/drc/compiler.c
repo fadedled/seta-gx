@@ -1,6 +1,19 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
-
-#include "emit_ppc.inc"
+#include "../../drc/emit_ppc.inc"
 #include "../sh2.h"
 #include "compiler.h"
 #include "ogc/pad.h"
@@ -12,10 +25,11 @@
 extern void jit_exit();
 extern void jit_export_regs();
 extern void jit_endblock_test();
+extern void jit_known_dest_endblock_test();
 extern void jit_div1();
 extern void jit_macl();
 extern void jit_macw();
-
+extern void jit_idle_loop0();
 #define MAX_BLOCK_INST	1024			/* NOTE: change this value eventually */
 #define BLOCK_ARR_SIZE	(4*1024*1024)/2		//TODO:x16?
 #define DRC_CODE_SIZE	1024*1024		/* 4Mb of instructions */
@@ -102,13 +116,12 @@ enum InstFlagCode {
 };
 
 typedef u32 (*DrcCode)(void *shctx);
-
+void drc_MarkCodePage(u32 addr);
 extern SH2 *sh_ctx;
 
 u32 *drc_code;
 u32 *drc_blocks;
 u32 ifc_array[4*1024] ATTRIBUTE_ALIGN(32);	//8k instructions
-u32 drc_blocks_size = 0;
 
 u32 drc_code_pos = 0;
 u32 _uses_t = 1;			//T bit check must not allways be done
@@ -125,7 +138,7 @@ u32 pc_breakpoint_val = 0;
 u32 pc_prev_pos = 0;
 u32 pc_prev[MAX_PREV];
 
-u32* HashGet(u32 key);
+u32 HashGet(u32 key);
 
 #define PPCE_LOAD(rA, name)		PPCC_LWZ(rA, GP_CTX, offsetof(SH2, name))
 #define PPCE_SAVE(rA, name)		PPCC_STW(rA, GP_CTX, offsetof(SH2, name))
@@ -796,31 +809,29 @@ extern void sh2_int_MACW(SH2 *sh, u32 inst);
 
 #define SH2JIT_MOVWI /* MOV.W @(disp,PC),Rn  1001nnnndddddddd */ \
 	u32 iaddr = (curr_pc+4) + ((disp & 0xFF) << 1); \
-	PPCC_ADDI(rn, 0, sh2_Read16(iaddr)); \
-	if (ifc_array[i] & IFC_IS_DELAY) { \
-		pc_breakpoint_val = 4; \
-	}
+	if (1) { \
+		PPCC_ADDI(rn, 0, sh2_Read16(iaddr)); \
+	} else { \
+		u32 val = (u32) sh2_GetPCAddr(iaddr); \
+		PPCC_ADDIS(rn, 0, (val >> 16));		/*Set high imm 16 bits */ \
+		PPCC_ORI(rn, rn, val);				/*Set low imm 16 bits */ \
+		PPCC_LHA(rn, rn, 0); \
+	} \
 
-	//PPCC_ADDIS(3, 0, (iaddr >> 16));		/*Set high imm 16 bits */
-	//PPCC_ORI(3, 3, iaddr);				/*Set low imm 16 bits */
-	//PPCC_BL(sh2_Read16);				/*Read 16 bit value*/
-	//PPCC_EXTSH(rn, 3);					/*Extend s16*/
-	//XXX: the address is constant so we can ignore sh2_Read16 and go straigth to its handling function
-	//TODO: Check for delay-slot
 
 #define SH2JIT_MOVLI /* MOV.L @(disp,PC),Rn  1101nnnndddddddd */ \
 	u32 iaddr = ((curr_pc + 4) & 0xFFFFFFFC) + ((disp & 0xFF) << 2); \
-	u32 val = sh2_Read32(iaddr); \
-	PPCC_ADDIS(rn, 0, (val >> 16));		/*Set high imm 16 bits */ \
-	PPCC_ORI(rn, rn, val);				/*Set low imm 16 bits */ \
-	if (ifc_array[i] & IFC_IS_DELAY) { \
-		pc_breakpoint_val = 5; \
-	}
+	if (1) { \
+		u32 val = (u32) sh2_GetPCAddr(iaddr); \
+		PPCC_ADDIS(3, 0, (val >> 16));		/*Set high imm 16 bits */ \
+		PPCC_ORI(3, 3, val);				/*Set low imm 16 bits */ \
+		PPCC_LWZ(rn, 3, 0); \
+	} else { \
+		u32 val = sh2_Read32(iaddr); \
+		PPCC_ADDIS(rn, 0, (val >> 16));		/*Set high imm 16 bits */ \
+		PPCC_ORI(rn, rn, val);				/*Set low imm 16 bits */ \
+	} \
 
-	//PPCC_BL(sh2_Read32);				/*Read 32 bit value*/
-	//PPCC_MOV(rn, 3);
-	//XXX: the address is constant so we can ignore sh2_Read16 and go straigth to its handling function
-	//TODO: Check for delay-slot
 
 
 #define SH2JIT_MOVBLG /* MOV.B @(disp,GBR),R0  11000100dddddddd */ \
@@ -923,10 +934,19 @@ extern void sh2_int_MACW(SH2 *sh, u32 inst);
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
 	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
-	PPCC_BCT(2, 4); 							/*Branch if true (T==0) */ \
-	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
-	PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
-	PPCC_B(jit_endblock_test); 				/*Exit block*/ \
+	PPCC_BCT(2, 6); 							/*Branch if true (T==0) */ \
+	{ \
+		u32 dst_addr = curr_pc+2; \
+		u32 sector = ((dst_addr >> 23) & 0xC) | ((dst_addr >> 20) & 0x2); \
+		sector = (((0x8FF5 << sector) << 5) & 0x180000); \
+		u32 drc_indx = ((dst_addr >> 1) & 0x7FFFF) | sector; \
+		u32 blk_address = (u32) &drc_blocks[drc_indx]; /* TODO: Can use the initial drc_indx since it can't be that far */ \
+		PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
+		PPCC_ADDIS(4, 0, (blk_address) >> 16);	/*Set high imm 16 bits */ \
+		PPCC_ORI(4, 4, blk_address);			/*Set low imm 16 bits */ \
+		PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
+		PPCC_B(jit_known_dest_endblock_test); /*End block with known jump address*/ \
+	} \
 	PPCC_ADDI(GP_PC, GP_PC, offset);			/*Mask off offset */ \
 	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
@@ -936,10 +956,19 @@ extern void sh2_int_MACW(SH2 *sh, u32 inst);
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
 	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
-	PPCC_BCT(2, 4); 							/*Branch if true (T==0) */ \
-	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
-	PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
-	PPCC_B(jit_endblock_test); 				/*Exit block*/ \
+	PPCC_BCT(2, 6); 							/*Branch if true (T==0) */ \
+	{ \
+		u32 dst_addr = curr_pc+2; \
+		u32 sector = ((dst_addr >> 23) & 0xC) | ((dst_addr >> 20) & 0x2); \
+		sector = (((0x8FF5 << sector) << 5) & 0x180000); \
+		u32 drc_indx = ((dst_addr >> 1) & 0x7FFFF) | sector; \
+		u32 blk_address = (u32) &drc_blocks[drc_indx]; /* TODO: Can use the initial drc_indx since it can't be that far */ \
+		PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
+		PPCC_ADDIS(4, 0, (blk_address) >> 16);	/*Set high imm 16 bits */ \
+		PPCC_ORI(4, 4, blk_address);			/*Set low imm 16 bits */ \
+		PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
+		PPCC_B(jit_known_dest_endblock_test); /*End block with known jump address*/ \
+	} \
 	PPCC_ADDI(GP_PC, GP_PC, offset);			/*Mask off offset */ \
 	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
@@ -982,10 +1011,19 @@ extern void sh2_int_MACW(SH2 *sh, u32 inst);
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
 	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
-	PPCC_BCF(2, 4); 							/*Branch if false (T!=0) */ \
-	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
-	PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
-	PPCC_B(jit_endblock_test); 				/*Exit block*/ \
+	PPCC_BCF(2, 6); 							/*Branch if false (T!=0) */ \
+	{ \
+		u32 dst_addr = curr_pc+2; \
+		u32 sector = ((dst_addr >> 23) & 0xC) | ((dst_addr >> 20) & 0x2); \
+		sector = (((0x8FF5 << sector) << 5) & 0x180000); \
+		u32 drc_indx = ((dst_addr >> 1) & 0x7FFFF) | sector; \
+		u32 blk_address = (u32) &drc_blocks[drc_indx]; /* TODO: Can use the initial drc_indx since it can't be that far */ \
+		PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
+		PPCC_ADDIS(4, 0, (blk_address) >> 16);	/*Set high imm 16 bits */ \
+		PPCC_ORI(4, 4, blk_address);			/*Set low imm 16 bits */ \
+		PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
+		PPCC_B(jit_known_dest_endblock_test); /*End block with known jump address*/ \
+	} \
 	PPCC_ADDI(GP_PC, GP_PC, offset);			/*Mask off offset */ \
 	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
@@ -995,10 +1033,19 @@ extern void sh2_int_MACW(SH2 *sh, u32 inst);
 	PPCC_ADDIS(GP_PC, 0, (curr_pc+2) >> 16);	/*Set high imm 16 bits */ \
 	PPCC_ORI(GP_PC, GP_PC, curr_pc+2);			/*Set low imm 16 bits */ \
 	PPCC_ANDI(GP_TMP, GP_SR, 0x0001);			/*Get T bit */ \
-	PPCC_BCF(2, 4); 							/*Branch if false (T!=0) */ \
-	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
-	PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
-	PPCC_B(jit_endblock_test); 				/*Exit block*/ \
+	PPCC_BCF(2, 6); 							/*Branch if false (T!=0) */ \
+	{ \
+		u32 dst_addr = curr_pc+2; \
+		u32 sector = ((dst_addr >> 23) & 0xC) | ((dst_addr >> 20) & 0x2); \
+		sector = (((0x8FF5 << sector) << 5) & 0x180000); \
+		u32 drc_indx = ((dst_addr >> 1) & 0x7FFFF) | sector; \
+		u32 blk_address = (u32) &drc_blocks[drc_indx]; /* TODO: Can use the initial drc_indx since it can't be that far */ \
+		PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
+		PPCC_ADDIS(4, 0, (blk_address) >> 16);	/*Set high imm 16 bits */ \
+		PPCC_ORI(4, 4, blk_address);			/*Set low imm 16 bits */ \
+		PPCC_ADDI(3, 0, curr_cycles + 1); 			/*Return cycles in block*/ \
+		PPCC_B(jit_known_dest_endblock_test); /*End block with known jump address*/ \
+	} \
 	PPCC_ADDI(GP_PC, GP_PC, offset);			/*Mask off offset */ \
 	PPCE_SAVE(GP_PC, pc);						/* Save PC */ \
 
@@ -1146,7 +1193,14 @@ struct BlockData {
 	u32 instr_count;
 	u32 cycle_count;
 	u32 entry_addr;
+	u32 dest_addr; //If constant address we set it at end of block
+	u32 jump_reg; //If we jump to the address of a register value here we put the reg in question (5th bit if active)
 } block_data;
+
+u32 bios_entries[1024];
+u32 bios_entries_num = 0;
+
+#define DEST_ADDR(inst) (curr_pc + ((EXT_IMM8(inst) << 1) + 4))
 
 #define IFC_SET_ENTRY(ofs) if((curr_pc+(ofs)) > addr) { entry_addr = (curr_pc+(ofs)); }
 
@@ -1162,15 +1216,18 @@ u16* _jit_GenIFCBlock(u32 addr)
 	u32 instr_count = 0;
 	u32 ld_regs = REG_NUM_SR;	// Allways have SR loaded
 	u32 st_regs = REG_NUM_SR;	// Allways have SR loaded
-	u32 entry_addr = 0;
+	//simple idle check
+	u32 dst_addr = ~0;
+	block_data.dest_addr = 0;
+	block_data.jump_reg = 0;
+	u32 has_write = 0;
+	u32 dt_used = 0;
+	u32 last_t = 0;
 	while (bstate != BSTATE_END) {
 		u16 inst = *(inst_ptr++);
 		u32 ifc = 0;
 		_jit_opcode = inst;
 
-		//TODO!!!!:
-		// INSTRUCTIONS THAT SET THE DELAY TO A BRANCH INSTRUCTION USE A ILLEGAL SLOT INSTRUCTION
-		//They are BF BT BFS BTS BRA BRAF BSR BSRF JMP JRE RTS
 		switch ((inst >> 12) & 0xF) {
 			case 0b0000: {
 			switch(inst) { //Constant instructions
@@ -1184,9 +1241,9 @@ u16* _jit_GenIFCBlock(u32 addr)
 				case 0x002B: {ifc = IFC_RTE | IFC_RLS(RLS_S15); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 				default:
 				switch (inst & 0xF) {
-					case 0b0100: {ifc = IFC_MOVBS0 | IFC_RLS(RLS_LNM0); } break;
-					case 0b0101: {ifc = IFC_MOVWS0 | IFC_RLS(RLS_LNM0); } break;
-					case 0b0110: {ifc = IFC_MOVLS0 | IFC_RLS(RLS_LNM0); } break;
+					case 0b0100: {ifc = IFC_MOVBS0 | IFC_RLS(RLS_LNM0); has_write++;} break;
+					case 0b0101: {ifc = IFC_MOVWS0 | IFC_RLS(RLS_LNM0); has_write++;} break;
+					case 0b0110: {ifc = IFC_MOVLS0 | IFC_RLS(RLS_LNM0); has_write++;} break;
 					case 0b0111: {ifc = IFC_MULL   | IFC_RLS(RLS_LNM);  } break;
 					case 0b1100: {ifc = IFC_MOVBL0 | IFC_RLS(RLS_LM0_SN); } break;
 					case 0b1101: {ifc = IFC_MOVWL0 | IFC_RLS(RLS_LM0_SN); } break;
@@ -1196,9 +1253,9 @@ u16* _jit_GenIFCBlock(u32 addr)
 					switch (inst & 0x3F) {
 						case 0b000010: {ifc = IFC_STCSR   | IFC_RLS(RLS_SN); } break;
 						case 0b010010: {ifc = IFC_STCGBR  | IFC_RLS(RLS_SN); } break;
-						case 0b000011: {ifc = IFC_BSRF    | IFC_RLS(RLS_LN); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+						case 0b000011: {ifc = IFC_BSRF    | IFC_RLS(RLS_LN); block_data.jump_reg = 0x10 | ((inst >> 8) & 0xF); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 						case 0b100010: {ifc = IFC_STCVBR  | IFC_RLS(RLS_SN); } break;
-						case 0b100011: {ifc = IFC_BRAF    | IFC_RLS(RLS_LN); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+						case 0b100011: {ifc = IFC_BRAF    | IFC_RLS(RLS_LN); block_data.jump_reg = 0x10 | ((inst >> 8) & 0xF); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 						case 0b101001: {ifc = IFC_MOVT    | IFC_RLS(RLS_SN); } break;
 						case 0b001010: {ifc = IFC_STSMACH | IFC_RLS(RLS_SN); } break;
 						case 0b011010: {ifc = IFC_STSMACL | IFC_RLS(RLS_SN); } break;
@@ -1208,13 +1265,13 @@ u16* _jit_GenIFCBlock(u32 addr)
 				} break;
 			}} break;
 			case 0b0001: { // MOV.L Rn Rm disp
-				ifc = IFC_MOVLS4 | IFC_RLS(RLS_LNM);
+				ifc = IFC_MOVLS4 | IFC_RLS(RLS_LNM); has_write++;
 			} break;
 			case 0b0010: {
 			switch (inst & 0xF) { // 0010_NNNN_MMMM_XXXX
-				case 0b0000: {ifc = IFC_MOVBS   | IFC_RLS(RLS_LNM); } break;
-				case 0b0001: {ifc = IFC_MOVWS   | IFC_RLS(RLS_LNM); } break;
-				case 0b0010: {ifc = IFC_MOVLS   | IFC_RLS(RLS_LNM); } break;
+				case 0b0000: {ifc = IFC_MOVBS   | IFC_RLS(RLS_LNM); has_write++;} break;
+				case 0b0001: {ifc = IFC_MOVWS   | IFC_RLS(RLS_LNM); has_write++;} break;
+				case 0b0010: {ifc = IFC_MOVLS   | IFC_RLS(RLS_LNM); has_write++;} break;
 				case 0b0011: {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
 				case 0b0100: {ifc = IFC_MOVBM   | IFC_RLS(RLS_LM_SN); } break;
 				case 0b0101: {ifc = IFC_MOVWM   | IFC_RLS(RLS_LM_SN); } break;
@@ -1226,7 +1283,7 @@ u16* _jit_GenIFCBlock(u32 addr)
 				case 0b1011: {ifc = IFC_OR      | IFC_RLS(RLS_LM_SN); } break;
 				case 0b1100: {ifc = IFC_CMPSTR  | IFC_RLS(RLS_LNM); } break;
 				case 0b1101: {ifc = IFC_XTRCT   | IFC_RLS(RLS_LM_SN); } break;
-				case 0b1110: {ifc = IFC_MULU    |  IFC_RLS(RLS_LNM); } break;
+				case 0b1110: {ifc = IFC_MULU    | IFC_RLS(RLS_LNM); } break;
 				case 0b1111: {ifc = IFC_MULS    | IFC_RLS(RLS_LNM); } break;
 			}} break;
 			case 0b0011: {
@@ -1250,17 +1307,17 @@ u16* _jit_GenIFCBlock(u32 addr)
 			case 0b0100: {
 			switch (inst & 0x3F) { // 0100_NNNN_.FX._XXXX
 				case 0b000000: {ifc = IFC_SHLL     | IFC_RLS(RLS_SN); } break;
-				case 0b010000: {ifc = IFC_DT       | IFC_RLS(RLS_SN); } break;
+				case 0b010000: {ifc = IFC_DT       | IFC_RLS(RLS_SN); dt_used = 1;} break; //TODO: use last_t
 				case 0b100000: {ifc = IFC_SHAL     | IFC_RLS(RLS_SN); } break;
 				case 0b000001: {ifc = IFC_SHLR     | IFC_RLS(RLS_SN); } break;
 				case 0b010001: {ifc = IFC_CMPPZ    | IFC_RLS(RLS_LN); } break;
 				case 0b100001: {ifc = IFC_SHAR     | IFC_RLS(RLS_SN); } break;
-				case 0b000010: {ifc = IFC_STSMMACH | IFC_RLS(RLS_SN); } break;
-				case 0b010010: {ifc = IFC_STSMMACL | IFC_RLS(RLS_SN); } break;
-				case 0b100010: {ifc = IFC_STSMPR   | IFC_RLS(RLS_SN); } break;
-				case 0b000011: {ifc = IFC_STCMSR   | IFC_RLS(RLS_SN); } break;
-				case 0b010011: {ifc = IFC_STCMGBR  | IFC_RLS(RLS_SN); } break;
-				case 0b100011: {ifc = IFC_STCMVBR  | IFC_RLS(RLS_SN); } break;
+				case 0b000010: {ifc = IFC_STSMMACH | IFC_RLS(RLS_SN); has_write++;} break;
+				case 0b010010: {ifc = IFC_STSMMACL | IFC_RLS(RLS_SN); has_write++;} break;
+				case 0b100010: {ifc = IFC_STSMPR   | IFC_RLS(RLS_SN); has_write++;} break;
+				case 0b000011: {ifc = IFC_STCMSR   | IFC_RLS(RLS_SN); has_write++;} break;
+				case 0b010011: {ifc = IFC_STCMGBR  | IFC_RLS(RLS_SN); has_write++;} break;
+				case 0b100011: {ifc = IFC_STCMVBR  | IFC_RLS(RLS_SN); has_write++;} break;
 				case 0b000100: {ifc = IFC_ROTL     | IFC_RLS(RLS_SN); } break;
 				case 0b100100: {ifc = IFC_ROTCL    | IFC_RLS(RLS_SN); } break;
 				case 0b000101: {ifc = IFC_ROTR     | IFC_RLS(RLS_SN); } break;
@@ -1281,9 +1338,9 @@ u16* _jit_GenIFCBlock(u32 addr)
 				case 0b001010: {ifc = IFC_LDSMACH  | IFC_RLS(RLS_LN); } break;
 				case 0b011010: {ifc = IFC_LDSMACL  | IFC_RLS(RLS_LN); } break;
 				case 0b101010: {ifc = IFC_LDSPR    | IFC_RLS(RLS_LN); } break;
-				case 0b001011: {ifc = IFC_JSR      | IFC_RLS(RLS_LN); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
-				case 0b011011: {ifc = IFC_TAS      | IFC_RLS(RLS_LN); } break;
-				case 0b101011: {ifc = IFC_JMP      | IFC_RLS(RLS_LN); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				case 0b001011: {ifc = IFC_JSR      | IFC_RLS(RLS_LN); block_data.jump_reg = 0x10 | ((inst >> 8) & 0xF); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+				case 0b011011: {ifc = IFC_TAS      | IFC_RLS(RLS_LN); has_write++;} break;
+				case 0b101011: {ifc = IFC_JMP      | IFC_RLS(RLS_LN); block_data.jump_reg = 0x10 | ((inst >> 8) & 0xF); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 				case 0b001110: {ifc = IFC_LDCSR    | IFC_RLS(RLS_LN); } break;
 				case 0b011110: {ifc = IFC_LDCGBR   | IFC_RLS(RLS_LN); } break;
 				case 0b101110: {ifc = IFC_LDCVBR   | IFC_RLS(RLS_LN); } break;
@@ -1316,26 +1373,30 @@ u16* _jit_GenIFCBlock(u32 addr)
 			case 0b0111: { ifc = IFC_ADDI | IFC_RLS(RLS_SN); } break;
 			case 0b1000: {
 			switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-				case 0b0000: {ifc = IFC_MOVBS4 | IFC_RLS(RLS_LM0); } break;
-				case 0b0001: {ifc = IFC_MOVWS4 | IFC_RLS(RLS_LM0); } break;
+				case 0b0000: {ifc = IFC_MOVBS4 | IFC_RLS(RLS_LM0); has_write++;} break;
+				case 0b0001: {ifc = IFC_MOVWS4 | IFC_RLS(RLS_LM0); has_write++;} break;
 				case 0b0100: {ifc = IFC_MOVBL4 | IFC_RLS(RLS_LM_S0); } break;
 				case 0b0101: {ifc = IFC_MOVWL4 | IFC_RLS(RLS_LM_S0); } break;
 				case 0b1000: {ifc = IFC_CMPIM  | IFC_RLS(RLS_L0); } break;
-				case 0b1001: {ifc = IFC_BT; bstate = BSTATE_END;} break; //TODO: Cycles are weird
-				case 0b1011: {ifc = IFC_BF; bstate = BSTATE_END;} break; //TODO: Cycles are weird
-				case 0b1101: {ifc = IFC_BTS; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
-				case 0b1111: {ifc = IFC_BFS;  if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
+				case 0b1001: {ifc = IFC_BT; dst_addr = DEST_ADDR(inst); bstate = BSTATE_END;} break; //TODO: Cycles are weird
+				case 0b1011: {ifc = IFC_BF; dst_addr = DEST_ADDR(inst); bstate = BSTATE_END;} break; //TODO: Cycles are weird
+				case 0b1101: {ifc = IFC_BTS; dst_addr = DEST_ADDR(inst); if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
+				case 0b1111: {ifc = IFC_BFS; dst_addr = DEST_ADDR(inst);  if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break; //TODO: Cycles are weird and Delay Slot is weird
 				default:     {ifc = IFC_ILLEGAL | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
 			}} break;
 			case 0b1001: { ifc = IFC_MOVWI | IFC_RLS(RLS_SN); } break;
-			case 0b1010: { ifc = IFC_BRA; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
-			case 0b1011: { ifc = IFC_BSR; if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+			case 0b1010: { ifc = IFC_BRA;
+							dst_addr = curr_pc + (EXT_IMM12(inst) << 1) + 4;
+							if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
+			case 0b1011: { ifc = IFC_BSR;
+							dst_addr = curr_pc + (EXT_IMM12(inst) << 1) + 4;
+							if(bstate == BSTATE_CONT) {bstate = BSTATE_SET_DELAY;}} break;
 			case 0b1100: {
 			switch ((inst >> 8) & 0xF) { // 0100_XXXX_YYYY_YYYY
-				case 0b0000: {ifc = IFC_MOVBSG | IFC_RLS(RLS_L0); } break;
-				case 0b0001: {ifc = IFC_MOVWSG | IFC_RLS(RLS_L0); } break;
-				case 0b0010: {ifc = IFC_MOVLSG | IFC_RLS(RLS_L0); } break;
-				case 0b0011: {ifc = IFC_TRAPA  | IFC_RLS(RLS_S15); bstate = BSTATE_END;} break;
+				case 0b0000: {ifc = IFC_MOVBSG | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b0001: {ifc = IFC_MOVWSG | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b0010: {ifc = IFC_MOVLSG | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b0011: {ifc = IFC_TRAPA  | IFC_RLS(RLS_S15); has_write++; bstate = BSTATE_END;} break;
 				case 0b0100: {ifc = IFC_MOVBLG | IFC_RLS(RLS_S0); } break;
 				case 0b0101: {ifc = IFC_MOVWLG | IFC_RLS(RLS_S0); } break;
 				case 0b0110: {ifc = IFC_MOVLLG | IFC_RLS(RLS_S0); } break;
@@ -1344,10 +1405,10 @@ u16* _jit_GenIFCBlock(u32 addr)
 				case 0b1001: {ifc = IFC_ANDI   | IFC_RLS(RLS_S0); } break;
 				case 0b1010: {ifc = IFC_XORI   | IFC_RLS(RLS_S0); } break;
 				case 0b1011: {ifc = IFC_ORI    | IFC_RLS(RLS_S0); } break;
-				case 0b1100: {ifc = IFC_TSTM   | IFC_RLS(RLS_L0); } break;
-				case 0b1101: {ifc = IFC_ANDM   | IFC_RLS(RLS_L0); } break;
-				case 0b1110: {ifc = IFC_XORM   | IFC_RLS(RLS_L0); } break;
-				case 0b1111: {ifc = IFC_ORM    | IFC_RLS(RLS_L0); } break;
+				case 0b1100: {ifc = IFC_TSTM   | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b1101: {ifc = IFC_ANDM   | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b1110: {ifc = IFC_XORM   | IFC_RLS(RLS_L0); has_write++;} break;
+				case 0b1111: {ifc = IFC_ORM    | IFC_RLS(RLS_L0); has_write++;} break;
 			}} break;
 			case 0b1101: { ifc = IFC_MOVLI   | IFC_RLS(RLS_SN); } break;
 			case 0b1110: { ifc = IFC_MOVI    | IFC_RLS(RLS_SN); } break;
@@ -1389,22 +1450,52 @@ u16* _jit_GenIFCBlock(u32 addr)
 		curr_pc += 2;
 	}
 
+	//basic loop idle: there are no writes to memory and the destination address is the start of the block
+	if (!has_write && !dt_used && addr == dst_addr) {
+		block_data.entry_addr = 1;
+	} else {
+		block_data.entry_addr = 0;
+	}
+
 	//Set values
 	block_data.st_regs = st_regs;
 	block_data.ld_regs = ld_regs;
 	block_data.instr_count = instr_count;
-	block_data.entry_addr = entry_addr;
-
+	block_data.dest_addr = (dst_addr < ~0 ? dst_addr : 0);
 	return ret_ptr;
 }
 
 
-u32* _jit_GenBlock(u32* iblock, u32 addr)
+u32 _jit_check_idleloop(u32 addr)
+{
+	u32 *instr_ptr = (u32*) sh2_GetPCAddr(addr);
+	//Test for idle_loop0
+	if (instr_ptr[0] == 0xC6F3400b &&
+		instr_ptr[1] == 0x0009C413 &&
+		instr_ptr[2] == 0x401189F9) {
+		return (u32) jit_idle_loop0;
+	}
+
+
+	return 0;
+}
+
+u32 _jit_GenBlock(u32 addr)
 {
 	//Pass 0, check instructions and decode one by one:
+	u32 blk;
 	pc_prev_unreached = addr;
 	u32 curr_cycles = 0;
 	u32 curr_pc = addr;
+	u32 sector =  ((addr >> 23) & 0xC) | ((addr >> 20) & 0x2);
+	sector = (((0x8FF5 << sector) << 5) & 0x180000);
+	u32 drc_indx = ((addr >> 1) & 0x7FFFF) | sector;
+
+	if ((blk = _jit_check_idleloop(addr))) {
+		drc_blocks[drc_indx] = blk;
+		return blk;
+	}
+
 	u16 *inst_ptr = _jit_GenIFCBlock(addr);
 
 	if (drc_code_pos + (block_data.instr_count * 8) >= DRC_CODE_SIZE) {
@@ -1586,24 +1677,42 @@ u32* _jit_GenBlock(u32* iblock, u32 addr)
 		++curr_cycles;	//At least one cycle
 	}
 
-	PPCC_ADDI(3, 0, curr_cycles); //Return cycles in block
-	PPCC_B(jit_endblock_test); //End block
+#if 1
+	if (block_data.entry_addr) {
+#else
+	if (0) {
+#endif
+		//block is idle then set cycles to zero and return
+		PPCC_ADDI(GP_TMP, 0, 0);
+		PPCE_SAVE(GP_TMP, cycles);
+		PPCC_B(jit_exit); //Stop excecution
+	} else if (block_data.dest_addr) {
+		//Block jumps to a known address (TODO: loops back for now, should apply to all PC relative jumps)
+		u32 sector = ((block_data.dest_addr >> 23) & 0xC) | ((block_data.dest_addr >> 20) & 0x2);
+		sector = (((0x8FF5 << sector) << 5) & 0x180000);
+		u32 drc_indx = ((block_data.dest_addr >> 1) & 0x7FFFF) | sector;
+		u32 blk_address = (u32) &drc_blocks[drc_indx];
+		PPCC_ADDIS(4, 0, (blk_address) >> 16);	/*Set high imm 16 bits */ \
+		PPCC_ORI(4, 4, blk_address);			/*Set low imm 16 bits */ \
+		PPCC_ADDI(3, 0, curr_cycles); //Return cycles in block
+		PPCC_B(jit_known_dest_endblock_test); //End block with known jump address
+	} else {
+		PPCC_ADDI(3, 0, curr_cycles); //Return cycles in block
+		PPCC_B(jit_endblock_test); //End block
+	}
+
+
 
 	/* Fill block code */
-	*iblock = (u32) &drc_code[drc_code_pos];
-	s32 len = ((u8*) icache_ptr - (u8*)*iblock);
-	u32 iblock_pos = ((u32) *iblock) & ~0x1F;
+	blk = (u32) &drc_code[drc_code_pos];
+	s32 len = ((u8*) icache_ptr - (u8*) blk);
+	u32 iblock_pos = ((u32) blk) & ~0x1F;
 	DCStoreRange((void*) iblock_pos, len + 0x20);
 	ICInvalidateRange((void*) iblock_pos, len + 0x20);
-
-	/* Add length of block to drc code position */
-	if (drc_code_pos > drc_code_pos + (len >> 2) ) {
-		HashClearAll();
-		return _jit_GenBlock(iblock, addr);
-	}
+	drc_blocks[drc_indx] = blk;
 	drc_code_pos += len >> 2;
-	drc_blocks_size++;
-	return iblock;
+
+	return blk;
 }
 
 
@@ -1624,38 +1733,107 @@ void sh2_DrcReset(void)
 	HashClearAll();
 }
 
-u32* HashGet(u32 key)
+inline void HashWRAMClearKey16(u32 addr)
+{
+	drc_blocks[addr >> 1] = (u32) _jit_GenBlock;
+}
+
+inline void HashWRAMClearKey32(u32 addr)
+{
+	u32 i = addr >> 1;
+	drc_blocks[i+1] = (drc_blocks[i] = (u32) _jit_GenBlock);
+}
+
+u32 HashGet(u32 addr)
 {
 	//DEBUG..
-	//pc_prev[pc_prev_pos] = key;
-	//pc_prev_pos = (pc_prev_pos+1) & (MAX_PREV-1);
-	//if (pc_prev_unreached == 0x0601C6DA && key == pc_breakpoint) {
+//	pc_prev[pc_prev_pos] = addr;
+//	pc_prev_pos = (pc_prev_pos+1) & (MAX_PREV-1);
+//
+//	if (addr == 0x060C0252) {
+//		pc_breakpoint_val = addr;
+//	}
+//test bios entries
+	//u32 addr_prev = pc_prev[(pc_prev_pos-1) & (MAX_PREV-1)];
+	//address is in bios but previous is not
+	//if (((key & 0x0FFFFFFF) <= 0x000FFFFF)
+	//	&& ((addr_prev & 0x0FFFFFFF) > 0x000FFFFF)) {
+	//	bios_entries[bios_entries_num] = key;
+	//	bios_entries_num++;
+	//}
+
+	//if (key == 0x000002ac) {
 	//if (key == pc_breakpoint) {
 	//	pc_breakpoint_val = 0xF;
 	//}
-	u32 i = (((key >> 1) & 0x7FFFF) | ((key >> 6) & 0x180000)) & (BLOCK_ARR_SIZE - 1);
-	return &drc_blocks[i];
+	//if (key == 0x000050ea) {
+	//	//800308c4
+	//	HashClearAll();
+	//}
+	//u32 sector = 0;
+	//switch ((addr >> 21) & 0x31) {
+	//	case 0x01: sector = 0x080000; break;
+	//	case 0x10: sector = 0x100000; break;
+	//	case 0x30: sector = 0x180000; break;
+	//	case 0x31: sector = 0x180000; break;
+	//}
+	//u32 sector = (0x30240000 >> 1) >> ((((addr >> 21) & 1) | ((addr >> 24) & 6)) << 1);
+	u32 sector =  ((addr >> 23) & 0xC) | ((addr >> 20) & 0x2);
+	sector = (((0x8FF5 << sector) << 5) & 0x180000);
+	u32 i = ((addr >> 1) & 0x7FFFF) | sector;
+	//u32 i = (((key >> 1) & 0x7FFFF) | ((key >> 6) & 0x180000)) & (BLOCK_ARR_SIZE - 1);
+//
+	//if (drc_blocks[i] & 1) { // consider not compiled block
+	//	return (u32) _jit_GenBlock;
+	//	//pc_breakpoint_val = key;
+	//}
+	//drc_code_pos = 0;
+	return drc_blocks[i];
 }
 
-void HashClearRange(u32 start_addr, u32 end_addr)
+void HashClearRange(u32 start_addr, u32 len)
 {
+	if((start_addr&0xDFF00000)!=0x200000&&(start_addr&0xDE000000)!=0x6000000) return;
+
+	//u32 i;
+	//u32 real_len = ((start_addr & 0xFFFF) + len) >> 1;
+	//start_addr &= ~0xFFFF;
+	u32 end_addr = start_addr + len;
+	// Ignore non-RAM regions
 	//Don't need to check 2nd byte
-	start_addr >>= 1;
-	end_addr >>= 1;
-	for (u32 i = start_addr; i <= end_addr; ++i) {
-		u32 hash = ((i & 0x7FFFF) | ((i >> 5) & 0x180000)) & (BLOCK_ARR_SIZE - 1);
-		drc_blocks[hash] = 0;
+	//u32 str = (((start_addr >> 1) & 0x7FFFF) | ((start_addr >> 6) & 0x180000)) & (BLOCK_ARR_SIZE - 1);
+	////u32 end = (((end_addr >> 1) & 0x7FFFF) | ((end_addr >> 6) & 0x180000)) & (BLOCK_ARR_SIZE - 1);
+	//u32 *bs = (u32*) &drc_blocks[str];
+	//u32 *be = (u32*) &drc_blocks[str + real_len];
+	//do {
+	//	*bs = (u32) _jit_GenBlock;
+	//	bs++;
+	//} while (bs < be);
+	//	u32 sector = 0;
+	//	switch ((start_addr >> 21) & 0x31) {
+	//		case 0x01: sector = 0x080000; break;
+	//		case 0x10: sector = 0x100000; break;
+	//		case 0x30: sector = 0x180000; break;
+	//		case 0x31: sector = 0x180000; break;
+	//	}
+	u32 sector =  ((start_addr >> 23) & 0xC) | ((start_addr >> 20) & 0x2);
+	sector = (((0x8FF5 << sector) << 5) & 0x180000);
+	for (u32 addr = start_addr; addr <= end_addr; addr+=2) {
+		//u32 sector = (0x30240000 >> 1) >> ((((addr >> 21) & 1) | ((addr >> 24) & 6)) << 1);
+		u32 i = ((addr >> 1) & 0x7FFFF) | sector;
+		drc_blocks[i] = (u32) _jit_GenBlock;
 	}
 }
 
 void HashClearAll(void)
 {
 	for (u32 i = 0; i < BLOCK_ARR_SIZE; ++i) {
-		drc_blocks[i] = 0;
+		drc_blocks[i] = (u32) _jit_GenBlock;
 	}
 	drc_code_pos = 0;
-	drc_blocks_size = 0;
 }
+
+
 
 // BIOS CODE PPC TO SSH
 //Wrong between drc_code_pos

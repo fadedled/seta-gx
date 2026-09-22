@@ -139,20 +139,7 @@ void Vdp1DeInit(void) {
 //////////////////////////////////////////////////////////////////////////////
 
 //HALF-DONE
-int VideoInit(int coreid) {
-#if 0
-	// Make sure the core is freed
-	VIDSoftDeInit();
-
-	if (VIDSoftInit() != 0)
-		return -1;
-
-   // Reset resolution/priority variables
-	if (Vdp2Regs){
-		//XXX: this is wrong?
-		VIDSoftVdp1Reset();
-	}
-#endif
+int VideoInit(int UNUSED) {
 	return 0;
 }
 

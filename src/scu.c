@@ -51,7 +51,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 	#include "sh2/sh2.h"
 #endif
 #include "yabause.h"
-#include <inttypes.h>
+#include <gctypes.h>
 
 #ifdef OPTIMIZED_DMA
 # include "cs2.h"
@@ -1198,7 +1198,7 @@ void ScuExec(u32 timing) {
 
                    int Counter = 0;
                    if ( ((instruction >> 10) & 0x1F) == 0x00 ||
-                        ((instruction >> 10) & 0x1F) == 0x04  ||
+                        ((instruction >> 10) & 0x1F) == 0x04 ||
                         ((instruction >> 11) & 0x0F) == 0x08 ||
                         ((instruction >> 10) & 0x1F) == 0x14 )
                    {
@@ -1264,97 +1264,6 @@ void ScuExec(u32 timing) {
 						ScuDsp->jmpaddr = instruction & 0xFF;
 						ScuDsp->delayed = 0;
 					}
-#if 0
-                     switch ((instruction >> 19) & 0x7F) {
-                        case 0x00: // JMP Imm
-                           ScuDsp->jmpaddr = instruction & 0xFF;
-                           ScuDsp->delayed = 0;
-                           break;
-                        case 0x41: // JMP NZ, Imm
-                           if (!ScuDsp->ProgControlPort.part.Z)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-                           break;
-                        case 0x42: // JMP NS, Imm
-                           if (!ScuDsp->ProgControlPort.part.S)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-
-                           //LOG("scu\t: JMP NS: S = %d, jmpaddr = %08X\n", (unsigned int)ScuDsp->ProgControlPort.part.S, (unsigned int)ScuDsp->jmpaddr);
-                           break;
-                        case 0x43: // JMP NZS, Imm
-                           if ( ScuDsp->ProgControlPort.part.Z==0 && ScuDsp->ProgControlPort.part.S == 0)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-
-                           //LOG("scu\t: JMP NZS: Z = %d, S = %d, jmpaddr = %08X\n", (unsigned int)ScuDsp->ProgControlPort.part.Z, (unsigned int)ScuDsp->ProgControlPort.part.S, (unsigned int)ScuDsp->jmpaddr);
-                           break;
-                        case 0x44: // JMP NC, Imm
-                           if (!ScuDsp->ProgControlPort.part.C)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-                           break;
-                        case 0x48: // JMP NT0, Imm
-                           if (!ScuDsp->ProgControlPort.part.T0)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-
-                           //LOG("scu\t: JMP NT0: T0 = %d, jmpaddr = %08X\n", (unsigned int)ScuDsp->ProgControlPort.part.T0, (unsigned int)ScuDsp->jmpaddr);
-                           break;
-                        case 0x61: // JMP Z,Imm
-                           if (ScuDsp->ProgControlPort.part.Z)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-                           break;
-                        case 0x62: // JMP S, Imm
-                           if (ScuDsp->ProgControlPort.part.S)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-
-                           //LOG("scu\t: JMP S: S = %d, jmpaddr = %08X\n", (unsigned int)ScuDsp->ProgControlPort.part.S, (unsigned int)ScuDsp->jmpaddr);
-                           break;
-                        case 0x63: // JMP ZS, Imm
-                           if (ScuDsp->ProgControlPort.part.Z || ScuDsp->ProgControlPort.part.S)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-
-                           //LOG("scu\t: JMP ZS: Z = %d, S = %d, jmpaddr = %08X\n", ScuDsp->ProgControlPort.part.Z, (unsigned int)ScuDsp->ProgControlPort.part.S, (unsigned int)ScuDsp->jmpaddr);
-                           break;
-                        case 0x64: // JMP C, Imm
-                           if (ScuDsp->ProgControlPort.part.C)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-                           break;
-                        case 0x68: // JMP T0,Imm
-                           if (ScuDsp->ProgControlPort.part.T0)
-                           {
-                              ScuDsp->jmpaddr = instruction & 0xFF;
-                              ScuDsp->delayed = 0;
-                           }
-                           break;
-                        default:
-                           LOG("scu\t: Unknown JMP instruction not implemented\n");
-                           break;
-                     }
-#endif
                      break;
                   case 0x0E: // Loop bottom Commands
                      if (instruction & 0x8000000)
@@ -1926,7 +1835,7 @@ void ScuTestInterruptMask()
 #ifdef USE_SH2_OLD
 				 SH2SendInterrupt(SSH2, 0x43, 2);
 #else
-			sh2_SetInterrupt(&ssh2, 0x40, 2);
+			sh2_SetInterrupt(&ssh2, 0x43, 2);
 #endif
            }
 

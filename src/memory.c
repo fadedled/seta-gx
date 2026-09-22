@@ -18,8 +18,6 @@
     Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 */
 
-//#ifdef PSP  // see FIXME in T1MemoryInit()
-
 #include <gccore.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,6 +34,7 @@
 	#include "sh2old/sh2core.h"
 #else
 	#include "sh2/sh2.h"
+	#include "sh2/drc/compiler.h"
 #endif
 #include "scsp.h"
 #include "scu.h"
@@ -222,12 +221,12 @@ u32 FASTCALL bios_Read32(u32 addr)
 
 u8 FASTCALL bup_Read8(u32 addr)
 {
-	return bup_ram[addr & (BACKUP_RAM_SIZE - 1)];
+	return bup_ram[(addr & (BACKUP_RAM_SIZE - 1)) >> 1] | (-(~addr & 1));
 }
 
 void FASTCALL bup_Write8(u32 addr, u8 val)
 {
-	bup_ram[(addr & (BACKUP_RAM_SIZE - 1)) | 1] = val;
+	bup_ram[(addr & (BACKUP_RAM_SIZE - 1)) >> 1] = val;
 	bup_ram_written = 1;
 }
 
@@ -254,18 +253,22 @@ u32 FASTCALL wram_Read32(u32 addr)
 void FASTCALL wram_Write8(u32 addr, u8 val)
 {
 	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	drc_blocks[addr >> 1] = (u32) _jit_GenBlock;
 	wram[addr] = val;
 }
 
 void FASTCALL wram_Write16(u32 addr, u16 val)
 {
 	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	drc_blocks[addr >> 1] = (u32) _jit_GenBlock;
 	*((u16*) (wram + addr)) = val;
 }
 
 void FASTCALL wram_Write32(u32 addr, u32 val)
 {
 	addr = (addr | ((addr >> 6) & HIGH_WRAM_SIZE)) & (WRAM_SIZE - 1);
+	u32 i = addr >> 1;
+	drc_blocks[i+1] = (drc_blocks[i] = (u32) _jit_GenBlock);
 	*((u32*) (wram + addr)) = val;
 }
 
@@ -376,7 +379,7 @@ static void mem_MaskFill(u8 *mem, u32 start, u32 end, u32 mask, u32 rcycles, u32
 		mask = PAGE_SIZE;
 	}
 	if (mem) { //Map memory
-		VM_MemMap(mem, start, mask, pp);
+		//VM_MemMap(mem, start, mask, pp);
 	}
 }
 
@@ -453,6 +456,7 @@ void mem_Deinit(void)
 
 void MappedMemoryInit()
 {
+#if 0
 	//Number of pages: 2 + 4 +1 + 1 + 128 + 128 + 1 + 128 + 1 + 1 + 1 + 4
 	//Now we would have 545 pages used
 	VM_Init(1024*1024, 256*1024);	//DFUK
@@ -473,6 +477,7 @@ void MappedMemoryInit()
 	//VM_MemMap(SCU_REG_BASE, 0x05FE0000u, PAGE_SIZE, VM_PP_NA);	//SCU Regs (208 bytes)
 	//VM_BATSet(1, HIGH_RAM_BASE, 0x06000000u, BL_ENC_1M);	//HIGH_RAM_BASE
 
+#endif
 
 	mem_MaskFill(0, 0x00000000, 0x07FFFFFF, 0, 1, 1, VM_PP_NA); // Init all
 	mem_MaskFill(bios_rom,              0x00000000, 0x000FFFFF, 0x7FFFF, 2, 2, VM_PP_RO); //BIOS Rom
@@ -495,7 +500,9 @@ void MappedMemoryInit()
 	mem_MaskFill(unmapped_page,         0x05FE0000, 0x05FEFFFF,    0xFF, 4, 2, VM_PP_NA); //SCU Regs
 	mem_MaskFill(wram + HIGH_WRAM_SIZE, 0x06000000, 0x07FFFFFF, 0xFFFFF, 2, 2, VM_PP_RW); //High RAM
 	//Handler for sh2 memory mapping
+#if 0
 	VM_MemMap(unmapped_page, 0x10000000, PAGE_SIZE, VM_PP_NA);
+#endif
    // Initialize everyting to unhandled to begin with
    FillMemoryArea(0x00, 0x100, &UnhandledMemoryReadByte,
                                 &UnhandledMemoryReadWord,
@@ -816,18 +823,81 @@ struct BUPHeader {
 	u32 _padding4;
 } bup_header = {.magic = {'V', 'm', 'e', 'm'}};
 
-#define BUP_MAX_SAVEFILE	(32*1024)
+#define BUP_MAX_SAVEFILE    (32*1024)
+#define BUP_HEADER_SIZE     (64)
 
 static u32 *bup_savefile;
 
 void bup_Format()
 {
-	const char *BupHeader = "BBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaattBBaacckkUUppRRaamm  FFoorrmmaatt";
+	const char *BupHeader =
+		"BackUpRam FormatBackUpRam FormatBackUpRam FormatBackUpRam Format";
+	// clear contents
+	bzero(bup_ram, BUP_MAX_SAVEFILE);
+	// fill with header
 	u32 *src = (u32*) BupHeader;
 	u32 *dst = (u32*) bup_ram;
-	for (u32 i = 0; i < 64; ++i) {
+	for (u32 i = 0; i < (BUP_HEADER_SIZE >> 2); ++i) {
 		dst[i] = src[i];
 	}
+}
+
+void bup_ReadSave(const char *filename)
+{
+	bup_Format();
+	FILE *fp;
+ 	if ((fp = fopen(filename, "rb")) == NULL) {
+		return;
+	}
+
+	// calculate file size
+	fseek(fp, 0, SEEK_END);
+	u32 filesize = ftell(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	// should fit in bup ram
+	if (filesize < BUP_MAX_SAVEFILE) {
+		fread(bup_ram, 1, filesize, fp);
+	}
+	fclose(fp);
+	bup_ram_written = 0;
+}
+
+/* Returns the index of the last nonzero value in arr, or -1 if none exists
+   (or if count == 0). */
+s32 __LastNonzero(const u32 *arr, u32 count) {
+	const u32 *p = arr + count;
+
+	while (p > arr) {
+		p--;
+		if (*p != 0) {
+			return (s32)(p - arr);
+		}
+	}
+	return -1;
+}
+
+void bup_WriteSave(const char *filename)
+{
+	if (!bup_ram_written) {
+		return;
+	}
+
+	// get last non zero value
+	s32 last_value = __LastNonzero((u32*) (bup_ram), (BUP_MAX_SAVEFILE) >> 2);
+	if (last_value == -1) {
+		return;
+	}
+	//align 16 bytes
+	last_value = (last_value + 0x4) & ~0x3;
+
+	FILE *fp;
+ 	if ((fp = fopen(filename, "wb")) == NULL) {
+		return;
+	}
+	fwrite(bup_ram, 1, last_value << 2, fp);
+	fclose(fp);
+	bup_ram_written = 0;
 }
 
 

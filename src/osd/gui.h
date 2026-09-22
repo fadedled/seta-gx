@@ -1,4 +1,17 @@
-
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #ifndef __GUI_H__
 #define __GUI_H__
@@ -11,7 +24,7 @@
  */
 
 #include <gccore.h>
-
+#include <malloc.h>
 
 #define MAX_MESSAGES        64
 #define OSD_MSG_BG			0x01
@@ -27,6 +40,10 @@
 
 #define GUI_XY(x, y)		((x & 0xFFFF) << 16 | (y & 0xFFFF))
 
+#define GUI_QUIT			0x1
+#define GUI_RETRY			0x2
+#define GUI_RESUME			0x4
+#define GUI_OK				0x8
 
 enum ReturnValue {
 	GUI_RET_NONE,
@@ -34,15 +51,12 @@ enum ReturnValue {
 	GUI_RET_EXIT
 };
 
-
-extern GXTexObj gui_tobj;
-extern GXTexRegion gui_treg;
-
 typedef struct String_t {
 	u32 len;
 	char *data;
 } String;
 
+#define GUI_STRING(str)			(String){.data = str, .len = (sizeof(str)-1)}
 
 typedef struct GuiLabel_t {
 	u32 color;
@@ -54,6 +68,8 @@ typedef struct GuiLabel_t {
 
 typedef struct GuiItems_t {
 	u32 cursor;				//position of cursor
+	u32 page;				//page of cursor
+	u32 page_count;			//number of entries on cursor
 	u32 count;				//number of entries
 	u32 disp_offset;		//offset of list displayed
 	u32 disp_count;			//number of entries displayed
@@ -71,13 +87,21 @@ typedef struct GuiAnim {
 	u32 time;
 } GuiAnim;
 
-void gui_Init(void);
-void gui_Draw(GuiItems *items);
-void gui_SetMessage(String msg, u32 color);
+typedef struct GuiOption_t {
+	String name;
+	String opt_names[4];
+	u32    count;
+	u32    selected;
+} GuiOption;
 
-//u32 gui_AnimSet(GuiAnim *anim, GuiElem *elems);
 
-
+void  gui_Init(void);
+void  gui_LoadGameList(void);
+u32   gui_Exec(void);
+void  gui_SetMessage(String msg, u32 color);
+char* gui_GetSelectedFile(void);
+void  gui_SetSelectedFile(char* filename);
+u32   gui_MsgBox(String *btn_labels, u32 btns_count, char *msg_format, ...);
 
 
 #endif /*__GUI_H__*/

@@ -1,8 +1,21 @@
+/********************************************************************************
+ * Copyright (C) 2026 Evoca
+ *
+ * This program is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation; version 2.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program; if not, see <http://www.gnu.org/licenses/>.
+ *******************************************************************************/
 
 #include "sgx.h"
 #include "../vdp1.h"
 #include "../vdp2.h"
-#include "../osd/gui.h"
 #include <malloc.h>
 
 #define TREG_VDPTEX			0
@@ -17,12 +30,6 @@ static u8 tlut_dirty[0x80] ATTRIBUTE_ALIGN(32);
 static GXTlutRegion tlut_region;	//XXX:tlut region for callback (can skip?)
 
 static GXTexRegion tex_region[3];
-//static GXTexRegion indtex_regions[192];
-//static GXTexObj    indtex_objects[192];
-
-//Tex Swizzler are stored by size, format and aligment
-static GXTexRegion ind_cellreg8;
-static GXTexObj    ind_celltex8;
 
 u32 *tlut_data;
 //==============================================================================
@@ -136,7 +143,6 @@ static GXTexRegion* __SGX_CalcTexRegion(const GXTexObj *obj, u8 mapid)
 void SGX_Init(void)
 {
 	GX_SetPixelFmt(GX_PF_RGBA6_Z24, GX_ZC_LINEAR);
-	gui_Init();
 	GX_SetArray(GX_VA_TEX0, tex_array, sizeof(*tex_array) * 2);
 
 	//Set the texcache regions
@@ -304,29 +310,6 @@ void SGX_InitTex(u32 mapid, u32 even, u32 odd)
 	GX_LOAD_BP_REG(tmem_odd);
 }
 
-void SGX_InitTexSet(u32 tex_count, u32 map0_even, u32 map1_even)
-{
-#if 0
-	u32 cache_regions[4] = {
-		0x120000, 0xD8000 | (0x20000 >> 5), 0xD8000 | (0x28000 >> 5), 0x120000
-	};
-	//Texture regions
-	u32 reg = cache_regions[mapid];
-	i <<= 24;
-	for (u32 i = 0; i < tex_count; ++i) {
-		u32 tmem_even = 0x8C000000 | mapid | reg;	// 128k cache
-		u32 tmem_odd = 0x90000000 | mapid;	//No odd tmem cache
-		//Texture filter
-		u32 tex_filt = 0x80000000 | mapid;
-		u32 tex_lod = 0x84000000 | mapid;
-
-		GX_LOAD_BP_REG(tex_filt);
-		GX_LOAD_BP_REG(tex_lod);
-		GX_LOAD_BP_REG(tmem_even);
-		GX_LOAD_BP_REG(tmem_odd);
-	}
-#endif
-}
 
 void SGX_LoadTlut(void *data_addr, u32 tlut)
 {
@@ -537,4 +520,5 @@ void SGX_SetCurrentMtxHi(u32 t4, u32 t5, u32 t6, u32 t7)
 	GX_LOAD_CP_REG(0x40, mtx);
 	GX_LOAD_XF_REG(0x1019, mtx);
 }
+
 

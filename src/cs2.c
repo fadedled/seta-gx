@@ -44,12 +44,14 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include <stdlib.h>
 #include <ctype.h>
 #include "cs2.h"
+#include "osd/osd.h"
 #include "debug.h"
 #include "error.h"
 #include "scsp.h"
 #include "scu.h"
 #include "smpc.h"
 #include "yabause.h"
+#include <ogc/lwp_watchdog.h>
 
 #define CDB_HIRQ_CMOK      0x0001
 #define CDB_HIRQ_DRDY      0x0002
@@ -936,11 +938,11 @@ void Cs2Exec(u32 timing) {
 
    if (Cs2Area->_periodiccycles >= Cs2Area->_periodictiming)
    {
+
       Cs2Area->_periodiccycles -= Cs2Area->_periodictiming;
 	  if (Cs2Area->_periodictiming == SEEK_TIME){
 		  Cs2SetTiming(1);
 	  }
-
       // Get Drive's current status and compare with old status
       switch (Cs2Area->status & 0xF) {
          case CDB_STAT_PAUSE:
@@ -950,8 +952,7 @@ void Cs2Exec(u32 timing) {
          case CDB_STAT_PLAY:
          {
             partition_struct * playpartition;
-            int ret = Cs2ReadFilteredSector(Cs2Area->FAD, &playpartition);
-
+			int ret = Cs2ReadFilteredSector(Cs2Area->FAD, &playpartition);
             switch (ret)
             {
                case 0:
@@ -1437,6 +1438,7 @@ void Cs2Execute(void) {
       CDLOG("cs2\t: Command %02x not implemented\n", instruction);
       break;
   }
+
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -3941,7 +3943,7 @@ int Cs2ReadFilteredSector(u32 rfsFAD, partition_struct **partition) {
 
   if (Cs2Area->outconcddev != NULL && !Cs2Area->isbufferfull)
   {
-     // read a sector using cd interface function to workblock.data
+	// read a sector using cd interface function to workblock.data
      if (!Cs2Area->cdi->ReadSectorFAD(rfsFAD, Cs2Area->workblock.data))
      {
         *partition = NULL;
@@ -3983,13 +3985,12 @@ int Cs2ReadFilteredSector(u32 rfsFAD, partition_struct **partition) {
      return 0;
   }
   else{
-    // read a sector using cd interface function to workblock.data
+	// read a sector using cd interface function to workblock.data
     if (!Cs2Area->cdi->ReadSectorFAD(rfsFAD, Cs2Area->workblock.data))
     {
       *partition = NULL;
       return -2;
     }
-
     Cs2Area->workblock.size = Cs2Area->getsectsize;
     Cs2Area->workblock.FAD = rfsFAD;
 
@@ -4027,7 +4028,6 @@ u8 Cs2GetIP(int autoregion) {
 
 	// read in lba 0/FAD 150
 	if ((gripartition = Cs2ReadUnFilteredSector(150)) != NULL) {
-		int i;
 		u8 *buf = (u8*) gripartition->block[gripartition->numblocks - 1]->data;
 		// Make sure we're dealing with a saturn game
 		if (memcmp(buf, "SEGA SEGASATURN", 15) == 0) {
@@ -4116,8 +4116,8 @@ u8 Cs2GetRegionID(void)
 }
 
 
-u32 Cs2GetMasterStackAdress(){ if (cdip) return cdip->msh2stack; else return 0x6002000; }
-u32 Cs2GetSlaveStackAdress(){ if (cdip) return cdip->ssh2stack; else return 0x6001000; }
+u32 Cs2GetMasterStackAddress(){ if (cdip) return cdip->msh2stack; else return 0x6002000; }
+u32 Cs2GetSlaveStackAddress(){ if (cdip) return cdip->ssh2stack; else return 0x6001000; }
 
 u64 Cs2GetGameId(){
 	return *((u64*)cdip->itemnum);

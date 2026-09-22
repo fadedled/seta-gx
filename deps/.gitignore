@@ -1,0 +1,7 @@
+/libwiidrc/lib
+/libwiidrc/build
+/libchdr/lib
+/libchdr/build
+/libchdr/deps/lzma*/lib
+/libchdr/deps/lzma*/build
+/lib

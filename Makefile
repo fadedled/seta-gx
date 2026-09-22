@@ -31,15 +31,18 @@ SOURCES		:=	src \
 			src/vm
 
 DATA		:=	#res
-INCLUDES	:=
+INCLUDES	:= $(CURDIR)/deps/libchdr/include
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
 DDEFINES= -DUSE_WIIGX -DWIICONVERTASM
+#DDEFINES+= -DDEBUG
+#DDEFINES+= -DDO_PROFILE
+DDEFINES+= -DWII_U_VERSION
 DDEFINES+= -DHW_RVL
 DDEFINES+= -DEXEC_FROM_CACHE
-DDEFINES+= -DOPTIMIZED_DMA
+#DDEFINES+= -DOPTIMIZED_DMA
 DDEFINES+= -DUSE_SCSP2
 DDEFINES+= -DSCSP_PLUGIN
 DDEFINES+= -DAUTOLOADPLUGIN
@@ -47,7 +50,7 @@ DDEFINES+= -DHAVE_STRCASECMP
 #DDEFINES+= -DSH2_INT
 #DDEFINES+= -DUSE_SH2_OLD
 
-VDEFINES=-DPACKAGE=\"seta-gx\" -DVERSION=\"r2926\" -DWIIVERSION=\"ver.\ 1.0\"  -DREENTRANT_SYSCALLS_PROVIDED
+VDEFINES=-DPACKAGE=\"seta-gx\" -DVERSION=\"0.4pre\" -DWIIVERSION=\"ver.\ 1.0\"  -DREENTRANT_SYSCALLS_PROVIDED
 
 MACHDEP = -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float -fsigned-char -ffast-math -funroll-loops -fauto-inc-dec -finline-functions #-fomit-frame-pointer -flto
 
@@ -63,13 +66,13 @@ LDFLAGS	= -g $(MACHDEP) -mrvl -Wl,-Map,$(notdir $@).map -static
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
 #---------------------------------------------------------------------------------
-LIBS	:= -laesnd -lfat -lwiiuse -lbte -logc -lchdr -llzma -lzstd -lm -lz
+LIBS	:= -laesnd -lwiidrc -lwiiuse -lbte -lspng -lchdr -lzstd -llzma -lz -lfat -logc -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS)
+LIBDIRS	:= $(CURDIR)/deps $(PORTLIBS)
 
 #---------------------------------------------------------------------------------
 # no real need to edit anything past this point unless you need to add additional
@@ -108,7 +111,7 @@ endif
 
 export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES)) $(addsuffix .o,$(TPLFILES))
 export OFILES_SOURCES := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o)
-export OFILES := $(OFILES_BIN) $(OFILES_SOURCES) m68kops.o m68kcpu.o m68kopdm.o m68kopac.o m68kopdm.o m68kopnz.o dsihandler.o jit_code.o sh2_int.o
+export OFILES := $(OFILES_BIN) $(OFILES_SOURCES) m68kops.o m68kcpu.o m68kopdm.o m68kopac.o m68kopdm.o m68kopnz.o dsihandler.o jit_code.o
 
 export HFILES := $(addsuffix .h,$(subst .,_,$(BINFILES))) $(addsuffix .h,$(subst .,_,$(TPLFILES)))
 
@@ -194,8 +197,8 @@ dsihandler.o: ./vm/dsihandler.s
 jit_code.o: ./sh2/drc/jit_code.s
 	$(CC) -x assembler-with-cpp $(CFLAGS) -D_LANGUAGE_ASSEMBLY -c -o $@ $<
 
-sh2_int.o: ./sh2/sh2_int.s
-	$(CC) -x assembler-with-cpp $(CFLAGS) -D_LANGUAGE_ASSEMBLY -c -o $@ $<
+#sh2_int.o: ./sh2/sh2_int.s
+#	$(CC) -x assembler-with-cpp $(CFLAGS) -D_LANGUAGE_ASSEMBLY -c -o $@ $<
 
 -include $(DEPSDIR)/*.d
 
