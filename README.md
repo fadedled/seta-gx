@@ -31,20 +31,19 @@ An optional config file can be setup, found in `apps/SetaGX` and named `setagx.c
 
 Remapping is planned, but the following is the standard mapping:
 
-| Sega Saturn | GameCube  | WiiMote | Classic |  N64  | Wii U / Pro  |
-|-------------|-----------|---------|---------|-------|--------------|
-| D-pad       | D-pad     | D-pad   | D-pad   | D-pad | D-pad        |
-| A           | B         | A       | Y       | A     | Y            |
-| B           | A         | 1       | B       | C-V   | B            |
-| C           | X         | 2       | A       | C->   | A            |
-| X           | Cstick-UP | -       | X       | B     | X            |
-| Y           | Y         | B       | ZL      | C-<   | ZL           |
-| Z           | Z         |         | ZR      | C-^   | ZR           |
-| R           | R         |         | R       | R     | R            |
-| L           | L         |         | L       | L     | L            |
-| Start       | Start     | +       | +       | Start | +            |
-|-------------|-----------|---------|---------|-------|--------------|
-| **EXIT**    | Start + Z | Home    | Home    | Z + L | Home         |
+| Sega Saturn |  N64  | GameCube  | WiiMote | Classic / Wii U / Pro |
+|-------------|-------|-----------|---------|-----------------------|
+| D-pad       | D-pad | D-pad     | D-pad   | D-pad                 |
+| A           | A     | B         | A       | Y                     |
+| B           | C-V   | A         | 1       | B                     |
+| C           | C->   | X         | 2       | A                     |
+| X           | B     | Cstick-UP | -       | X                     |
+| Y           | C-<   | Y         | B       | ZL                    |
+| Z           | C-^   | Z         |         | ZR                    |
+| R           | R     | R         |         | R                     |
+| L           | L     | L         |         | L                     |
+| Start       | Start | Start     | +       | +                     |
+| **EXIT**    | Z + L | Start + Z | Home    | Home                  |
 
 To return to the menu press the **EXIT** button(s) at the same time, this will close the game so save before doing this. In the menu you can select a game and press A/2 to start it, pressing Start/+ will open/close the options menu and pressing B/1 will return to the Homebrew Channel.
 
