@@ -29,8 +29,10 @@ void SVI_Init(void);
 void SVI_CopyXFB(u32 x, u32 y);
 void SVI_SwapBuffers(u32 wait_vsync);
 void SVI_SetResolution(u32 tvmd);
+void SVI_RestoreTVMode(void);
 void SVI_CopyFrame(void);
 void SVI_ClearFrame(void);
+void SVI_ClearAllFrames(void);
 void SVI_ResetViewport(void);
 void SVI_EnableNativeVideo(u32 enable);
 

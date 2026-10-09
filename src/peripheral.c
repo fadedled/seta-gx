@@ -18,6 +18,7 @@
 #include <ogcsys.h>
 #include <wiiuse/wpad.h>
 #include <ogc/n64.h>
+#include "config.h"
 
 //For wii u version
 #ifdef WII_U_VERSION
@@ -351,31 +352,22 @@ u32 per_updatePads()
 	//Generate Peripheral data for SMPC
 	u32 size = 0;
 	//TODO: make multitap optional (or use game id table)
-	if (0) { //Use of multitap
-		if (per_status & 0x80) { //All controllers are connected
-			//setup multitap
-			per_data.data[size++] = PER_STAT_MULTITAP;
-			for (u32 i = 0; i < 6; ++i) {
-				if (perpad[i].type != PAD_TYPE_NONE) {
-					per_data.data[size++] = PER_ID_DIGITAL;
-					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
-					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
-				} else {
-					per_data.data[size++] = PER_ID_NONE;
-				}
+	switch (CONF_GET_OPT(CONF_OPT_USE_MULTITAP)) {
+		case 0: {//No multitap
+			per_data.data[size++] = per_status & 0x1 ? PER_STAT_DIRECT : PER_STAT_NONE;
+			if (per_status & 0x1) {
+				per_data.data[size++] = PER_ID_DIGITAL;
+				per_data.data[size++] = ~(perpad[0].btn & 0xFF);
+				per_data.data[size++] = ~((perpad[0].btn >> 0x8) & 0xFF);
 			}
-			//add last peripheral data
-			per_data.data[size++] = PER_STAT_MULTITAP;
-			for (u32 i = 6; i < 8; ++i) {
-				if (perpad[i].type != PAD_TYPE_NONE) {
-					per_data.data[size++] = PER_ID_DIGITAL;
-					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
-					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
-				} else {
-					per_data.data[size++] = PER_ID_NONE;
-				}
+			per_data.data[size++] = per_status & 0x2 ? PER_STAT_DIRECT : PER_STAT_NONE;
+			if (per_status & 0x2) {
+				per_data.data[size++] = PER_ID_DIGITAL;
+				per_data.data[size++] = ~(perpad[1].btn & 0xFF);
+				per_data.data[size++] = ~((perpad[1].btn >> 0x8) & 0xFF);
 			}
-		} else { // Up until 7 controllers conected
+		} break;
+		case 1: { //One multitap connected on port 1
 			//setup multitap
 			per_data.data[size++] = PER_STAT_MULTITAP;
 			for (u32 i = 0; i < 6; ++i) {
@@ -394,47 +386,33 @@ u32 per_updatePads()
 				per_data.data[size++] = ~(perpad[6].btn & 0xFF);
 				per_data.data[size++] = ~((perpad[6].btn >> 0x8) & 0xFF);
 			}
-		}
-	} else {
-		per_data.data[size++] = per_status & 0x1 ? PER_STAT_DIRECT : PER_STAT_NONE;
-		if (per_status & 0x1) {
-			per_data.data[size++] = PER_ID_DIGITAL;
-			per_data.data[size++] = ~(perpad[0].btn & 0xFF);
-			per_data.data[size++] = ~((perpad[0].btn >> 0x8) & 0xFF);
-		}
-		per_data.data[size++] = per_status & 0x2 ? PER_STAT_DIRECT : PER_STAT_NONE;
-		if (per_status & 0x2) {
-			per_data.data[size++] = PER_ID_DIGITAL;
-			per_data.data[size++] = ~(perpad[1].btn & 0xFF);
-			per_data.data[size++] = ~((perpad[1].btn >> 0x8) & 0xFF);
-		}
+		} break;
+		case 2: { //Two multitaps connected
+			//setup multitap peripheral data
+			per_data.data[size++] = PER_STAT_MULTITAP;
+			for (u32 i = 0; i < 6; ++i) {
+				if (perpad[i].type != PAD_TYPE_NONE) {
+					per_data.data[size++] = PER_ID_DIGITAL;
+					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
+				} else {
+					per_data.data[size++] = PER_ID_NONE;
+				}
+			}
+			//add second multitap peripheral data
+			per_data.data[size++] = PER_STAT_MULTITAP;
+			for (u32 i = 6; i < 8; ++i) {
+				if (perpad[i].type != PAD_TYPE_NONE) {
+					per_data.data[size++] = PER_ID_DIGITAL;
+					per_data.data[size++] = ~(perpad[i].btn & 0xFF);
+					per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
+				} else {
+					per_data.data[size++] = PER_ID_NONE;
+				}
+			}
+		} break;
 	}
-/*
-	//Set the port stats
-	port_stat[0] = (per_status & 0x1 ? (per_status & 0x80 ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
-	port_stat[1] = (per_status & 0x2 ? (per_status & 0xFC ? PER_STAT_MULTITAP : PER_STAT_DIRECT) : PER_STAT_NONE);
-	u32 port_count = 0;
-	u32 port_ofs = 0b00000011 + (per_num == 8 ? 2 : 0);
 
-	for (u32 i = 0; i < per_num; ++i) {
-		if ((port_ofs >> i) & 1) {	//See if port stat must be set
-			per_data.data[size++] = port_stat[port_count++];
-		}
-		if (perpad[i].type != PAD_TYPE_NONE) {
-			per_data.data[size++] = PER_ID_DIGITAL;
-			per_data.data[size++] = ~(perpad[i].btn & 0xFF);
-			per_data.data[size++] = ~((perpad[i].btn >> 0x8) & 0xFF);
-		}
-	}
-	//Fill rest of data with no input
-	if (2 < per_num && per_num < 8){ //Fill the rest of multitap
-		for (u32 i = per_num; i < 7; ++i) {
-			per_data.data[size++] = PER_ID_NONE;
-		}
-	} else if (per_num == 1) {	//Only have one controller
-		per_data.data[size++] = PER_STAT_NONE;
-	}
-*/
 	per_data.data_size = size;
 	return exit_code;
 }

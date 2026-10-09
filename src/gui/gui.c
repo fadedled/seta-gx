@@ -97,6 +97,15 @@ GuiOption gui_opts[CONF_OPT_MAX] = {
 			[1] = GUI_STRING("Yes")
 		},
 		.count = 2
+	},
+	[CONF_OPT_USE_MULTITAP] = {
+		.name  = GUI_STRING("Connect Multitap"),
+		.opt_names = {
+			[0] = GUI_STRING("Off"),
+			[1] = GUI_STRING("1 Port"),
+			[2] = GUI_STRING("2 Ports")
+		},
+		.count = 3
 	}
 //	[CONF_OPT_INPUT_TYPE] = {
 //		.name  = GUI_STRING("Input Type"),
@@ -498,13 +507,20 @@ static void gui_DrawControllers(u32 x, u32 y)
 	//u8 pad[8] = {1, 0, 2, 1, 0, 0, 0, 0};
 	const u32 num_pads = PER_PADMAX;
 	GX_Begin(GX_QUADS, GX_VTXFMT7, num_pads*4*2);
+	u32 act_ports = 2;
+	if (gui_opts[CONF_OPT_USE_MULTITAP].selected == 1) {
+		act_ports = 7;
+	} else if (gui_opts[CONF_OPT_USE_MULTITAP].selected == 2) {
+		act_ports = 8;
+	}
+
 	// Only display 2 controllers for now
 	for (u32 i = 0; i < num_pads; ++i) {
 		u32 dx = x + ((i & 1) * 32);
 		u32 dy = y + ((i & ~1) * 11);
 		u32 num = i << 1;
 		u32 pad_tex = perpad[i].type << 3;
-		u32 color = (perpad[i].type ? 0xffeceeCC : 0xbdbdfb88);
+		u32 color = (perpad[i].type && i < act_ports ? 0xffeceeCC : 0xbdbdfb88);
 		GX_Position2s16(dx, dy);		// Top Left
 		GX_Color1u32(color);
 		GX_TexCoord2s16(pad_tex+16, 4);
@@ -784,7 +800,7 @@ static int fn_compare(const void *x, const void *y)
 	return strcasecmp(((String *)x)->data, ((String *)y)->data);
 }
 
-void gui_LoadGameList(void)
+u32 gui_LoadGameList(void)
 {
 
 	u32 str_pos = 0;
@@ -792,7 +808,7 @@ void gui_LoadGameList(void)
 	DIR *dp = opendir(conf.dir[CONF_GAMES]);
 	if (!dp) {
 		//gui_SetMessage(gui_messages[MESSAGE_NO_FOLDER], 0xffff);
-		return;
+		return 0;
 	}
 	//Allocate memory for filename storing
 	game_name_strings = (char*) calloc(0x10000, sizeof(*game_name_strings));	//64KB for now
@@ -835,11 +851,12 @@ void gui_LoadGameList(void)
 	if (!filelist.count) {
 		closedir(dp);
 		//gui_SetMessage(gui_messages[MESSAGE_NO_GAMES], 0xffff);
-		return;
+		return 0;
 	}
 
 	qsort(filelist.item, games_filecount, sizeof(*filelist.item), fn_compare);
 	closedir(dp);
+	return filelist.count;
 }
 
 
@@ -874,8 +891,10 @@ static u32 __gui_GetInput(void) {
 
 u32 gui_Exec(void)
 {
-	if (gui_img_w == 128) {
+	if (gui_img_w == 128) { // Cover art is loaded
 		GX_PreloadEntireTexture(&gui_img_tobj, &gui_img_treg);
+	} else {
+		__gui_LoadPNG(GX_TEXMAP1, filelist.item[(filelist.page * filelist.disp_count) + filelist.cursor].data);
 	}
 
 	while (1) {
@@ -937,9 +956,9 @@ u32 gui_Exec(void)
 				//Set up file name
 				u32 selected_file_num = (filelist.page * filelist.disp_count) + filelist.cursor;
 				selected_file = filelist.item[selected_file_num].data;
+				SVI_ClearAllFrames();
 				return 1;
-			} else if (buttons & GUI_PAD_STR) {	//Uses the C button as A button
-				//Hold R to turn on FPS counter
+			} else if (buttons & GUI_PAD_STR) {	//Go into options menu
 				in_options ^= 1;
 			} else if (buttons & GUI_PAD_B) {	//Uses the B button as B button
 				mem_Deinit();
@@ -979,8 +998,7 @@ u32 gui_Exec(void)
 				} else {
 					gui_opts[option_selected].selected++;
 				}
-			} else if (buttons & GUI_PAD_STR) {	//Uses the C button as A button
-				//Hold R to turn on FPS counter
+			} else if (buttons & GUI_PAD_STR) {	//Exit options menu
 				in_options ^= 1;
 			}
 		}
@@ -1041,6 +1059,10 @@ u32 gui_MsgBox(String *btn_labels, u32 btns_count, char *msg_format, ...)
 				selected_btn++;
 			}
 		} else if (buttons & GUI_PAD_A) {
+			SVI_ClearFrame();
+			SVI_SwapBuffers(1);
+			SVI_ClearFrame();
+			SVI_SwapBuffers(1);
 			return selected_btn;
 		}
 

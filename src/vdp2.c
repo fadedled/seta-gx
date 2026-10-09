@@ -33,7 +33,7 @@
 
 #include "vdp1.h"
 #include "yabause.h"
-#include "osd/osd.h"
+#include "gui/osd.h"
 #include <ogc/lwp_watchdog.h>
 #include "sgx/sgx.h"
 #include "sgx/svi.h"

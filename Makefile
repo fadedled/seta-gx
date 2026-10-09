@@ -23,7 +23,7 @@ include $(DEVKITPRO)/libogc2/wii_rules
 TARGET		:=	seta-gx
 BUILD		:=	build
 SOURCES		:=	src \
-			src/osd \
+			src/gui \
 			src/sgx \
 			src/sh2old \
 			src/sh2 \

@@ -24,7 +24,7 @@
 #include "debug.h"
 #include "scu.h"
 #include "vdp2.h"
-#include "osd/osd.h"
+#include "gui/osd.h"
 #include "sgx/sgx.h"
 #ifdef GEKKO
 #include "yabause.h"

@@ -52,7 +52,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include <ctype.h>
 #include <wchar.h>
 #include <ogc/lwp_watchdog.h>
-#include "osd/osd.h"
+#include "gui/osd.h"
 #include "cdbase.h"
 #include "error.h"
 #include "debug.h"

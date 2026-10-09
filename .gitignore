@@ -3,6 +3,7 @@
 /notes.txt
 /release
 /build
+/test
 /*.dol
 /*.elf
 /src/*.old

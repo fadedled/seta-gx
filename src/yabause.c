@@ -38,8 +38,8 @@
 #else
 	#include "sh2/sh2.h"
 #endif
-#include "osd/gui.h"
-#include "osd/osd.h"
+#include "gui/gui.h"
+#include "gui/osd.h"
 #include "smpc.h"
 #include "vdp1.h"
 #include "vdp2.h"
@@ -300,8 +300,8 @@ u32 core_Exec(void)
 		YabauseDeInit();
 	}
 	SVI_SetResolution(0x80D2);
+	SVI_ClearAllFrames();
 	VIDEO_SetBlack(0);
-	VIDEO_WaitVSync();
 	return autoload;
 }
 
@@ -1109,8 +1109,8 @@ int YabauseQuickLoadGame(void)
 
 //////////////////////////////////////////////////////////////////////////////
 //Per game settings for cartridges
-#if 0
-u64 gameid_1MB[] = {
+#if 1
+char* gameid_1MB[] = {
 	"T-1521G/x20" //Astra Superstars
 	"T-9904G/x20" //Cotton 2
 	"T-3111G/x20" //Metal Slug
@@ -1149,7 +1149,7 @@ u64 gameid_1MB[] = {
 	"T-1515G/x20"
 };
 
-u64 gameid_4MB[] = {
+char* gameid_4MB[] = {
 	"T-1230G/x20" //Pocket Fighter†
 	"T-1247G/x20" //Street Fighter Zero 3
 	"T-1246G/x20"
@@ -1165,6 +1165,7 @@ u64 gameid_4MB[] = {
 	"T-1245G/x20"
 };
 
+
 static u32 __core_CheckID(u64 id, u64 *id_list, u32 entries) {
 	for (u32 i = 0; i < entries; ++i) {
 		if (*id_list == id) {
@@ -1175,10 +1176,10 @@ static u32 __core_CheckID(u64 id, u64 *id_list, u32 entries) {
 	return 0;
 }
 
-static u32 core_DetectCartridge(u8 *game_id) {
+static void core_DetectCartridge(u8 *game_id) {
 	u64 id = *((u64*) game_id);
-	__core_CheckID(id, gameid_1MB, sizeof(gameid_1MB) / sizeof(*gameid_1MB));
-	__core_CheckID(id, gameid_4MB, sizeof(gameid_4MB) / sizeof(*gameid_4MB));
+	__core_CheckID(id, (u64*)gameid_1MB, sizeof(gameid_1MB) / sizeof(*gameid_1MB));
+	__core_CheckID(id, (u64*)gameid_4MB, sizeof(gameid_4MB) / sizeof(*gameid_4MB));
 	//__core_CheckID(id, gameid_1MB, sizeof(gameid_1MB) / sizeof(*gameid_1MB));
 
 }

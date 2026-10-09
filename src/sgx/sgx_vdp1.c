@@ -77,7 +77,7 @@ static u8 mesh_tex[] ATTRIBUTE_ALIGN(32) = {
 };
 
 SGXTexPre pretex_mesh = {
-	.addr = (0x7FF80 >> 5) | (0x200000 | 0xD8000),
+	.addr = (0x7FE80 >> 5) | (0x200000 | 0xD8000),
 	.fmt = TEX_FMT(GX_TF_I4, 8, 8),
 	.attr = TEX_ATTR(GX_REPEAT, GX_REPEAT)
 };
@@ -108,7 +108,6 @@ void SGX_Vdp1Init(void)
 	SGX_InitTex(GX_TEXMAP3, TEXREG(0x30000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP4, TEXREG(0x38000, TEXREG_SIZE_32K), 0);
 	SGX_InitTex(GX_TEXMAP5, TEXREG(0x40000, TEXREG_SIZE_32K), 0);
-	SGX_InitTex(GX_TEXMAP6, TEXREG(0x48000, TEXREG_SIZE_32K), 0);
 
 	dot_tex[0] = (u8*) memalign(32, 704*256*3);
 	rgb_tex[0] = dot_tex[0] + (704*256*1);
@@ -184,7 +183,6 @@ void SGX_Vdp1Begin(void)
 	//Draw the mesh z-texture vvv
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
-	SGX_SetVtxOffset(0, 0);
 	GX_SetScissor(0, 0, 640, 480);
 	GX_SetNumChans(0);
 	GX_SetCurrentMtx(MTX_IDENTITY);
@@ -223,7 +221,6 @@ void SGX_Vdp1Begin(void)
 	//Store format
 	vdp1pix.type = Vdp2Regs->SPCTL & 0xF;
 	vdp1pix.color_mask = color_mask[vdp1pix.type];
-	SGX_SetVtxOffset(-local_coordx, -local_coordy);
 	is_processed = 0;
 }
 
@@ -504,7 +501,6 @@ static void __Vdp1Convert16bpp(void)
 void SGX_Vdp1End(void)
 {
 	SGX_SpriteConverterSet(0, SPRITE_NONE, 0);
-	SGX_SetVtxOffset(0, 0);
 	GX_SetScissor(0, 0, 640, 480);
 	//Copy colors
 	if (1) { //16bpp framebuffer
@@ -688,8 +684,8 @@ void SGX_Vdp1DrawNormalSpr(void)
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, w << 3, h);
 	vdp1mtx2d[0][0] = (f32) (w << 3);
 	vdp1mtx2d[1][1] = (f32) h;
-	vdp1mtx2d[0][3] = (f32) ((s16) vdp1cmd->XA);
-	vdp1mtx2d[1][3] = (f32) ((s16) vdp1cmd->YA);
+	vdp1mtx2d[0][3] = (f32) (((s16) vdp1cmd->XA)+local_coordx);
+	vdp1mtx2d[1][3] = (f32) (((s16) vdp1cmd->YA)+local_coordy);
 	GX_LoadPosMtxImm(vdp1mtx2d, MTX_VDP1_POS_2D);
 	GX_SetCurrentMtx(MTX_VDP1_POS_2D);
 
@@ -767,16 +763,16 @@ void SGX_Vdp1DrawScaledSpr(void)
 
 	//Draw the sprite
 	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
-		GX_Position2s16(x0, y0);
+		GX_Position2s16(x0+local_coordx, y0+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
-		GX_Position2s16(x1, y0);
+		GX_Position2s16(x1+local_coordx, y0+local_coordy);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
-		GX_Position2s16(x0, y1);
+		GX_Position2s16(x0+local_coordx, y1+local_coordy);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
-		GX_Position2s16(x1, y1);
+		GX_Position2s16(x1+local_coordx, y1+local_coordy);
 		GX_Color1u16(colors[2]);
 		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 	GX_End();
@@ -826,16 +822,16 @@ void SGX_Vdp1DrawDistortedSpr(void)
 
 	//Draw the sprite
 	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
-		GX_Position2s16(x0, y0);
+		GX_Position2s16(x0+local_coordx, y0+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(spr_size & (0x0000 ^ tex_flip));
-		GX_Position2s16(x1, y1);
+		GX_Position2s16(x1+local_coordx, y1+local_coordy);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(spr_size & (0x3F00 ^ tex_flip));
-		GX_Position2s16(x3, y3);
+		GX_Position2s16(x3+local_coordx, y3+local_coordy);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(spr_size & (0x00FF ^ tex_flip));
-		GX_Position2s16(x2, y2);
+		GX_Position2s16(x2+local_coordx, y2+local_coordy);
 		GX_Color1u16(colors[2]);
 		GX_TexCoord1u16(spr_size & (0x3FFF ^ tex_flip));
 	GX_End();
@@ -883,16 +879,16 @@ void SGX_Vdp1DrawPolygon(void)
 
 	//Draw the sprite
 	GX_Begin(GX_TRIANGLESTRIP, GX_VTXFMT2, 4);
-		GX_Position2s16(x0, y0);
+		GX_Position2s16(x0+local_coordx, y0+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(x1, y1);
+		GX_Position2s16(x1+local_coordx, y1+local_coordy);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(x3, y3);
+		GX_Position2s16(x3+local_coordx, y3+local_coordy);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(x2, y2);
+		GX_Position2s16(x2+local_coordx, y2+local_coordy);
 		GX_Color1u16(colors[2]);
 		GX_TexCoord1u16(0);
 	GX_End();
@@ -919,19 +915,19 @@ void SGX_Vdp1DrawPolyline(void)
 
 	//Draw the sprite
 	GX_Begin(GX_LINESTRIP, GX_VTXFMT2, 5);
-		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
+		GX_Position2s16(vdp1cmd->XA+local_coordx, vdp1cmd->YA+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(vdp1cmd->XB, vdp1cmd->YB);
+		GX_Position2s16(vdp1cmd->XB+local_coordx, vdp1cmd->YB+local_coordy);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(vdp1cmd->XC, vdp1cmd->YC);
+		GX_Position2s16(vdp1cmd->XC+local_coordx, vdp1cmd->YC+local_coordy);
 		GX_Color1u16(colors[2]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(vdp1cmd->XD, vdp1cmd->YD);
+		GX_Position2s16(vdp1cmd->XD+local_coordx, vdp1cmd->YD+local_coordy);
 		GX_Color1u16(colors[3]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
+		GX_Position2s16(vdp1cmd->XA+local_coordx, vdp1cmd->YA+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
 	GX_End();
@@ -961,10 +957,10 @@ void SGX_Vdp1DrawLine(void)
 
 	//Draw the sprite
 	GX_Begin(GX_LINES, GX_VTXFMT2, 2);
-		GX_Position2s16(vdp1cmd->XA, vdp1cmd->YA);
+		GX_Position2s16(vdp1cmd->XA+local_coordx, vdp1cmd->YA+local_coordy);
 		GX_Color1u16(colors[0]);
 		GX_TexCoord1u16(0);
-		GX_Position2s16(vdp1cmd->XB, vdp1cmd->YB);
+		GX_Position2s16(vdp1cmd->XB+local_coordx, vdp1cmd->YB+local_coordy);
 		GX_Color1u16(colors[1]);
 		GX_TexCoord1u16(0);
 	GX_End();
@@ -996,5 +992,4 @@ void SGX_Vdp1LocalCoord(void)
 {
 	local_coordx = (f32) ((s16)vdp1cmd->XA);
 	local_coordy = (f32) ((s16)vdp1cmd->YA);
-	SGX_SetVtxOffset(-local_coordx, -local_coordy);
 }

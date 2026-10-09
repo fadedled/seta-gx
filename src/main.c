@@ -27,7 +27,7 @@
 
 
 //#include <di/di.h>
-#include "osd/gui.h"
+#include "gui/gui.h"
 #include "sgx/svi.h"
 
 #include "cart.h"
@@ -92,20 +92,25 @@ int main(int argc, char **argv)
 
 	//Init video/gui
 	SVI_Init();
+	per_Init();
 	gui_Init();
 
-	//Do a normal init of devices
-	while (!fatInit(CACHE_PAGES, true)) {
-		if (gui_MsgBox(msg_box_btns, 2, "Could not open any devices") == 0) {
+try_init:
+	//Init of devices
+	if (!fatInit(CACHE_PAGES, true)) {
+		if (gui_MsgBox(msg_box_btns, 2, "Could not open any devices!") == 0) {
 			return 0;
 		}
+		goto try_init;
 	}
 
 	//Load the config file
 	const char* err_dir;
 	if ((err_dir = config_Load())) {
-		gui_MsgBox(msg_box_btns, 1,"Could not find directory: %s", err_dir);
-		return 0;
+		if (gui_MsgBox(msg_box_btns, 2, "Directory does not exist: %s", err_dir) == 0) {
+			return 0;
+		}
+		goto try_init;
 	}
 
 	//Autoload the gamefile
@@ -116,14 +121,16 @@ int main(int argc, char **argv)
 			gui_MsgBox(msg_box_btns, 1,"Could not find file: %s", argv[2]);
 			return 0;
 		}
-	} else {
-		gui_LoadGameList();
+	} else if (gui_LoadGameList() == 0) {
+		if (gui_MsgBox(msg_box_btns, 2, "No games found in: %s", conf.dir[CONF_GAMES]) == 0) {
+			return 0;
+		}
+		goto try_init;
 	}
 
 	//Init everything else
 	mem_allocate();
 	snd_Init();
-	per_Init();
 
 	prof_AddCounter(PROF_SH2M, "SH2M");
 	prof_AddCounter(PROF_SH2S, "SH2S");

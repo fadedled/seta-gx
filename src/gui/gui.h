@@ -96,7 +96,7 @@ typedef struct GuiOption_t {
 
 
 void  gui_Init(void);
-void  gui_LoadGameList(void);
+u32   gui_LoadGameList(void);
 u32   gui_Exec(void);
 void  gui_SetMessage(String msg, u32 color);
 char* gui_GetSelectedFile(void);

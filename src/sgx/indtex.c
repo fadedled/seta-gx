@@ -208,7 +208,6 @@ static u32 __indtex16bppGen(u16 *data, u32 n, u32 align)
 void SGX_InitSpriteConv(void)
 {
 	ind_addr = 0;
-
 }
 
 void __genConverter(SGXTexPre *tex, u32 width, u32 bpp_id, u32 align)
@@ -257,6 +256,10 @@ void SGX_SpriteConverterSet(u32 width, u32 bpp_id, u32 align)
 }
 
 
+
+//Cell Indtex Conversions
+//These convert the cell format
+
 static const u16 indtex_8x2cell[] ATTRIBUTE_ALIGN(32) = {
 	0x8080, 0x7F81, 0x0000, 0x0000,
 	0x817F, 0x8080, 0x0000, 0x0000,
@@ -283,13 +286,38 @@ static const u16 indtex_16x2cell[] ATTRIBUTE_ALIGN(32) = {
 	0x837b, 0x827c, 0x817f, 0x8080
 };
 
+static const u16 indtex_32bpp_rigth[] ATTRIBUTE_ALIGN(32) = {
+	0x8180, 0x8180, 0x8180, 0x8180,
+	0x8180, 0x8180, 0x8180, 0x8180,
+	0x8180, 0x8180, 0x8180, 0x8180,
+	0x8180, 0x8180, 0x8180, 0x8180
+};
+
+
+static const u16 indtex_32x1cell[] ATTRIBUTE_ALIGN(32) = {
+	0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080,
+	0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080,
+	0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080,
+	0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080, 0x8080,
+};
+
+static const u16 indtex_32x2cell[] ATTRIBUTE_ALIGN(32) = {
+	0x8080, 0x7f81, 0x0000, 0x0000,
+	0x8081, 0x7f82, 0x0000, 0x0000,
+	0x817e, 0x807f, 0x0000, 0x0000,
+	0x817f, 0x8080, 0x0000, 0x0000
+};
+
 enum IndCell {
+	INDTEX_32RIGHT,
+
 	//CELL FORMAT
 	INDTEX_CELL_8x2,
 	INDTEX_CELL_16x1,
 	INDTEX_CELL_16x2,
 	INDTEX_CELL_32x1,
 	INDTEX_CELL_32x2,
+
 
 	//BITMAP FORMAT
 	INDTEX_BITMAP_4x512,	// 4bpp
@@ -303,16 +331,24 @@ enum IndCell {
 };
 
 SGXTexPre indtex_cell[16] = {
-	{.addr = (0x7FF00 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 2), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
-	{.addr = (0x7FF20 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 4), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
-	{.addr = (0x7FF40 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 4, 8), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	[INDTEX_32RIGHT]   = {.addr  = (0x7FF00 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 2), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+
+	[INDTEX_CELL_8x2]  = {.addr  = (0x7FF20 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 2), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	[INDTEX_CELL_16x1] = {.addr  = (0x7FF40 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 2, 4), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	[INDTEX_CELL_16x2] = {.addr  = (0x7FF60 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 4, 8), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+
+	[INDTEX_CELL_32x1] = {.addr  = (0x7FFA0 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 4, 8), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
+	[INDTEX_CELL_32x2] = {.addr  = (0x7FFC0 >> 5) | (0x200000 | 0xD8000), .fmt = TEX_FMT(GX_TF_IA8, 4, 8), .attr = TEX_ATTR(GX_CLAMP, GX_REPEAT)},
 };
 
 void SGX_CellConverterInit(void)
 {
-	SGX_PreloadTex(indtex_8x2cell , indtex_cell[INDTEX_CELL_8x2].addr, TEXPRE_TYPE_16BPP | 1);
-	SGX_PreloadTex(indtex_16x1cell, indtex_cell[INDTEX_CELL_16x1].addr, TEXPRE_TYPE_16BPP | 1);
-	SGX_PreloadTex(indtex_16x2cell, indtex_cell[INDTEX_CELL_16x2].addr, TEXPRE_TYPE_16BPP | 2);
+	SGX_PreloadTex(indtex_32bpp_rigth, indtex_cell[INDTEX_32RIGHT].addr , TEXPRE_TYPE_16BPP | 1);
+	SGX_PreloadTex(indtex_8x2cell    , indtex_cell[INDTEX_CELL_8x2].addr , TEXPRE_TYPE_16BPP | 1);
+	SGX_PreloadTex(indtex_16x1cell   , indtex_cell[INDTEX_CELL_16x1].addr, TEXPRE_TYPE_16BPP | 1);
+	SGX_PreloadTex(indtex_16x2cell   , indtex_cell[INDTEX_CELL_16x2].addr, TEXPRE_TYPE_16BPP | 2);
+	SGX_PreloadTex(indtex_32x1cell   , indtex_cell[INDTEX_CELL_32x1].addr, TEXPRE_TYPE_16BPP | 2);
+	SGX_PreloadTex(indtex_32x2cell   , indtex_cell[INDTEX_CELL_32x2].addr, TEXPRE_TYPE_16BPP | 2);
 
 	//Generate the Bitmap Converters
 	__genConverter(&indtex_cell[INDTEX_BITMAP_4x512], (512-8)/8, SPRITE_4BPP, 0);
@@ -323,22 +359,76 @@ void SGX_CellConverterInit(void)
 	//__genConverter(&indtex_cell[INDTEX_BITMAP_32x512], width, bpp_id, align);
 }
 
-void SGX_CellConverterSet(u32 cellsize, u32 bpp_id)
+void SGX_CellConverterSet(u32 cellsize, u32 color_fmt)
 {
-	if (cellsize && (bpp_id == SPRITE_8BPP)) {
+	if (cellsize && (color_fmt == 1)) {
+		GX_SetNumTevStages(1);
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+
 		GX_SetNumIndStages(1);
 		SGX_SetTexPreloaded(GX_TEXMAP7, &indtex_cell[INDTEX_CELL_8x2]);
 		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP7);
 		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_2, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
 		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_8, GX_ITS_4);
-	} else if (bpp_id == SPRITE_16BPP) {
+	} else if (color_fmt == 3 || color_fmt == 2) {
+		GX_SetNumTevStages(1);
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+
 		GX_SetNumIndStages(1);
 		SGX_SetTexPreloaded(GX_TEXMAP7, &indtex_cell[INDTEX_CELL_16x1 + cellsize]);
 		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_1, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
 		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP7);
 		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_4, GX_ITS_1);
+	} else if (color_fmt == 4) {
+		GX_SetNumTevStages(1);
+
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_ZERO);
+		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_KONST, GX_CA_TEXA, GX_CA_ZERO);
+		//GX_SetTevColorIn(GX_TEVSTAGE1, GX_CC_ZERO, GX_CC_KONST, GX_CC_TEXC, GX_CC_CPREV);
+		//GX_SetTevAlphaIn(GX_TEVSTAGE1, GX_CA_ZERO, GX_CA_KONST, GX_CA_TEXA, GX_CA_APREV);
+
+		GXColor kolor_ar = {0xFF, 0x00, 0x00, 0xFF};
+		GX_SetTevKColor(GX_KCOLOR0, kolor_ar);
+		GXColor kolor_gb = {0x00, 0xFF, 0xFF, 0x00};
+		GX_SetTevKColor(GX_KCOLOR1, kolor_gb);
+		GX_SetTevKColorSel(GX_TEVSTAGE0, GX_TEV_KCSEL_K0);
+		GX_SetTevKAlphaSel(GX_TEVSTAGE0, GX_TEV_KASEL_K0_A);
+		GX_SetTevKColorSel(GX_TEVSTAGE1, GX_TEV_KCSEL_K1);
+		GX_SetTevKAlphaSel(GX_TEVSTAGE1, GX_TEV_KASEL_K1_A);
+		GX_SetTevOrder(GX_TEVSTAGE1, GX_TEXCOORD0, GX_TEXMAP1, GX_COLORNULL);
+
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+
+		//GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP3);
+		//GX_SetTevSwapMode(GX_TEVSTAGE1, GX_TEV_SWAP0, GX_TEV_SWAP3);
+
+		GX_SetNumIndStages(1);
+		SGX_SetTexPreloaded(GX_TEXMAP7, &indtex_cell[INDTEX_CELL_16x1 + cellsize]);
+		GX_SetTevIndirect(GX_TEVSTAGE0, GX_INDTEXSTAGE0, GX_ITF_8, GX_ITB_ST, GX_ITM_1, GX_ITW_OFF, GX_ITW_OFF, GX_FALSE, GX_FALSE, GX_ITBA_OFF);
+		GX_SetIndTexOrder(GX_INDTEXSTAGE0, GX_TEXCOORD0, GX_TEXMAP7);
+		GX_SetIndTexCoordScale(GX_INDTEXSTAGE0, GX_ITS_4, GX_ITS_1);
+
+		//SGX_SetTexPreloaded(GX_TEXMAP6, &indtex_cell[INDTEX_32RIGHT]);
+		//GX_SetTevIndirect(GX_TEVSTAGE1, GX_INDTEXSTAGE1, GX_ITF_8, GX_ITB_S, GX_ITM_1, GX_ITW_0, GX_ITW_0, GX_TRUE, GX_FALSE, GX_ITBA_OFF);
+		//GX_SetIndTexOrder(GX_INDTEXSTAGE1, GX_TEXCOORD0, GX_TEXMAP6);
+		//GX_SetIndTexCoordScale(GX_INDTEXSTAGE1, GX_ITS_4, GX_ITS_1);
+	} else { //No indirect
+		GX_SetNumTevStages(1);
+		GX_SetTevColorIn(GX_TEVSTAGE0, GX_CC_ZERO, GX_CC_ZERO, GX_CC_ZERO, GX_CC_TEXC);
+		GX_SetTevAlphaIn(GX_TEVSTAGE0, GX_CA_ZERO, GX_CA_ZERO, GX_CA_ZERO, GX_CA_TEXA);
+
+		GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP1);
+
+		GX_SetNumIndStages(0);
+		GX_SetTevDirect(GX_TEVSTAGE0);
+		GX_SetTevDirect(GX_TEVSTAGE1);
 	}
-	//TODO: Handle Cell 32BPP (1x1 and 2x2)
 }
 
 u32 SGX_BitmapConverterSet(u32 width, u32 bpp_id)

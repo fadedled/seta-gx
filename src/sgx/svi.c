@@ -17,7 +17,7 @@
 #include "svi.h"
 #include "sgx.h"
 #include "../profile.h"
-#include "../osd/osd.h"
+#include "../gui/osd.h"
 #include "svi_vmodes.inc"
 
 #define COLOR_BLACK        (0x10801080)
@@ -44,7 +44,10 @@ u32 vert_offset = 0;
 u32 scale_mtx = MTX_TEX_SCALED_N;
 u16 *xfb[2] = { NULL, NULL };
 u32 fbsel = 0;
-GXRModeObj *rmode_conf;
+
+GXRModeObj *rmode_std[8]; /* Standard */
+GXRModeObj *rmode_ntv[8]; /* Native */
+GXRModeObj **rmode_conf;
 GXRModeObj *rmode;
 u32 tvmode;
 u32 svi_disp = 0;
@@ -74,17 +77,15 @@ static void __svi_PretraceCB(u32 ret_count)
 	//const u32 xfb_size = 704 * 480 * VI_DISPLAY_PIX_SZ;
 	//__VIClearFramebuffer(xfb[0], xfb_size, COLOR_BLACK);
 	//__VIClearFramebuffer(xfb[1], xfb_size, COLOR_BLACK);
-	if (rmode_conf != TVNTSCNative) {
+
+
+	u32 vmode_indx = ((tvmd_curr >> 4) & 0x3) + (vdp2_interlace << 2);
+	rmode = rmode_conf[vmode_indx];
+	rmode->fbWidth = width << 1; //rmode->fbWidth = 704;
+	if (rmode_conf == rmode_std) {
 		GX_SetDispCopyYScale((f32)(2 - vdp2_interlace));	//scale the XFB copy if not interlaced
 		GX_Flush();
 	}
-
-	u32 vmode_indx = (vdp2_interlace << 1) | ((tvmd_curr & 0x30) > 0);
-	rmode = &rmode_conf[vmode_indx];
-	rmode->fbWidth = width << 1; //rmode->fbWidth = 704;
-	//rmode->viYOrigin = vert_offset;
-	//rmode->viHeight = height << 1;
-	//rmode->viYOrigin = 4;//(VI_MAX_HEIGHT_NTSC - rmode->viHeight) / 2;
 	VIDEO_Configure(rmode);
 	VIDEO_Flush();
 	VIDEO_SetPreRetraceCallback(NULL);
@@ -104,12 +105,92 @@ const u32 const_vert_colors[40] ATTRIBUTE_ALIGN(32) = {
 	0x00000000, 0x00000000, 0x00000000, 0x00000000,
 };
 
+
+void SVI_GetPrefferedMode(void)
+{
+	u32 tv_mode;
+	u32 scan_mode = (VIDEO_HaveComponentCable() ? VI_PROGRESSIVE : VIDEO_GetScanMode());
+
+	switch (CONF_GetVideo()) {
+		case CONF_VIDEO_NTSC: tv_mode = VI_NTSC; break;
+		case CONF_VIDEO_PAL:  tv_mode = (CONF_GetEuRGB60() ? VI_EURGB60 : VI_PAL); break;
+		case CONF_VIDEO_MPAL: tv_mode = (VIDEO_HaveComponentCable() ? VI_NTSC : VI_MPAL);
+		default:              tv_mode = VIDEO_GetCurrentTvMode(); break;
+	}
+
+	if (tv_mode == VI_EURGB60) {
+		RM_NTSC_224P.viTVMode = VI_TVMODE_EURGB60_DS;
+		RM_NTSC_240P.viTVMode = VI_TVMODE_EURGB60_DS;
+		RM_NTSC_448I.viTVMode = VI_TVMODE_EURGB60_INT;
+		RM_NTSC_480I.viTVMode = VI_TVMODE_EURGB60_INT;
+		RM_NTSC_448P.viTVMode = VI_TVMODE_EURGB60_PROG;
+		RM_NTSC_480P.viTVMode = VI_TVMODE_EURGB60_PROG;
+	} else if (tv_mode == VI_MPAL) {
+		RM_NTSC_224P.viTVMode = VI_TVMODE_MPAL_DS;
+		RM_NTSC_240P.viTVMode = VI_TVMODE_MPAL_DS;
+		RM_NTSC_448I.viTVMode = VI_TVMODE_MPAL_INT;
+		RM_NTSC_480I.viTVMode = VI_TVMODE_MPAL_INT;
+		RM_NTSC_448P.viTVMode = VI_TVMODE_MPAL_PROG;
+		RM_NTSC_480P.viTVMode = VI_TVMODE_MPAL_PROG;
+	}
+
+	//Set native modes
+	switch (tv_mode) {
+		case VI_PAL:
+		case VI_DEBUG_PAL:
+			rmode_ntv[0] = &RM_PAL_224P; rmode_ntv[1] = &RM_PAL_240P; rmode_ntv[2] = rmode_std[3] = &RM_PAL_256P;
+			rmode_ntv[4] = &RM_PAL_448I; rmode_ntv[5] = &RM_PAL_480I; rmode_ntv[6] = rmode_std[7] = &RM_PAL_512I;
+			break;
+		case VI_EURGB60:
+		case VI_MPAL:
+		default: //NTSC
+			rmode_ntv[0] = &RM_NTSC_224P; rmode_ntv[1] = &RM_NTSC_240P; rmode_ntv[2] = rmode_std[3] = &RM_NTSC_240P;
+			rmode_ntv[4] = &RM_NTSC_448I; rmode_ntv[5] = &RM_NTSC_480I; rmode_ntv[6] = rmode_std[7] = &RM_NTSC_480I;
+			break;
+	}
+
+	//Set standard modes
+	switch (scan_mode) {
+		case VI_PROGRESSIVE:
+			switch (tv_mode) {
+				case VI_PAL:
+				case VI_DEBUG_PAL:
+					rmode_std[0] = &RM_PAL_448P; rmode_std[1] = &RM_PAL_480P; rmode_std[2] = rmode_std[3] = &RM_PAL_512P;
+					rmode_std[4] = &RM_PAL_448P; rmode_std[5] = &RM_PAL_480P; rmode_std[6] = rmode_std[7] = &RM_PAL_512P;
+					break;
+				case VI_EURGB60:
+				case VI_MPAL:
+				default: //NTSC
+					rmode_std[0] = &RM_NTSC_448P; rmode_std[1] = &RM_NTSC_480P; rmode_std[2] = rmode_std[3] = &RM_NTSC_480P;
+					rmode_std[4] = &RM_NTSC_448P; rmode_std[5] = &RM_NTSC_480P; rmode_std[6] = rmode_std[7] = &RM_NTSC_480P;
+					break;
+			} break;
+		case VI_INTERLACE:
+			switch (tv_mode) {
+				case VI_PAL:
+				case VI_DEBUG_PAL:
+					rmode_std[0] = &RM_PAL_448I; rmode_std[1] = &RM_PAL_480I; rmode_std[2] = rmode_std[3] = &RM_PAL_512I;
+					rmode_std[4] = &RM_PAL_448I; rmode_std[5] = &RM_PAL_480I; rmode_std[6] = rmode_std[7] = &RM_PAL_512I;
+					break;
+				case VI_EURGB60:
+				case VI_MPAL:
+				default: //NTSC
+					rmode_std[0] = &RM_NTSC_448I; rmode_std[1] = &RM_NTSC_480I; rmode_std[2] = rmode_std[3] = &RM_NTSC_480I;
+					rmode_std[4] = &RM_NTSC_448I; rmode_std[5] = &RM_NTSC_480I; rmode_std[6] = rmode_std[7] = &RM_NTSC_480I;
+					break;
+			} break;
+		case VI_NON_INTERLACE:
+			rmode_std[0] = rmode_ntv[0]; rmode_std[1] = rmode_ntv[0]; rmode_std[2] = rmode_std[3] = rmode_ntv[0];
+			rmode_std[4] = rmode_ntv[4]; rmode_std[5] = rmode_ntv[4]; rmode_std[6] = rmode_std[7] = rmode_ntv[4];
+			break;
+	}
+}
+
 void SVI_Init(void)
 {
 	VIDEO_Init();
-	if (VIDEO_HaveComponentCable()) {
 
-	}
+	SVI_GetPrefferedMode();
 	SVI_EnableNativeVideo(0);
 	rmode = VIDEO_GetPreferredMode(NULL);
 
@@ -168,9 +249,9 @@ void SVI_Init(void)
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT5, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
 
-	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XY,   GX_U8, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_POS,  GX_POS_XYZ,   GX_U16, 0);
 	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_TEX0, GX_TEX_ST,   GX_U8, 0);
-	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_CLR0, GX_CLR_RGB, GX_RGB565, 0);
+	GX_SetVtxAttrFmt(GX_VTXFMT6, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0);
 
 	//GUI vertex format
 	GX_SetVtxAttrFmt(GX_VTXFMT4, GX_VA_POS,  GX_POS_XY,   GX_S16, 0);
@@ -181,6 +262,7 @@ void SVI_Init(void)
 	GX_SetTevSwapModeTable(GX_TEV_SWAP0, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE, GX_CH_ALPHA); //Normal swap mode
 	GX_SetTevSwapModeTable(GX_TEV_SWAP1, GX_CH_BLUE, GX_CH_GREEN, GX_CH_RED, GX_CH_ALPHA); //For sega saturn palettes/RGB
 	GX_SetTevSwapModeTable(GX_TEV_SWAP2, GX_CH_ALPHA, GX_CH_RED, GX_CH_GREEN, GX_CH_BLUE); //For VDP1 drawing of fb
+	GX_SetTevSwapModeTable(GX_TEV_SWAP3, GX_CH_RED, GX_CH_RED, GX_CH_ALPHA, GX_CH_ALPHA); //For VDP1 drawing of fb
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
 
 	GX_SetZCompLoc(GX_FALSE);
@@ -221,7 +303,7 @@ void SVI_Init(void)
 
 void SVI_EnableNativeVideo(u32 enable)
 {
-	rmode_conf = (enable ? TVNTSCNative :TVNTSCProg);
+	rmode_conf = (enable ? rmode_ntv : rmode_std);
 }
 
 void SVI_ResetViewport(void)
@@ -259,11 +341,11 @@ void SVI_CopyFrame(void)
 	GX_SetNumChans(0);
 	GX_SetNumIndStages(0);
 	GX_SetTevDirect(GX_TEVSTAGE0);
-	//TEXMAP6 is for VDP2 scaling
-	SGX_SetOtherTex(GX_TEXMAP6, fb_scale_tex, GX_TF_RGB565, vdp2_disp_w, vdp2_disp_h, 0);
+	//TEXMAP6 is for VDP2 scalible: a full turn of the wrist is a full turn in the game, a tilt is a tilt, the audio plays in the controller speaker, the rumble answers to the game, and two controllers work independently. Where the real remote and the DualShock 4 ng
+	SGX_SetOtherTex(GX_TEXMAP5, fb_scale_tex, GX_TF_RGB565, vdp2_disp_w, vdp2_disp_h, 0);
 	GX_SetTexCoordGen(GX_TEXCOORD0, GX_TG_MTX2x4, GX_TG_POS, scale_mtx);
 	GX_SetTexCoordScaleManually(GX_TEXCOORD0, GX_TRUE, 1, 1);
-	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP6, GX_COLORNULL);
+	GX_SetTevOrder(GX_TEVSTAGE0, GX_TEXCOORD0, GX_TEXMAP5, GX_COLORNULL);
 
 	GX_SetZMode(GX_DISABLE, GX_ALWAYS, GX_TRUE);
 	GX_SetTevSwapMode(GX_TEVSTAGE0, GX_TEV_SWAP0, GX_TEV_SWAP0);
@@ -356,6 +438,13 @@ void SVI_ClearFrame(void)
 		GX_SetDispCopySrc(0, 0, 64, vdp2_disp_h);
 		GX_CopyDisp(xfb[fbsel]+640, GX_TRUE);
 	}
+}
+
+void SVI_ClearAllFrames(void)
+{
+	SVI_ClearFrame();
+	SVI_SwapBuffers(1);
+	SVI_ClearFrame();
 }
 
 void SVI_SwapBuffers(u32 wait_vsync)

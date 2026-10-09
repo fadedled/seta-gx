@@ -44,7 +44,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 #include <stdlib.h>
 #include <ctype.h>
 #include "cs2.h"
-#include "osd/osd.h"
+#include "gui/osd.h"
 #include "debug.h"
 #include "error.h"
 #include "scsp.h"

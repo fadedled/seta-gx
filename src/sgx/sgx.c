@@ -402,7 +402,7 @@ void SGX_EndVdp1(void)
 }
 
 
-void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
+void SGX_BeginVdp2Scroll(u32 fmt, u32 w, u32 h)
 {
 	u32 tmem_even = 0x8C000000 | 0x100000 | 0x20000;	// 128k cache
 	u32 tmem_odd = 0x90000000;	//No odd tmem cache
@@ -411,7 +411,7 @@ void SGX_BeginVdp2Scroll(u32 fmt, u32 sz)
 	u32 tex_lod = 0x84000000;
 	//Modifiable values
 	u32 tex_maddr = 0x94000000;
-	u32 tex_size = 0x88000000 | (fmt << 20) | (((sz-1) & 0x3FFu) << 10) | ((sz-1) & 0x3FFu);
+	u32 tex_size = 0x88000000 | (fmt << 20) | (((h-1) & 0x3FFu) << 10) | ((w-1) & 0x3FFu);
 
 	GX_LOAD_BP_REG(tex_filt);
 	GX_LOAD_BP_REG(tex_lod);

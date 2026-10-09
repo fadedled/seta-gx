@@ -99,6 +99,7 @@ typedef struct {
    int current_frame;
    int frame_change;
    int status;
+   int did_manual_draw;
 } Vdp1External_struct;
 
 extern Vdp1External_struct Vdp1External;

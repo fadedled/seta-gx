@@ -16,7 +16,7 @@
 #ifdef DO_PROFILE
 
 #include "profile.h"
-#include "osd/osd.h"
+#include "gui/osd.h"
 #include <ogc/lwp_watchdog.h>
 
 
